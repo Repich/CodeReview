@@ -45,3 +45,6 @@
 /artifact_storage/
 /CR-71611.txt
 /agents.md
+__pycache__/
+*.py[cod]
+.DS_Store

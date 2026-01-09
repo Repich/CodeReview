@@ -12,6 +12,12 @@ services:
     env_file: .env
     environment:
       CODEREVIEW_DEBUG: "false"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
     volumes:
       - artifact_storage:/app/artifacts
     ports:
@@ -26,8 +32,11 @@ services:
       CODEREVIEW_WORKER_REDIS_URL: redis://redis:6379/0
       CODEREVIEW_WORKER_ENGINE_VERSION: "0.1.0"
     depends_on:
-      - backend
-      - redis
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
     volumes:
       - artifact_storage:/app/artifacts
 
