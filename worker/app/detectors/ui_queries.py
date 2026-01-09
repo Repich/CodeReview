@@ -1,0 +1,449 @@
+from __future__ import annotations
+
+import re
+from typing import Iterable
+
+from worker.app.detectors.base import BaseDetector, DetectorContext
+from worker.app.detectors.registry import register
+from worker.app.models import DetectorFinding
+
+
+@register
+class SessionParamsClientDetector(BaseDetector):
+    norm_id = "SESSION_PARAMS_NOT_FOR_CLIENT_LOGIC"
+    detector_id = "detector.session_params_client"
+    severity = "major"
+
+    directive_pattern = re.compile(r"&\s*([А-Яа-яA-Za-z]+)")
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        client_context = False
+        for line_no, line in self.iter_lines(ctx.source.content):
+            stripped = line.strip()
+            if stripped.startswith("&"):
+                client_context = "НаКлиенте" in stripped and "НаСервере" not in stripped
+                continue
+            if "ПараметрыСеанса" in line and client_context:
+                findings.append(
+                    self.create_finding(
+                        ctx,
+                        message="Параметры сеанса читаются в клиентской процедуре",
+                        recommendation="Перенесите работу с параметрами сеанса в серверный код или используйте кэш в форме.",
+                        line=line_no,
+                        extra={"line": line.strip()},
+                    )
+                )
+        return findings
+
+
+def _is_form_module(ctx: DetectorContext) -> bool:
+    module_type = (ctx.source.module_type or "").lower()
+    path_lower = (ctx.source.path or "").lower()
+    return "form" in module_type or "/forms/" in path_lower or path_lower.endswith("formmodule.bsl")
+
+
+@register
+class MetadataReservedWordsDetector(BaseDetector):
+    norm_id = "NAME_NO_QUERY_TABLE_WORDS"
+    detector_id = "detector.metadata_reserved_words"
+    severity = "major"
+
+    reserved = {
+        "select",
+        "from",
+        "where",
+        "union",
+        "join",
+        "вибрать",
+        "выбрать",
+        "из",
+        "где",
+    }
+
+    splitter = re.compile(r"[\\/._]")
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        parts = [p.lower() for p in self.splitter.split(ctx.source.path) if p]
+        offending = sorted(self.reserved.intersection(parts))
+        if not offending:
+            return []
+        return [
+            self.create_finding(
+                ctx,
+                message="Имя объекта конфликтует с ключевыми словами языка запросов",
+                recommendation="Переименуйте объект, чтобы имя не совпадало с SELECT/FROM/WHERE и т.п.",
+                line=1,
+                extra={"path": ctx.source.path, "offending": offending},
+            )
+        ]
+
+
+@register
+class QueryUppercaseKeywordsDetector(BaseDetector):
+    norm_id = "QUERY_KEYWORDS_UPPER"
+    detector_id = "detector.query_upper_keywords"
+    severity = "minor"
+
+    keyword_pattern = re.compile(r"\b(выбрать|из|где|объединить|соединение)\b", re.IGNORECASE)
+    query_prefixes = (
+        "запрос.текст",
+        "запрос =",
+        "текстзапроса",
+        "текстзапроса =",
+        "запрос.текст =",
+    )
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        for line_no, line in self.iter_lines(ctx.source.content):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("//"):
+                continue
+            if not self._is_query_line(stripped):
+                continue
+            for match in self.keyword_pattern.finditer(line):
+                token = match.group(0)
+                if token.upper() != token:
+                    findings.append(
+                        self.create_finding(
+                            ctx,
+                            message=f"Ключевое слово запроса '{token}' должно быть заглавными буквами",
+                            recommendation="Используйте заглавные буквы для ключевых слов языка запросов (ВЫБРАТЬ, ИЗ, ГДЕ...).",
+                            line=line_no,
+                            extra={"keyword": token},
+                        )
+                )
+                    break
+        return findings
+
+    def _is_query_line(self, stripped: str) -> bool:
+        if stripped.startswith("|"):
+            return True
+        lower = stripped.lower()
+        return any(prefix in lower for prefix in self.query_prefixes)
+
+
+@register
+class FormElementNamingDetector(BaseDetector):
+    norm_id = "FORM_LAYOUT_05"
+    detector_id = "detector.form_element_naming"
+    severity = "minor"
+
+    element_pattern = re.compile(r'Элементы\.(?:Добавить|Найти)\s*\(\s*"([^"]+)"')
+    bad_name_pattern = re.compile(r"\d+$")
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        for line_no, line in self.iter_lines(ctx.source.content):
+            for match in self.element_pattern.finditer(line):
+                name = match.group(1)
+                if self.bad_name_pattern.search(name):
+                    findings.append(
+                        self.create_finding(
+                            ctx,
+                            message=f'Имя элемента формы "{name}" содержит числовой суффикс',
+                            recommendation="Используйте единообразные имена элементов без добавления индексов (например, \"Контрагент\").",
+                            line=line_no,
+                            extra={"element": name},
+                        )
+                    )
+        return findings
+
+
+@register
+class FormDirectDataWriteDetector(BaseDetector):
+    norm_id = "FORM_NO_DIRECT_METADATA_WRITE"
+    detector_id = "detector.form_direct_write"
+    severity = "major"
+
+    creation_pattern = re.compile(
+        r"(Справочники|Документы|Регистры[А-Яа-яA-Za-z]*|ПланыВидовХарактеристик|ПланыСчетов)"
+        r"\.[\wА-Яа-яЁё]+\.(СоздатьЭлемент|СоздатьДокумент|СоздатьОбъект|СоздатьНаборЗаписей)",
+        re.UNICODE,
+    )
+    write_pattern = re.compile(
+        r"(Справочники|Документы|Регистры[А-Яа-яA-Za-z]*|ПланыВидовХарактеристик|ПланыСчетов)"
+        r"\.[\wА-Яа-яЁё]+\.[\wА-Яа-яЁё]*Записать",
+        re.UNICODE,
+    )
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        if not _is_form_module(ctx):
+            return []
+        findings: list[DetectorFinding] = []
+        for line_no, line in self.iter_lines(ctx.source.content):
+            if self.creation_pattern.search(line) or self.write_pattern.search(line):
+                findings.append(
+                    self.create_finding(
+                        ctx,
+                        message="Модуль формы напрямую создает или записывает объект метаданных",
+                        recommendation="Вынесите создание/запись объектов в общий модуль или сервис, а форма должна только вызывать его.",
+                        line=line_no,
+                        extra={"line": line.strip()},
+                    )
+                )
+        return findings
+
+
+@register
+class DocumentSaveModeDetector(BaseDetector):
+    norm_id = "DOC_SAVE_IN_POST_MODE"
+    detector_id = "detector.document_save_mode"
+    severity = "major"
+
+    save_pattern = re.compile(r"Записать\s*\((.*?)\)", re.IGNORECASE)
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        module_type = ctx.source.module_type or ""
+        if "Documents/" not in ctx.source.path and not module_type.lower().startswith("document"):
+            return []
+        findings: list[DetectorFinding] = []
+        content = ctx.source.content
+        for match in self.save_pattern.finditer(content):
+            args = match.group(1).strip()
+            if not args or "РежимЗаписиДокумента.Проведение" not in args:
+                line_no = content[: match.start()].count("\n") + 1
+                findings.append(
+                    self.create_finding(
+                        ctx,
+                        message="Запись документа выполняется без режима проведения",
+                        recommendation="Документы, требующие отражения в учете, следует записывать с параметром РежимЗаписиДокумента.Проведение.",
+                        line=line_no,
+                        extra={"call": f"Записать({args})"},
+                    )
+                )
+        return findings
+
+
+@register
+class QueryExplicitAliasesDetector(BaseDetector):
+    norm_id = "QUERY_EXPLICIT_ALIASES"
+    detector_id = "detector.query_aliases"
+    severity = "minor"
+
+    header_prefixes = (
+        "ВЫБРАТЬ",
+        "ИЗ",
+        "ГДЕ",
+        "СГРУППИРОВАТЬ",
+        "УПОРЯДОЧИТЬ",
+        "ИТОГИ",
+        "ЛЕВОЕ",
+        "ПРАВОЕ",
+        "ПОЛНОЕ",
+        "ВНУТРЕННЕЕ",
+        "ОБЪЕДИНИТЬ",
+        "ПО",
+    )
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        for line_no, line in self.iter_lines(ctx.source.content):
+            stripped = line.strip()
+            if not stripped.startswith("|"):
+                continue
+            expr = stripped.lstrip("|").strip()
+            if not expr:
+                continue
+            expr_upper = expr.upper()
+            if expr_upper.startswith(self.header_prefixes):
+                continue
+            if "." in expr and " КАК " not in expr_upper and " AS " not in expr_upper:
+                findings.append(
+                    self.create_finding(
+                        ctx,
+                        message="Поле запроса без псевдонима",
+                        recommendation="Добавьте оператор КАК/AS, чтобы явно задать псевдоним для поля.",
+                        line=line_no,
+                        extra={"expression": expr},
+                    )
+                )
+        return findings
+
+
+@register
+class QueryCommentPatchingDetector(BaseDetector):
+    norm_id = "QUERY_NO_COMMENT_PATCHING"
+    detector_id = "detector.query_comment_patching"
+    severity = "major"
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        for line_no, line in self.iter_lines(ctx.source.content):
+            if "/*" not in line:
+                continue
+            if "СтрЗаменить" in line or "+" in line or "&" in line:
+                findings.append(
+                    self.create_finding(
+                        ctx,
+                        message="Используются комментарии для модификации текста запроса",
+                        recommendation="Формируйте текст запроса без патчинга через комментарии, задавайте условия явным кодом.",
+                        line=line_no,
+                        extra={"line": line.strip()},
+                    )
+                )
+        return findings
+
+
+@register
+class LineLengthDetector(BaseDetector):
+    norm_id = "TEXT_MAX_LINE_LENGTH"
+    detector_id = "detector.line_length"
+    severity = "minor"
+
+    max_length = 150
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        for line_no, line in self.iter_lines(ctx.source.content):
+            if len(line.rstrip("\n")) > self.max_length:
+                findings.append(
+                    self.create_finding(
+                        ctx,
+                        message=f"Длина строки превышает {self.max_length} символов",
+                        recommendation="Разбейте выражение на несколько строк для повышения читаемости.",
+                        line=line_no,
+                        extra={"length": len(line.rstrip("\n"))},
+                    )
+                )
+        return findings
+
+
+@register
+class QueryMultilineDetector(BaseDetector):
+    norm_id = "QUERY_MULTILINE"
+    detector_id = "detector.query_multiline"
+    severity = "minor"
+
+    inline_assign_pattern = re.compile(r'Запрос\.Текст\s*=\s*"([^"\n]*)"', re.IGNORECASE)
+    inline_new_query_pattern = re.compile(r'Новый\s+Запрос\s*\(\s*"([^"\n]*)"\s*\)', re.IGNORECASE)
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        content = ctx.source.content
+        for match in list(self.inline_assign_pattern.finditer(content)) + list(
+            self.inline_new_query_pattern.finditer(content)
+        ):
+            text = match.group(1)
+            if not text.strip():
+                continue
+            line_no = content[: match.start()].count("\n") + 1
+            findings.append(
+                self.create_finding(
+                    ctx,
+                    message="Текст запроса записан в одну строку",
+                    recommendation="Добавьте переводы строк и оформите запрос с отступами.",
+                    line=line_no,
+                    extra={"query": text[:60]},
+                )
+            )
+        return findings
+
+
+@register
+class SessionParamsCacheDetector(BaseDetector):
+    norm_id = "SESSION_PARAMS_NOT_CACHE"
+    detector_id = "detector.session_params_cache"
+    severity = "major"
+
+    assign_pattern = re.compile(r"ПараметрыСеанса\.[\wА-Яа-яЁё]+\s*=", re.UNICODE)
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        for line_no, line in self.iter_lines(ctx.source.content):
+            if self.assign_pattern.search(line):
+                findings.append(
+                    self.create_finding(
+                        ctx,
+                        message="Параметры сеанса используются как хранилище данных",
+                        recommendation="Не используйте ПараметрыСеанса для кеширования; храните данные в отдельных механизмах.",
+                        line=line_no,
+                        extra={"line": line.strip()},
+                    )
+                )
+        return findings
+
+
+@register
+class QuerySelectStarDetector(BaseDetector):
+    norm_id = "QUERY_GENERAL_01"
+    detector_id = "detector.query_select_star"
+    severity = "major"
+
+    star_pattern = re.compile(r"ВЫБРАТЬ\s+\*", re.IGNORECASE)
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        for line_no, line in self.iter_lines(ctx.source.content):
+            if self.star_pattern.search(line):
+                findings.append(
+                    self.create_finding(
+                        ctx,
+                        message="Используется ВЫБРАТЬ * в тексте запроса",
+                        recommendation="Выбирайте только необходимые поля вместо ВЫБРАТЬ *.",
+                        line=line_no,
+                        extra={"line": line.strip()},
+                    )
+                )
+        return findings
+
+
+def _line_starts_loop(text: str) -> bool:
+    stripped = text.strip().lower()
+    return ("для" in stripped or "пока" in stripped) and stripped.endswith("цикл")
+
+
+@register
+class QueryInsideLoopDetector(BaseDetector):
+    norm_id = "QUERY_GENERAL_02"
+    detector_id = "detector.query_inside_loop"
+    severity = "major"
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        loop_depth = 0
+        for line_no, line in self.iter_lines(ctx.source.content):
+            stripped_lower = line.strip().lower()
+            if _line_starts_loop(line):
+                loop_depth += 1
+            elif stripped_lower.startswith("конеццикла") and loop_depth > 0:
+                loop_depth -= 1
+            if loop_depth <= 0:
+                continue
+            lowered = line.lower()
+            if "новый запрос" in lowered or "запрос." in lowered and ("выполн" in lowered or "установитьпараметр" in lowered):
+                findings.append(
+                    self.create_finding(
+                        ctx,
+                        message="Создание или выполнение запроса внутри цикла",
+                        recommendation="Подготовьте запрос и данные вне цикла, чтобы минимизировать количество обращений к СУБД.",
+                        line=line_no,
+                        extra={"line": line.strip()},
+                    )
+                )
+        return findings
+
+
+@register
+class TodoCommentDetector(BaseDetector):
+    norm_id = "COMMENT_NO_TODO_MARKERS"
+    detector_id = "detector.todo_comment"
+    severity = "minor"
+
+    pattern = re.compile(r"//\s*(?:todo|fixme|xxx|hack|временно|уточнить|\?\?\?)", re.IGNORECASE)
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        for line_no, line in self.iter_lines(ctx.source.content):
+            if self.pattern.search(line):
+                findings.append(
+                    self.create_finding(
+                        ctx,
+                        message="Найден служебный комментарий TODO/FIXME/Уточнить",
+                        recommendation="Удалите служебный комментарий или заведите задачу в трекере — в коде они не допускаются.",
+                        line=line_no,
+                        extra={"line": line.strip()},
+                    )
+                )
+        return findings

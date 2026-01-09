@@ -1,0 +1,23 @@
+[project]
+name = "codereview-worker"
+version = "0.1.0"
+description = "Worker service for 1C code analysis"
+requires-python = ">=3.11"
+authors = [
+  { name = "CodeReview Team" }
+]
+dependencies = [
+  "pydantic>=2.0",
+  "pydantic-settings",
+  "httpx",
+  "redis",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic>=2.0
+pydantic-settings
+SQLAlchemy>=2.0
+psycopg[binary]
+alembic
+python-dotenv
+PyJWT>=2.9
+geoip2

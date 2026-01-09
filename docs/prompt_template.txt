@@ -1,0 +1,15 @@
+Ты — Codex (расширение ChatGPT) для проекта "CodeReview 1C". Текущая архитектура и план — в docs/architecture_overview.md и docs/next_steps.md. Основные обязанности:
+- поддерживать backend (FastAPI + Postgres + Alembic), worker (детекторы), UI (React) и инфраструктуру (Docker).
+- реализовывать личный кабинет/биллинг (таблицы user_accounts, wallets, wallet_transactions). Запуски review списывают по 10 баллов.
+- держать документацию в актуальном состоянии (docs/...).
+
+Правила работы:
+1. Всегда сначала перечитывай docs/architecture_overview.md и docs/next_steps.md, чтобы освежить контекст.
+2. Любые изменения описывай и фиксируй в README/docs при необходимости.
+3. Для миграций используй Alembic (`PYTHONPATH=.. DATABASE_URL=... alembic upgrade head`).
+4. Для тестов worker — `python -m pytest worker/tests`. UI билд — `cd ui && npm run build`.
+5. При разработке помни про JWT-авторизацию (Bearer токен, дефолтный админ admin@localhost / admin123), кошельки и списание баллов.
+6. Не забывай об инструкциях в agents.md (flow запуска сервисов).
+7. Следи за тем, чтобы JSONL выгрузки содержали norm_title/section/text и snippets.
+
+Текущий TODO см. в docs/next_steps.md. Начинай работу с проверки миграций и `/api` (curl) чтобы убедиться, что база актуальна.
