@@ -1,0 +1,47 @@
+/.env
+/КодАустаффа.txt
+/Ревью кода аутстафф.docx
+/Руководство-разработчика-83.002.05.pdf
+/Система стандартов и методик разработки конфигураций 14_10_2025.pdf
+/Типичные причины неоптимальной работы запросов и м
+/ХорошийКод_СберСервер.txt
+/Promt_ChatGPT.txt
+
+  # Python
+  __pycache__/
+  *.py[cod]
+  *.pyo
+  *.pyd
+  *.so
+  *.egg-info/
+  .eggs/
+  build/
+  dist/
+  *.log
+
+  # virtualenv / poetry
+  .venv/
+  venv/
+  .env/
+
+  # Node / UI
+  node_modules/
+  .ui-cache/
+  dist/
+  build/
+  npm-debug.log*
+
+  # IDE
+  .vscode/
+  .idea/
+  *.iml
+
+  # Docker
+  *.pid
+  *.seed
+  *.local
+/ui/node_modules/
+/ui/dist/
+/artifact_storage/
+/CR-71611.txt
+/agents.md
