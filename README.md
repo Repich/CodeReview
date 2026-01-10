@@ -6,10 +6,11 @@
 
 - `backend/` — FastAPI API, модели, миграции.
 - `worker/` — очередь задач, детекторы, тесты.
-- `ui/` — React/Vite интерфейс (список запусков и карточка запуска, LLM-заглушка).
-- `docs/` — описание сущностей, норм и детекторов.
+- `ui/` — React/Vite интерфейс (список запусков, карточка запуска, личный кабинет с AI-блоком).
+- `docs/` — описание сущностей, норм, пайплайна и требований к инфраструктуре.
+- `docs/deployment_security.md` — сводка по прод-окружению, блок-листам и аудитам.
 - `infrastructure/docker/` — Dockerfile'ы и конфигурация nginx.
-- `scripts/bootstrap_structure.py` — генератор skeleton'a (используется в Makefile).
+- `scripts/` — `bootstrap_structure.py`, `analyze_module.py`, утилиты для генерации структуры и ручного прогона воркера.
 
 ## Быстрый старт (локально)
 
@@ -22,7 +23,7 @@ uvicorn backend.app.main:app
 python -m worker.app.main
 ```
 
-> Авторизация использует JWT (`Authorization: Bearer ...`). Для разработки достаточно значения по умолчанию, но в проде задайте `CODEREVIEW_AUTH_JWT_SECRET` и `CODEREVIEW_AUTH_ACCESS_TOKEN_EXPIRE_MINUTES`.
+> Авторизация использует JWT (`Authorization: Bearer ...`). Для разработки достаточно значения по умолчанию, но в проде задайте `CODEREVIEW_AUTH_JWT_SECRET`, `CODEREVIEW_AUTH_ACCESS_TOKEN_EXPIRE_MINUTES` и осмысленный `DEEPSEEK_API_KEY` (если задействуете LLM).
 
 **Создание запуска с исходниками:**
 
@@ -51,6 +52,44 @@ cd ui
 npm install
 npm run dev
 ```
+
+## Сборка UI и раздача статики
+
+В продакшне фронтенд обслуживается самим backend. После изменений UI выполните:
+
+```bash
+cd ui
+npm ci
+npm run build
+
+cd ..
+rm -rf backend/app/static
+mkdir -p backend/app/static
+cp -r ui/dist/* backend/app/static/
+```
+
+Проверяем, что `GET /` и `HEAD /` возвращают 200: `curl -I http://127.0.0.1:8000/`.
+
+## Продакшн (домашний сервер)
+
+1. Подготовьте Postgres (отдельный контейнер/кластер):
+   ```sql
+   CREATE DATABASE codereview;
+   CREATE USER codereview_user WITH PASSWORD '***';
+   GRANT ALL PRIVILEGES ON DATABASE codereview TO codereview_user;
+   ```
+2. `.env`:
+   ```
+   DATABASE_URL=postgresql+psycopg://codereview_user:***@host.docker.internal:5432/codereview
+   CODEREVIEW_DATABASE_URL=postgresql+psycopg://codereview_user:***@host.docker.internal:5432/codereview
+   CODEREVIEW_WORKER_BACKEND_API_URL=http://backend:8000/api
+   DEEPSEEK_API_KEY=...
+   ```
+3. `docker-compose up -d --build backend worker` (redis поднимется автоматически).
+4. Выполните миграции: `docker-compose exec backend bash -c "cd /app/backend && PYTHONPATH=/app alembic upgrade head"`.
+5. Caddy на Raspberry Pi проксирует `codereview.1cretail.ru` → `192.168.1.76:8200` и заверщает TLS. В backend нет отдельного nginx — он отвечает и за API, и за статику.
+
+Детали — в `docs/deployment_security.md`.
 
 ### Автоматический анализ отдельных модулей
 
@@ -93,15 +132,57 @@ python scripts/analyze_module.py path/to/Module.bsl \
 - `PATCH /api/ai-findings/{id}` — изменить статус AI-замечания (`suggested` → `pending`/`confirmed`/`rejected`).
 - `GET /api/review-runs/{id}/llm/logs` — список диагностических логов LLM (только администраторы). Каждый лог можно скачать через `/api/audit/io/{io_log_id}/download`.
 
-## Docker
+## Production deployment (сейчас поднято на codereview.1cretail.ru)
 
-Для домашнего сервера используйте `docker-compose.yml`:
+1. **UI build**  
+   ```bash
+   cd ui
+   npm ci
+   npm run build
+   rm -rf ../backend/app/static && mkdir -p ../backend/app/static
+   cp -r dist/* ../backend/app/static/
+   ```
+   FastAPI отдаёт `backend/app/static/index.html` и все ассеты самостоятельно, поэтому
+   отдельный контейнер UI не нужен.
 
-```bash
-docker compose up --build
-```
+2. **Подготовить `.env` на сервере**
 
-Сервисы: Postgres, Redis, backend, worker, nginx (прокси). Томa: `pg_data`, `artifact_storage`, `app_logs`.
+   ```dotenv
+   CODEREVIEW_DATABASE_URL=postgresql+psycopg://codereview_user:***@host.docker.internal:5432/codereview
+   CODEREVIEW_WORKER_BACKEND_API_URL=http://backend:8000/api
+   CODEREVIEW_WORKER_REDIS_URL=redis://redis:6379/0
+   DEEPSEEK_API_KEY=...
+   CODEREVIEW_DEFAULT_RUN_COST_POINTS=10
+   CODEREVIEW_AUTH_JWT_SECRET=change-me
+   ```
+
+   > Мы используем уже существующий postgres вне docker-compose, поэтому `host.docker.internal`
+   > пробрасывается через `extra_hosts` (см. `docker-compose.yml`).
+
+3. **Собрать/обновить контейнеры**
+
+   ```bash
+   docker-compose up -d --build backend worker redis
+   docker-compose exec backend bash -c "cd /app/backend && PYTHONPATH=/app alembic upgrade head"
+   ```
+
+4. **Reverse proxy**  
+   Caddy на Raspberry Pi проксирует `codereview.1cretail.ru` к `192.168.1.76:8200`.  
+   TLS завершается на Caddy, backend видит реальный IP через `X-Forwarded-For`.
+
+5. **Готовность**  
+   - `curl -I http://127.0.0.1:8200/` → `200 OK` (root выдаёт index.html).  
+   - `curl http://127.0.0.1:8200/api/health` → `{"status":"ok","version":...}`.  
+   - В Caddy-логах нет `connection refused`.
+
+## Security & monitoring
+
+- `SecurityMiddleware` читает реальный IP (`CODEREVIEW_TRUSTED_PROXY_DEPTH`), ведёт таблицу `access_logs`,
+  блокирует IP/CIDR/страны (`CODEREVIEW_BLOCKED_IPS`, `CODEREVIEW_BLOCKED_CIDRS`, `CODEREVIEW_BLOCKED_COUNTRIES`)
+  и логирует причину (`block_reason`).
+- Геолокация включается, если смонтировать `CODEREVIEW_GEOIP_DB_PATH` (например, MaxMind GeoLite2).
+- Логи доступов для админов: `GET /api/admin/access-logs?limit=200`.
+- Все вызовы LLM (worker) сохраняются в `ai_findings` + JSON в `artifact_storage`.
 
 ## CI
 

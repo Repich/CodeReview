@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { login, register } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,8 +16,37 @@ function LoginPage({ initialMode = 'login' }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [website, setWebsite] = useState('');
   const [isSubmitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
+
+  useEffect(() => {
+    if (!turnstileSiteKey) return;
+    (window as any).turnstileCallback = (token: string) => {
+      setCaptchaToken(token);
+    };
+    const scriptId = 'turnstile-script';
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+      script.async = true;
+      script.defer = true;
+      document.body.appendChild(script);
+    }
+    return () => {
+      delete (window as any).turnstileCallback;
+    };
+  }, [turnstileSiteKey]);
+
+  useEffect(() => {
+    if (mode === 'register') {
+      setCaptchaToken('');
+      setWebsite('');
+    }
+  }, [mode]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -28,7 +57,18 @@ function LoginPage({ initialMode = 'login' }: Props) {
         const token = await login({ email, password });
         setToken(token.access_token);
       } else {
-        const token = await register({ email, password, name });
+        if (turnstileSiteKey && !captchaToken) {
+          setError('Подтвердите, что вы не робот.');
+          setSubmitting(false);
+          return;
+        }
+        const token = await register({
+          email,
+          password,
+          name,
+          captcha_token: captchaToken || undefined,
+          website: website || undefined,
+        });
         setToken(token.access_token);
       }
       navigate('/runs', { replace: true });
@@ -98,6 +138,19 @@ function LoginPage({ initialMode = 'login' }: Props) {
               />
             </div>
           )}
+          {mode === 'register' && (
+            <div style={{ display: 'none' }}>
+              <label htmlFor="website">Website</label>
+              <input
+                id="website"
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                value={website}
+                onChange={(event) => setWebsite(event.target.value)}
+              />
+            </div>
+          )}
           <div className="field">
             <label htmlFor="password">Пароль</label>
             <input
@@ -109,6 +162,16 @@ function LoginPage({ initialMode = 'login' }: Props) {
               onChange={(event) => setPassword(event.target.value)}
             />
           </div>
+          {mode === 'register' && turnstileSiteKey && (
+            <div className="field">
+              <label>Проверка</label>
+              <div
+                className="cf-turnstile"
+                data-sitekey={turnstileSiteKey}
+                data-callback="turnstileCallback"
+              />
+            </div>
+          )}
           {error && <div className="alert alert-error">{error}</div>}
           <button type="submit" className="btn btn-primary" disabled={isSubmitting} style={{ width: '100%' }}>
             {isSubmitting ? 'Обрабатываем...' : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}

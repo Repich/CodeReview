@@ -1,10 +1,10 @@
 # Архитектура CodeReview 1C (MVP)
 
 ## Состав
-- **Backend (FastAPI + SQLAlchemy + Postgres)**: CRUD по основным сущностям, очередь задач, приём результатов, личный кабинет/кошелёк.
-- **Worker (Python)**: 11 детекторов, опрос `/review-runs/next-task`, отправка `/review-runs/{id}/results`, стабы LLM.
-- **UI (Vite/React)**: список запусков, карточка запуска, личный кабинет (баланс и транзакции), форма создания run'а.
-- **Инфраструктура**: docker compose (postgres, redis, backend, worker, nginx), Alembic миграции, CI (pytest детекторов + UI build).
+- **Backend (FastAPI + SQLAlchemy + Postgres)**: CRUD по основным сущностям, очередь задач, приём результатов, личный кабинет/кошелёк, выдача статики UI.
+- **Worker (Python)**: 11 детекторов, опрос `/review-runs/next-task`, отправка `/review-runs/{id}/results`, LLM-пайплайн (DeepSeek).
+- **UI (Vite/React)**: список запусков, карточка запуска, личный кабинет (баланс и транзакции), форма создания run'а. В проде собранная статика лежит в `backend/app/static`.
+- **Инфраструктура**: docker compose (redis, backend, worker; Postgres подключаем к существующему инстансу), Alembic миграции, CI (pytest детекторов + UI build), reverse-proxy на Caddy.
 
 ## Основные таблицы
 - `review_runs` — запуск проверки. Новые поля: `user_id`, `cost_points`.
@@ -32,7 +32,11 @@
 
 ## Worker
 - Реестр 11 детекторов (`worker/app/detectors/critical.py`). Каждый возвращает `DetectorFinding` с `snippet` (несколько строк вокруг нарушения).
-- `Analyzer` добавляет заглушку LLM и формирует payload в формате `data_contracts.md`.
+- LLM-пайплайн:
+  1. Модуль `code_units.py` режет исходный файл на процедуры/функции, помечает диапазоны диффа (если передан `change_map`).
+  2. Для каждого unit подтягиваются релевантные нормы (`norms.yaml` → embeddings/ключевые слова, см. `docs/analysis_pipeline.md`).
+  3. Worker собирает подсказку (код + контекст + статические findings) и вызывает DeepSeek. Ответы логируются в `artifact_storage/<run>_llm_*.json` и таблицу `ai_findings`.
+  4. LLM видит только изменённые строки, но получает до 20 строк контекста вокруг каждого изменения.
 - CLI: `python -m worker.app.main --once` для одиночного задания или постоянный опрос.
 
 ## UI
@@ -58,3 +62,23 @@
 - Если JSONL без описания нормы — убедитесь, что `norms.yaml` существует в корне; backend читает его на каждый экспорт.
 - Ошибка Alembic `wallet_txn_type already exists` → удалите тип вручную: `DROP TYPE IF EXISTS wallet_txn_type CASCADE;`.
 - `fork: Resource temporarily unavailable` при Alembic/uvicorn обычно вызван ограничением среды — лучше запускать команды в обычном системном терминале.
+- **Дифф-ревью**: если фронт отправляет `changes` (формат Crucible — пара `old_line/new_line`), backend сохраняет карту диапазонов. Worker проверяет только затронутые строки, но добавляет контекст в промпт.
+- **LLM показатели**: каждая подсказка фиксирует `llm_prompt_version` и `engine_version`. Артефакты доступны только администратору (UI → «Диагностика LLM»).
+
+## Развёртывание (prod)
+
+- **UI**: `npm run build`, результат копируем в `backend/app/static`. FastAPI раздаёт `/` и ассеты, так что отдельный nginx внутри docker-compose не нужен.
+- **Docker compose**: backend/worker/redis. Postgres живёт отдельно; контейнеры подключаются через `extra_hosts: host.docker.internal:host-gateway`.
+- **Миграции**: `docker-compose exec backend bash -c "cd /app/backend && PYTHONPATH=/app alembic upgrade head"`.
+- **Reverse proxy**: Raspberry Pi + Caddy → `codereview.1cretail.ru` → `192.168.1.76:8200`. Проксируем `/api/*` на backend, остальное отдаёт статика.
+- **Переменные окружения**: `CODEREVIEW_DATABASE_URL`, `CODEREVIEW_WORKER_BACKEND_API_URL`, `DEEPSEEK_API_KEY`, `CODEREVIEW_AUTH_JWT_SECRET`, `CODEREVIEW_DEFAULT_RUN_COST_POINTS`, блок-листы (`CODEREVIEW_BLOCKED_IPS/CIDRS/COUNTRIES`), GeoIP (`CODEREVIEW_GEOIP_DB_PATH`), `CODEREVIEW_TRUSTED_PROXY_DEPTH=1`.
+
+## Безопасность и наблюдаемость
+
+- `SecurityMiddleware`:
+  - извлекает реальный IP (`X-Forwarded-For`) и проверяет его по IP/CIDR/странам;
+  - при блокировке немедленно отвечает 403 и пишет причину;
+  - пишет каждую операцию в `access_logs` (ip, страна, метод, путь, latency, user_agent, user_id/None, block_reason).
+- Админ-эндпоинты: `GET /api/admin/access-logs` и `GET /api/admin/llm/logs`.
+- Скачивание артефактов (`/api/audit/io/{id}/download`) проверяет владельца run'а.
+- На уровне Caddy включены HSTS/Referrer-Policy, статические файлы выдаём только из `backend/app/static`, путь проверяется функцией `_is_within_static`.

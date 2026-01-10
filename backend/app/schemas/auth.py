@@ -26,6 +26,8 @@ class RegisterPayload(ORMModel):
     email: str
     password: str = Field(min_length=6)
     name: str | None = None
+    captcha_token: str | None = None
+    website: str | None = None
 
     @field_validator("email")
     @classmethod

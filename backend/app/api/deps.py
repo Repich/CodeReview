@@ -6,10 +6,12 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import get_settings
 from backend.app.db.session import get_session
 from backend.app.models.enums import UserRole
 from backend.app.models.user import UserAccount
 from backend.app.core.security import decode_access_token
+from backend.app.services import auth_security
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
@@ -52,6 +54,9 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="User not found")
     if user.status != "active":
         raise HTTPException(status_code=403, detail="User disabled")
+    if user.role == UserRole.ADMIN:
+        settings = get_settings()
+        auth_security.enforce_admin_local(request, settings)
     request.state.current_user = user
     return user
 

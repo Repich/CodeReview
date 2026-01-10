@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import logging
 import time
-from ipaddress import ip_address, ip_network, IPv4Address, IPv6Address
+from ipaddress import ip_network, IPv4Address, IPv6Address
 from typing import Iterable, Optional
 
-from fastapi import Request, Response
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 from backend.app.core.config import get_settings
 from backend.app.db.session import SessionLocal
 from backend.app.models.access_log import AccessLog
+from backend.app.utils.request_ip import extract_client_ip
 
 try:
     import geoip2.database
@@ -52,7 +53,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         return networks
 
     async def dispatch(self, request: Request, call_next):
-        client_ip_obj = self._extract_ip(request)
+        client_ip_obj = extract_client_ip(request, self.trusted_proxy_depth)
         client_ip = str(client_ip_obj) if client_ip_obj else "unknown"
         country_code = self._lookup_country(client_ip_obj)
         block_reason = self._check_block(client_ip_obj, country_code)
@@ -101,27 +102,6 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     def _resolve_user_id(self, request: Request):
         user = getattr(request.state, "current_user", None)
         return getattr(user, "id", None)
-
-    def _extract_ip(self, request: Request) -> Optional[IPv4Address | IPv6Address]:
-        forwarded = request.headers.get("x-forwarded-for")
-        candidate = None
-        if forwarded:
-            parts = [part.strip() for part in forwarded.split(",") if part.strip()]
-            if parts:
-                index = -1 - self.trusted_proxy_depth
-                if abs(index) <= len(parts):
-                    candidate = parts[index]
-                else:
-                    candidate = parts[0]
-        elif request.client and request.client.host:
-            candidate = request.client.host
-        if not candidate:
-            return None
-        try:
-            return ip_address(candidate)
-        except ValueError:
-            logger.debug("Unable to parse IP address from %s", candidate)
-            return None
 
     def _lookup_country(self, ip_obj: Optional[IPv4Address | IPv6Address]) -> Optional[str]:
         if not ip_obj or not self.geo_reader:

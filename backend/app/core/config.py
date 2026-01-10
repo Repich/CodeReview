@@ -16,6 +16,23 @@ class Settings(BaseSettings):
     auth_jwt_secret: str = "insecure-dev-secret"
     auth_jwt_algorithm: str = "HS256"
     auth_access_token_expire_minutes: int = 60 * 24
+    admin_local_only: bool = True
+    admin_allowed_cidrs: list[str] = [
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10",
+    ]
+    auth_failed_login_limit: int = 5
+    auth_failed_login_window_minutes: int = 15
+    registration_rate_limit: int = 5
+    registration_rate_window_minutes: int = 60
+    registration_bonus_points: int = 100
+    turnstile_secret_key: str | None = None
+    turnstile_verify_url: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
     access_log_enabled: bool = True
     trusted_proxy_depth: int = 1
     blocked_ips: list[str] = []

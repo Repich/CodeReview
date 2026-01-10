@@ -289,6 +289,8 @@ export interface RegisterPayload {
   email: string;
   password: string;
   name?: string;
+  captcha_token?: string;
+  website?: string;
 }
 
 export interface TokenResponse {
