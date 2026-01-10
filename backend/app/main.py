@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.routing import APIRoute
 from fastapi.responses import FileResponse
 
 from backend.app.api.router import api_router
@@ -28,6 +29,22 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+async def serve_index_head() -> Response:
+    return Response(status_code=200)
+
+
+app.router.routes.insert(
+    0,
+    APIRoute(
+        path="/",
+        endpoint=serve_index_head,
+        methods=["HEAD"],
+        include_in_schema=False,
+        name="serve_index_head",
+    ),
+)
 
 
 if __name__ == "__main__":
