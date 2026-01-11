@@ -24,6 +24,45 @@ function LoginPage({ initialMode = 'login' }: Props) {
   const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
   const turnstileWidgetIdRef = useRef<string | null>(null);
 
+  const extractAuthError = (err: unknown) => {
+    const detail = (err as any)?.response?.data?.detail;
+    if (typeof detail === 'string') {
+      if (detail === 'User with this email already exists') {
+        return 'Пользователь с таким email уже существует.';
+      }
+      if (detail === 'Invalid email or password') {
+        return 'Неверный email или пароль.';
+      }
+      if (detail === 'Captcha verification failed') {
+        return 'Проверка не пройдена. Попробуйте снова.';
+      }
+      if (detail === 'Registration blocked') {
+        return 'Регистрация заблокирована.';
+      }
+      if (detail === 'Invalid email') {
+        return 'Некорректный email.';
+      }
+      return detail;
+    }
+    if (Array.isArray(detail) && detail.length) {
+      const first = detail[0];
+      if (
+        first?.type === 'string_too_short' &&
+        Array.isArray(first?.loc) &&
+        first.loc.includes('password')
+      ) {
+        return 'Пароль должен быть минимум 6 символов.';
+      }
+      if (typeof first?.msg === 'string') {
+        if (first.msg.includes('Invalid email')) {
+          return 'Некорректный email.';
+        }
+        return first.msg;
+      }
+    }
+    return null;
+  };
+
   const renderTurnstile = () => {
     if (!turnstileSiteKey) return;
     const turnstile = (window as any).turnstile;
@@ -94,7 +133,7 @@ function LoginPage({ initialMode = 'login' }: Props) {
       navigate('/runs', { replace: true });
     } catch (err) {
       console.error(err);
-      setError('Не удалось выполнить операцию. Проверьте данные и попробуйте снова.');
+      setError(extractAuthError(err) ?? 'Не удалось выполнить операцию. Проверьте данные и попробуйте снова.');
     } finally {
       setSubmitting(false);
     }
