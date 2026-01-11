@@ -149,6 +149,35 @@ export interface UserProfile {
   created_at: string;
 }
 
+export interface AccessLogEntry {
+  id: number;
+  created_at: string;
+  user_id?: string | null;
+  user_email?: string | null;
+  ip_address: string;
+  country_code?: string | null;
+  method: string;
+  path: string;
+  status_code: number;
+  duration_ms: number;
+  user_agent?: string | null;
+  block_reason?: string | null;
+}
+
+export interface CaddyAccessLogEntry {
+  id: number;
+  created_at: string;
+  host?: string | null;
+  method?: string | null;
+  uri?: string | null;
+  status_code?: number | null;
+  duration_ms?: number | null;
+  size_bytes?: number | null;
+  remote_ip?: string | null;
+  user_agent?: string | null;
+  referer?: string | null;
+}
+
 export interface WalletInfo {
   id: string;
   balance: number;
@@ -270,6 +299,22 @@ export async function fetchCurrentUser() {
   return data;
 }
 
+export async function fetchUsers(params?: {
+  limit?: number;
+  offset?: number;
+  email?: string;
+  status?: string;
+  role?: string;
+}) {
+  const { data } = await client.get<UserProfile[]>('/users', { params });
+  return data;
+}
+
+export async function updateUserStatus(userId: string, status: string) {
+  const { data } = await client.patch<UserProfile>(`/users/${userId}/status`, { status });
+  return data;
+}
+
 export async function fetchWallet() {
   const { data } = await client.get<WalletInfo>('/wallets/me');
   return data;
@@ -317,6 +362,27 @@ export interface WalletAdjustPayload {
 
 export async function adjustWalletBalance(payload: WalletAdjustPayload) {
   const { data } = await client.post<WalletTransaction>('/wallets/adjust', payload);
+  return data;
+}
+
+export async function fetchAccessLogs(params?: {
+  limit?: number;
+  ip?: string;
+  user_id?: string;
+  path?: string;
+}) {
+  const { data } = await client.get<AccessLogEntry[]>('/admin/access-logs', { params });
+  return data;
+}
+
+export async function fetchCaddyLogs(params?: {
+  limit?: number;
+  host?: string;
+  ip?: string;
+  status?: number;
+  path?: string;
+}) {
+  const { data } = await client.get<CaddyAccessLogEntry[]>('/admin/caddy-logs', { params });
   return data;
 }
 

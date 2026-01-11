@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     registration_bonus_points: int = 100
     turnstile_secret_key: str | None = None
     turnstile_verify_url: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+    caddy_log_ingest_token: str | None = None
+    caddy_log_retention_days: int = 30
     access_log_enabled: bool = True
     trusted_proxy_depth: int = 1
     blocked_ips: list[str] = []

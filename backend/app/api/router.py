@@ -7,6 +7,7 @@ from backend.app.api.routes import (
     auth,
     audit,
     access_logs,
+    caddy_logs,
     feedback,
     findings,
     health,
@@ -28,3 +29,4 @@ api_router.include_router(audit.router)
 api_router.include_router(users.router)
 api_router.include_router(wallets.router)
 api_router.include_router(access_logs.router)
+api_router.include_router(caddy_logs.router)

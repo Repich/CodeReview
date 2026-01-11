@@ -18,6 +18,7 @@ function DashboardLayout({ children }: Props) {
     queryKey: ['layout-wallet'],
     queryFn: fetchWallet,
   });
+  const isAdmin = (userQuery.data?.role || '').toLowerCase() === 'admin';
 
   return (
     <div className="app-shell">
@@ -30,6 +31,11 @@ function DashboardLayout({ children }: Props) {
           <NavLink to="/account" className={({ isActive }) => (isActive ? 'active-link' : undefined)}>
             Личный кабинет
           </NavLink>
+          {isAdmin && (
+            <NavLink to="/admin" className={({ isActive }) => (isActive ? 'active-link' : undefined)}>
+              Админка
+            </NavLink>
+          )}
         </nav>
         <div className="app-user">
           <div>

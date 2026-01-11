@@ -31,6 +31,18 @@ class UserRead(ORMModel):
     created_at: datetime
 
 
+class UserStatusUpdate(ORMModel):
+    status: str
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"active", "disabled"}:
+            raise ValueError("Invalid status")
+        return normalized
+
+
 class WalletRead(ORMModel):
     id: uuid.UUID
     balance: int

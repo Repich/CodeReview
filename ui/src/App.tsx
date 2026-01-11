@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import RunListPage from './pages/RunList';
 import RunDetailsPage from './pages/RunDetails';
 import AccountPage from './pages/Account';
+import AdminPage from './pages/Admin';
 import LoginPage from './pages/Login';
 import { useAuth } from './contexts/AuthContext';
 import DashboardLayout from './components/DashboardLayout';
@@ -37,6 +38,7 @@ function App() {
         <Route path="/runs" element={<RunListPage />} />
         <Route path="/runs/:id" element={<RunDetailsPage />} />
         <Route path="/account" element={<AccountPage />} />
+        <Route path="/admin" element={<AdminPage />} />
       </Route>
       <Route path="*" element={<Navigate to={fallbackPath} replace />} />
     </Routes>
