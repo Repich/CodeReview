@@ -1,10 +1,8 @@
-import { FormEvent, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   fetchCurrentUser,
   fetchWallet,
   fetchWalletTransactions,
-  adjustWalletBalance,
 } from '../services/api';
 
 function AccountPage() {
@@ -15,45 +13,6 @@ function AccountPage() {
     queryFn: fetchWalletTransactions,
     enabled: true,
   });
-  const isAdmin = (userQuery.data?.role || '').toLowerCase() === 'admin';
-  const [adjustEmail, setAdjustEmail] = useState('');
-  const [adjustAmount, setAdjustAmount] = useState('0');
-  const [adjustReason, setAdjustReason] = useState('Admin top-up');
-  const [adjustMessage, setAdjustMessage] = useState<string | null>(null);
-  const [adjustState, setAdjustState] = useState<'idle' | 'success' | 'error'>('idle');
-  const [isSubmittingAdjust, setSubmittingAdjust] = useState(false);
-
-  const handleAdjustSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    setSubmittingAdjust(true);
-    setAdjustMessage(null);
-    setAdjustState('idle');
-    try {
-      const amountNumber = Math.abs(Number(adjustAmount));
-      if (!amountNumber) {
-        setAdjustMessage('Укажите сумму больше нуля.');
-        setAdjustState('error');
-        return;
-      }
-      await adjustWalletBalance({
-        user_email: adjustEmail,
-        amount: amountNumber,
-        reason: adjustReason,
-      });
-      setAdjustMessage('Баланс успешно пополнен.');
-      setAdjustState('success');
-      setAdjustEmail('');
-      setAdjustAmount('0');
-      setAdjustReason('Admin top-up');
-      await Promise.all([walletQuery.refetch(), txQuery.refetch()]);
-    } catch (err) {
-      console.error(err);
-      setAdjustMessage('Не удалось выполнить операцию.');
-      setAdjustState('error');
-    } finally {
-      setSubmittingAdjust(false);
-    }
-  };
 
   if (userQuery.isLoading || walletQuery.isLoading) {
     return <p>Загружаем профиль...</p>;
@@ -158,56 +117,6 @@ function AccountPage() {
         </div>
       </div>
 
-      {isAdmin && (
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <h2 className="card-title">Пополнение баланса</h2>
-              <p className="muted">Доступно только администраторам. Email — обязательное поле.</p>
-            </div>
-          </div>
-          <form onSubmit={handleAdjustSubmit} className="form-grid" style={{ gap: '1rem' }}>
-            <div className="field">
-              <label htmlFor="adjust-email">Email пользователя</label>
-              <input
-                id="adjust-email"
-                type="email"
-                required
-                value={adjustEmail}
-                onChange={(event) => setAdjustEmail(event.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="adjust-amount">Сумма (баллы)</label>
-              <input
-                id="adjust-amount"
-                type="number"
-                min={1}
-                required
-                value={adjustAmount}
-                onChange={(event) => setAdjustAmount(event.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="adjust-reason">Комментарий</label>
-              <input
-                id="adjust-reason"
-                type="text"
-                value={adjustReason}
-                onChange={(event) => setAdjustReason(event.target.value)}
-              />
-            </div>
-            <button type="submit" className="btn btn-primary" disabled={isSubmittingAdjust}>
-              {isSubmittingAdjust ? 'Выполняем...' : 'Пополнить'}
-            </button>
-            {adjustMessage && (
-              <div className={`alert ${adjustState === 'success' ? 'alert-success' : 'alert-error'}`}>
-                {adjustMessage}
-              </div>
-            )}
-          </form>
-        </div>
-      )}
     </div>
   );
 }

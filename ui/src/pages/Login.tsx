@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { login, register } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,31 +21,51 @@ function LoginPage({ initialMode = 'login' }: Props) {
   const [isSubmitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
+  const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
+
+  const renderTurnstile = () => {
+    if (!turnstileSiteKey) return;
+    const turnstile = (window as any).turnstile;
+    if (!turnstile || !turnstileContainerRef.current) return;
+    if (turnstileWidgetIdRef.current) return;
+    turnstileWidgetIdRef.current = turnstile.render(turnstileContainerRef.current, {
+      sitekey: turnstileSiteKey,
+      callback: (token: string) => setCaptchaToken(token),
+    });
+  };
 
   useEffect(() => {
     if (!turnstileSiteKey) return;
-    (window as any).turnstileCallback = (token: string) => {
-      setCaptchaToken(token);
-    };
     const scriptId = 'turnstile-script';
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement('script');
-      script.id = scriptId;
-      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
-      script.async = true;
-      script.defer = true;
-      document.body.appendChild(script);
+    const existing = document.getElementById(scriptId) as HTMLScriptElement | null;
+    if (existing) {
+      renderTurnstile();
+      return;
     }
-    return () => {
-      delete (window as any).turnstileCallback;
+    const script = document.createElement('script');
+    script.id = scriptId;
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      renderTurnstile();
     };
+    document.body.appendChild(script);
   }, [turnstileSiteKey]);
 
   useEffect(() => {
     if (mode === 'register') {
       setCaptchaToken('');
       setWebsite('');
+      renderTurnstile();
+      return;
     }
+    const turnstile = (window as any).turnstile;
+    if (turnstileWidgetIdRef.current && turnstile?.remove) {
+      turnstile.remove(turnstileWidgetIdRef.current);
+    }
+    turnstileWidgetIdRef.current = null;
   }, [mode]);
 
   const handleSubmit = async (event: FormEvent) => {
@@ -165,11 +185,7 @@ function LoginPage({ initialMode = 'login' }: Props) {
           {mode === 'register' && turnstileSiteKey && (
             <div className="field">
               <label>Проверка</label>
-              <div
-                className="cf-turnstile"
-                data-sitekey={turnstileSiteKey}
-                data-callback="turnstileCallback"
-              />
+              <div ref={turnstileContainerRef} />
             </div>
           )}
           {error && <div className="alert alert-error">{error}</div>}
