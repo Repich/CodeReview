@@ -160,7 +160,21 @@ def fetch_next_task(response: Response, db: Session = Depends(get_db)):
             )
             db.commit()
             continue
-        sources = artifact_service.load_sources(artifact_path)
+        try:
+            sources = artifact_service.load_sources(artifact_path)
+        except FileNotFoundError:
+            review_run.status = ReviewStatus.FAILED
+            review_run.finished_at = datetime.utcnow()
+            db.add(review_run)
+            db.add(
+                AuditLog(
+                    review_run_id=review_run.id,
+                    event_type=AuditEventType.RUN_FAILED,
+                    payload={"reason": "missing_source_file", "artifact": artifact_path},
+                )
+            )
+            db.commit()
+            continue
         review_run.status = ReviewStatus.RUNNING
         if not review_run.started_at:
             review_run.started_at = datetime.utcnow()
