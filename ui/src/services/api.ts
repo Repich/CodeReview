@@ -228,6 +228,11 @@ export async function createReviewRun(payload: CreateReviewRunPayload) {
   return data;
 }
 
+export async function rerunReviewRun(id: string) {
+  const { data } = await client.post<ReviewRun>(`/review-runs/${id}/rerun`);
+  return data;
+}
+
 export async function deleteReviewRun(id: string) {
   await client.delete(`/review-runs/${id}`);
 }

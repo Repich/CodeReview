@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
@@ -319,6 +320,62 @@ def update_review_run(
     review_run = ensure_run_access(db, review_run_id, current_user)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(review_run, field, value)
+    db.add(review_run)
+    db.commit()
+    db.refresh(review_run)
+    return review_run
+
+
+@router.post("/{review_run_id}/rerun", response_model=ReviewRunRead)
+def rerun_review_run(
+    review_run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(get_current_user),
+) -> ReviewRun:
+    review_run = ensure_run_access(db, review_run_id, current_user)
+    if review_run.status in (ReviewStatus.RUNNING, ReviewStatus.QUEUED):
+        raise HTTPException(status_code=409, detail="Запуск уже выполняется или ожидает")
+
+    ctx = review_run.context or {}
+    artifact_path = ctx.get("source_artifact")
+    if not artifact_path:
+        raise HTTPException(status_code=409, detail="Невозможно перезапустить: нет исходников")
+    settings = get_settings()
+    source_file = Path(settings.artifact_dir) / artifact_path
+    if not source_file.exists():
+        raise HTTPException(status_code=409, detail="Невозможно перезапустить: источник не найден")
+
+    db.query(Finding).filter(Finding.review_run_id == review_run.id).delete(
+        synchronize_session=False
+    )
+    db.query(AIFinding).filter(AIFinding.review_run_id == review_run.id).delete(
+        synchronize_session=False
+    )
+    db.query(AuditLog).filter(
+        AuditLog.review_run_id == review_run.id,
+        AuditLog.event_type != AuditEventType.RUN_CREATED,
+    ).delete(synchronize_session=False)
+
+    output_logs = (
+        db.query(IOLog)
+        .filter(IOLog.review_run_id == review_run.id, IOLog.direction == IODirection.OUT)
+        .all()
+    )
+    for record in output_logs:
+        artifact_service.delete_artifact(record.storage_path)
+    db.query(IOLog).filter(
+        IOLog.review_run_id == review_run.id,
+        IOLog.direction == IODirection.OUT,
+    ).delete(synchronize_session=False)
+
+    review_run.status = ReviewStatus.QUEUED
+    review_run.queued_at = datetime.utcnow()
+    review_run.started_at = None
+    review_run.finished_at = None
+    review_run.engine_version = None
+    review_run.detectors_version = None
+    review_run.norms_version = None
+    review_run.llm_prompt_version = None
     db.add(review_run)
     db.commit()
     db.refresh(review_run)

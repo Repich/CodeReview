@@ -268,6 +268,13 @@ def test_query_aliases_negative():
     assert not run(QueryExplicitAliasesDetector, content)
 
 
+def test_query_aliases_negative_with_tabs():
+    content = """Запрос.Текст = "ВЫБРАТЬ 
+| ЗНАЧЕНИЕ(ВидДвиженияНакопления.Приход)\tКАК ВидДвижения
+| ИЗ Документ.Тест";"""
+    assert not run(QueryExplicitAliasesDetector, content)
+
+
 def test_query_comment_patching_positive():
     content = 'Запрос.Текст = Запрос.Текст + "/*where*/";'
     assert run(QueryCommentPatchingDetector, content)

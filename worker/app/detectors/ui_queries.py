@@ -221,6 +221,7 @@ class QueryExplicitAliasesDetector(BaseDetector):
     norm_id = "QUERY_EXPLICIT_ALIASES"
     detector_id = "detector.query_aliases"
     severity = "minor"
+    alias_pattern = re.compile(r"(?:^|\s)(КАК|AS)(?=\s)", re.IGNORECASE)
 
     header_prefixes = (
         "ВЫБРАТЬ",
@@ -246,10 +247,11 @@ class QueryExplicitAliasesDetector(BaseDetector):
             expr = stripped.lstrip("|").strip()
             if not expr:
                 continue
+            normalized_expr = " ".join(expr.split())
             expr_upper = expr.upper()
             if expr_upper.startswith(self.header_prefixes):
                 continue
-            if "." in expr and " КАК " not in expr_upper and " AS " not in expr_upper:
+            if "." in expr and not self.alias_pattern.search(normalized_expr):
                 findings.append(
                     self.create_finding(
                         ctx,

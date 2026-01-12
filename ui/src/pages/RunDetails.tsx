@@ -13,6 +13,7 @@ import {
   downloadFindingsJsonl,
   updateAIFindingStatus,
   deleteReviewRun,
+  rerunReviewRun,
   fetchRunSources,
 } from '../services/api';
 import type { Finding, AIFinding, AIFindingStatus, LLMLogEntry, RunSource } from '../services/api';
@@ -135,6 +136,18 @@ function RunDetailsPage() {
     },
   });
 
+  const rerunMutation = useMutation({
+    mutationFn: () => rerunReviewRun(id!),
+    onSuccess: () => {
+      runQuery.refetch();
+      findingsQuery.refetch();
+      aiFindingsQuery.refetch();
+      auditQuery.refetch();
+      artifactsQuery.refetch();
+      llmLogsQuery.refetch();
+    },
+  });
+
   const filteredFindings: Finding[] = useMemo(() => {
     const items = findingsQuery.data?.items ?? [];
     return items.filter((item) => {
@@ -234,6 +247,20 @@ function RunDetailsPage() {
     }
   };
 
+  const handleRerun = () => {
+    if (!id || !run) return;
+    if (run.status === 'running' || run.status === 'queued') {
+      return;
+    }
+    if (
+      window.confirm(
+        'Перезапустить запуск? Текущие findings, логи и артефакты будут очищены.',
+      )
+    ) {
+      rerunMutation.mutate();
+    }
+  };
+
   return (
     <div>
       <div className="page-heading">
@@ -246,6 +273,18 @@ function RunDetailsPage() {
             {statusLabels[run?.status ?? ''] ?? run?.status}
           </span>
           {progressText && <span className="muted">{progressText}</span>}
+          <button
+            className="btn btn-secondary"
+            disabled={run?.status === 'running' || run?.status === 'queued' || rerunMutation.isPending}
+            onClick={handleRerun}
+          >
+            {rerunMutation.isPending ? 'Перезапускаем…' : 'Перезапустить'}
+          </button>
+          {rerunMutation.isError && (
+            <span className="alert alert-error" style={{ marginTop: '0.25rem' }}>
+              Не удалось перезапустить. Попробуйте позже.
+            </span>
+          )}
           <button
             className="btn btn-secondary"
             disabled={run?.status === 'running' || deleteRunMutation.isPending}
