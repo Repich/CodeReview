@@ -240,6 +240,7 @@ class QueryExplicitAliasesDetector(BaseDetector):
 
     def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
         findings: list[DetectorFinding] = []
+        in_select = False
         for line_no, line in self.iter_lines(ctx.source.content):
             stripped = line.strip()
             if not stripped.startswith("|"):
@@ -248,10 +249,24 @@ class QueryExplicitAliasesDetector(BaseDetector):
             if not expr:
                 continue
             normalized_expr = " ".join(expr.split())
-            expr_upper = expr.upper()
-            if expr_upper.startswith(self.header_prefixes):
+            expr_upper = normalized_expr.upper()
+
+            expr_to_check: str | None = None
+            if expr_upper.startswith("ВЫБРАТЬ"):
+                in_select = True
+                remainder = normalized_expr[len("ВЫБРАТЬ") :].strip()
+                if remainder:
+                    expr_to_check = remainder
+            elif expr_upper.startswith(self.header_prefixes):
+                if in_select:
+                    in_select = False
                 continue
-            if "." in expr and not self.alias_pattern.search(normalized_expr):
+            else:
+                if not in_select:
+                    continue
+                expr_to_check = normalized_expr
+
+            if expr_to_check and "." in expr_to_check and not self.alias_pattern.search(expr_to_check):
                 findings.append(
                     self.create_finding(
                         ctx,

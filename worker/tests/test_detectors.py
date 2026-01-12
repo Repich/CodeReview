@@ -275,6 +275,24 @@ def test_query_aliases_negative_with_tabs():
     assert not run(QueryExplicitAliasesDetector, content)
 
 
+def test_query_aliases_negative_where_condition():
+    content = """Запрос.Текст = "ВЫБРАТЬ 
+| Документ.Ссылка КАК Ссылка
+| ИЗ Документ.Тест
+| ГДЕ
+| Документ.Ссылка = &Ссылка";"""
+    assert not run(QueryExplicitAliasesDetector, content)
+
+
+def test_query_aliases_negative_order_by():
+    content = """Запрос.Текст = "ВЫБРАТЬ 
+| Документ.Ссылка КАК Ссылка
+| ИЗ Документ.Тест
+| УПОРЯДОЧИТЬ ПО
+| Документ.Ссылка";"""
+    assert not run(QueryExplicitAliasesDetector, content)
+
+
 def test_query_comment_patching_positive():
     content = 'Запрос.Текст = Запрос.Текст + "/*where*/";'
     assert run(QueryCommentPatchingDetector, content)
