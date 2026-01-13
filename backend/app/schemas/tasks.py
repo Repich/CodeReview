@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
 
 from backend.app.models.enums import FindingSeverity
 
@@ -62,6 +63,7 @@ class AnalysisResultPayload(BaseModel):
     ai_findings: list[AISuggestionPayload] | None = None
     llm_prompt_version: str | None = None
     llm_logs: list["LLMDiagnosticPayload"] | None = None
+    metrics: dict[str, Any] | None = None
 
 
 class LLMDiagnosticPayload(BaseModel):

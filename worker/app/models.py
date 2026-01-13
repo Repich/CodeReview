@@ -62,6 +62,7 @@ class AnalysisResult:
     detectors_version: str
     norms_version: str
     duration_ms: int
+    metrics: dict[str, Any] | None = None
     ai_suggestions: list["AISuggestion"] = field(default_factory=list)
     llm_prompt_version: str | None = None
     llm_logs: list["LLMDiagnostic"] = field(default_factory=list)

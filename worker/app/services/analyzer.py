@@ -8,6 +8,7 @@ from worker.app.config import get_settings
 from worker.app.detectors.base import DetectorContext
 from worker.app.detectors.registry import default_registry
 from worker.app.models import AnalysisResult, AnalysisTask, DetectorFinding
+from worker.app.services.cognitive_complexity import compute_cognitive_complexity
 from worker.app.services.llm_client import generate_ai_suggestions
 
 
@@ -28,6 +29,7 @@ class Analyzer:
                 findings.extend(detector.detect(ctx))
         findings = self._filter_findings(findings, range_map)
         llm_result = generate_ai_suggestions(task, findings)
+        metrics = compute_cognitive_complexity(task.sources)
         llm_context_value = {
             "enabled": bool(llm_result),
             "prompt_version": llm_result.prompt_version if llm_result else None,
@@ -44,6 +46,7 @@ class Analyzer:
             detectors_version=self.settings.detectors_version,
             norms_version=self.settings.norms_version,
             duration_ms=duration_ms,
+            metrics=metrics,
             ai_suggestions=llm_result.suggestions if llm_result else [],
             llm_prompt_version=llm_result.prompt_version if llm_result else None,
             llm_logs=llm_result.log_entries if llm_result else [],

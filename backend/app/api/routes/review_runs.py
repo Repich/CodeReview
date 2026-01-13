@@ -218,6 +218,13 @@ def submit_results(
     review_run.norms_version = payload.norms_version
     if payload.llm_prompt_version is not None:
         review_run.llm_prompt_version = payload.llm_prompt_version
+    if payload.metrics:
+        context = dict(review_run.context or {})
+        metrics = dict(context.get("metrics") or {})
+        for key, value in payload.metrics.items():
+            metrics[key] = value
+        context["metrics"] = metrics
+        review_run.context = context
     review_run.status = ReviewStatus.COMPLETED
     review_run.started_at = review_run.started_at or datetime.utcnow()
     review_run.finished_at = datetime.utcnow()

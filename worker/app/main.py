@@ -63,6 +63,7 @@ def serialize_result(result: AnalysisResult) -> dict[str, Any]:
         "detectors_version": result.detectors_version,
         "norms_version": result.norms_version,
         "duration_ms": result.duration_ms,
+        "metrics": result.metrics,
         "llm_prompt_version": result.llm_prompt_version,
         "findings": [
             {
