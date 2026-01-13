@@ -118,12 +118,12 @@ def generate_ai_suggestions(
                     logger.warning("LLM unit %s: no response", unit.unit_name)
                     continue
                 allowed_norm_ids = {card.norm_id for card in norm_cards}
-            unit_suggestions = _parse_response(
-                response_text,
-                unit_findings,
-                unit,
-                allowed_norm_ids,
-            )
+                unit_suggestions = _parse_response(
+                    response_text,
+                    unit_findings,
+                    unit,
+                    allowed_norm_ids,
+                )
                 if unit_suggestions:
                     logger.info(
                         "LLM unit %s: received %s suggestions",
