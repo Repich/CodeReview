@@ -72,6 +72,7 @@ class QueryNormRepository:
     path: Path = NORMS_PATH
     norm_ids: list[str] | None = None
     cards: list[NormCard] | None = None
+    entries: dict[str, dict] | None = None
     version: str = "unknown"
 
     def __post_init__(self) -> None:
@@ -79,6 +80,8 @@ class QueryNormRepository:
             self.norm_ids = list(QUERY_NORM_IDS)
         if self.cards is None:
             self.cards = []
+        if self.entries is None:
+            self.entries = {}
         self._load()
 
     def _load(self) -> None:
@@ -94,6 +97,7 @@ class QueryNormRepository:
             entry = norm_map.get(norm_id)
             if not entry:
                 continue
+            self.entries[norm_id] = entry
             body = _format_norm_body(entry)
             checksum = hashlib.sha1(f"{norm_id}:{body}".encode("utf-8")).hexdigest()[:12]
             tokens = set(_tokenize(body))

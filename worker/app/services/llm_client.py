@@ -118,12 +118,12 @@ def generate_ai_suggestions(
                     logger.warning("LLM unit %s: no response", unit.unit_name)
                     continue
                 allowed_norm_ids = {card.norm_id for card in norm_cards}
-                unit_suggestions = _parse_response(
-                    response_text,
-                    unit_findings,
-                    unit,
-                    allowed_norm_ids,
-                )
+            unit_suggestions = _parse_response(
+                response_text,
+                unit_findings,
+                unit,
+                allowed_norm_ids,
+            )
                 if unit_suggestions:
                     logger.info(
                         "LLM unit %s: received %s suggestions",
@@ -188,12 +188,13 @@ def generate_ai_suggestions(
                 if not response_text:
                     logger.warning("LLM query %s: no response", unit.unit_name)
                     continue
-                unit_suggestions = _parse_response(
-                    response_text,
-                    unit_findings,
-                    unit,
-                    query_norm_ids,
-                )
+            unit_suggestions = _parse_response(
+                response_text,
+                unit_findings,
+                unit,
+                query_norm_ids,
+                norm_lookup=query_norm_repo.entries,
+            )
                 if unit_suggestions:
                     logger.info(
                         "LLM query %s: received %s suggestions",
@@ -357,8 +358,9 @@ def _build_query_prompt(
         - Некоторые строки могут быть собраны динамически и не начинаться с символа "|".
         - Не отмечай нарушения, которые уже есть в статических находках.
         - Для каждого нового нарушения верни объект с полями
-          norm_id, section, category, norm_text, source_reference, severity (optional),
-          evidence (массив объектов с file, lines и reason).
+          norm_id, severity (optional), evidence (массив объектов с file, lines и reason).
+        - Не добавляй norm_text/section/category/source_reference — мы заполним их по norm_id.
+        - В текстовых полях избегай двойных кавычек, используй «» или одинарные кавычки.
         - lines указывай относительно исходного файла (например "CommonModules/Module.bsl:210-235").
         - Если нарушений нет, верни пустой массив [].
 
@@ -421,8 +423,9 @@ def _format_norm_cards(cards: list[NormCard]) -> str:
 def _parse_response(
     raw_text: str,
     unit_findings: list[DetectorFinding],
-    unit: CodeUnit,
+    unit: CodeUnit | QueryUnit,
     allowed_norm_ids: set[str],
+    norm_lookup: dict[str, dict] | None = None,
 ) -> list[AISuggestion]:
     cleaned = raw_text.strip()
     if cleaned.startswith("```"):
@@ -445,9 +448,6 @@ def _parse_response(
     for entry in parsed:
         if not isinstance(entry, dict):
             continue
-        norm_text = entry.get("norm_text")
-        if not norm_text:
-            continue
         norm_id = entry.get("norm_id")
         if not norm_id or norm_id not in allowed_norm_ids:
             logger.debug("Skipping unknown norm_id: %s", norm_id)
@@ -458,12 +458,17 @@ def _parse_response(
         if not _evidence_matches_entry(entry, unit):
             logger.debug("Skipping norm %s due to invalid evidence", norm_id)
             continue
+        meta = norm_lookup.get(norm_id) if norm_lookup else {}
+        norm_text = entry.get("norm_text") or (meta.get("norm_text") if meta else None)
+        if not norm_text:
+            continue
         suggestion = AISuggestion(
             norm_id=norm_id,
-            section=entry.get("section"),
-            category=entry.get("category"),
+            section=entry.get("section") or (meta.get("section") if meta else None),
+            category=entry.get("category") or (meta.get("category") if meta else None),
             norm_text=str(norm_text),
-            source_reference=entry.get("source_reference"),
+            source_reference=entry.get("source_reference")
+            or (meta.get("source_reference") or meta.get("source_standard") if meta else None),
             severity=entry.get("severity"),
             evidence=entry.get("evidence"),
             llm_raw_response=entry,
