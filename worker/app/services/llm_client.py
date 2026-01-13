@@ -445,16 +445,8 @@ def _parse_response(
     allowed_norm_ids: set[str],
     norm_lookup: dict[str, dict] | None = None,
 ) -> list[AISuggestion]:
-    cleaned = raw_text.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`")
-        lines = cleaned.splitlines()
-        if lines and lines[0].lower().startswith("json"):
-            lines = lines[1:]
-        cleaned = "\n".join(lines)
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
+    parsed = _load_json_array(raw_text)
+    if parsed is None:
         logger.warning("LLM response is not a valid JSON payload")
         return []
 
@@ -463,16 +455,24 @@ def _parse_response(
         return suggestions
 
     existing_norms = {finding.norm_id for finding in unit_findings}
+    norm_id_map = {norm_id.upper(): norm_id for norm_id in allowed_norm_ids}
     for entry in parsed:
         if not isinstance(entry, dict):
             continue
-        norm_id = entry.get("norm_id")
-        if not norm_id or norm_id not in allowed_norm_ids:
-            logger.debug("Skipping unknown norm_id: %s", norm_id)
+        norm_id_raw = str(entry.get("norm_id") or "").strip()
+        norm_id = norm_id_map.get(norm_id_raw.upper())
+        if not norm_id:
+            logger.debug("Skipping unknown norm_id: %s", norm_id_raw)
             continue
         if norm_id and norm_id in existing_norms:
             logger.debug("Skipping norm %s already covered by static finding", norm_id)
             continue
+        evidence = entry.get("evidence")
+        if isinstance(evidence, dict):
+            evidence = [evidence]
+        elif evidence is not None and not isinstance(evidence, list):
+            evidence = None
+        entry["evidence"] = evidence
         if not _evidence_matches_entry(entry, unit):
             logger.debug("Skipping norm %s due to invalid evidence", norm_id)
             continue
@@ -494,6 +494,33 @@ def _parse_response(
         suggestions.append(suggestion)
     return suggestions
 
+
+def _load_json_array(raw_text: str) -> list[dict] | None:
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        lines = cleaned.splitlines()
+        if lines and lines[0].lower().startswith("json"):
+            lines = lines[1:]
+        cleaned = "\n".join(lines).strip()
+    try:
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, list):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+    start = cleaned.find("[")
+    end = cleaned.rfind("]")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    snippet = cleaned[start : end + 1]
+    try:
+        parsed = json.loads(snippet)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, list):
+        return parsed
+    return None
 
 @lru_cache(maxsize=1)
 def _load_api_key() -> str | None:
