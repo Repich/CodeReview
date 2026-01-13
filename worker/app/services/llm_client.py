@@ -26,7 +26,10 @@ SYSTEM_PROMPT = (
     "Ты получаешь отдельные фрагменты модулей 1С и выдержки из стандарта. "
     "Твоя задача — найти новые нарушения норм в данном фрагменте. "
     "Не дублируй статические находки. Для каждого нарушения указывай norm_id, "
-    "обоснование, строки и краткое описание."
+    "обоснование, строки и краткое описание. "
+    "Используй только нормы из раздела «Выдержки стандартов» и не придумывай новые. "
+    "norm_id должен совпадать с идентификатором из выдержек (например, std437). "
+    "Если подходящей нормы нет, верни пустой массив."
 )
 
 MAX_UNIT_CODE_CHARS = 6_000
@@ -96,7 +99,13 @@ def generate_ai_suggestions(
         if not response_text:
             logger.warning("LLM unit %s: no response", unit.unit_name)
             continue
-        unit_suggestions = _parse_response(response_text, unit_findings, unit)
+        allowed_norm_ids = {card.norm_id for card in norm_cards}
+        unit_suggestions = _parse_response(
+            response_text,
+            unit_findings,
+            unit,
+            allowed_norm_ids,
+        )
         if unit_suggestions:
             logger.info(
                 "LLM unit %s: received %s suggestions",
@@ -278,6 +287,7 @@ def _parse_response(
     raw_text: str,
     unit_findings: list[DetectorFinding],
     unit: CodeUnit,
+    allowed_norm_ids: set[str],
 ) -> list[AISuggestion]:
     cleaned = raw_text.strip()
     if cleaned.startswith("```"):
@@ -304,6 +314,9 @@ def _parse_response(
         if not norm_text:
             continue
         norm_id = entry.get("norm_id")
+        if not norm_id or norm_id not in allowed_norm_ids:
+            logger.debug("Skipping unknown norm_id: %s", norm_id)
+            continue
         if norm_id and norm_id in existing_norms:
             logger.debug("Skipping norm %s already covered by static finding", norm_id)
             continue
