@@ -40,7 +40,10 @@ QUERY_SYSTEM_PROMPT = (
     "Твоя задача — найти нарушения норм по запросам. "
     "Используй только нормы из раздела «Выдержки стандартов» и не придумывай новые. "
     "norm_id должен совпадать с идентификатором из выдержек. "
-    "Если подходящей нормы нет, верни пустой массив."
+    "Если есть потенциальное нарушение или риск, даже если требуется проверка контекста "
+    "(объем данных, индексы, назначение результата), все равно верни его и пометь в reason, "
+    "что это «возможное» нарушение. "
+    "Если сомневаешься, лучше вернуть потенциальное нарушение с severity info/warning, чем пустой массив."
 )
 
 MAX_UNIT_CODE_CHARS = 6_000
@@ -49,6 +52,7 @@ MAX_UNITS_PER_RUN = 40
 MAX_QUERY_TEXT_CHARS = 32_000
 MAX_QUERY_NORM_TEXT_CHARS = 40_000
 MAX_QUERY_UNITS_PER_RUN = 40
+QUERY_TEMPERATURE = 0.2
 
 
 @dataclass
@@ -184,7 +188,12 @@ def generate_ai_suggestions(
                     len(unit_findings),
                 )
                 prompt = _build_query_prompt(unit, unit_findings, query_norm_repo.cards)
-                response_text = _call_deepseek(prompt, api_key, system_prompt=QUERY_SYSTEM_PROMPT)
+                response_text = _call_deepseek(
+                    prompt,
+                    api_key,
+                    system_prompt=QUERY_SYSTEM_PROMPT,
+                    temperature=QUERY_TEMPERATURE,
+                )
                 if not response_text:
                     logger.warning("LLM query %s: no response", unit.unit_name)
                     continue
@@ -242,7 +251,12 @@ def generate_ai_suggestions(
     )
 
 
-def _call_deepseek(prompt: str, api_key: str, system_prompt: str = SYSTEM_PROMPT) -> str | None:
+def _call_deepseek(
+    prompt: str,
+    api_key: str,
+    system_prompt: str = SYSTEM_PROMPT,
+    temperature: float = 0,
+) -> str | None:
     settings = get_settings()
     url = settings.llm_api_base.rstrip("/") + "/v1/chat/completions"
     payload = {
@@ -251,7 +265,7 @@ def _call_deepseek(prompt: str, api_key: str, system_prompt: str = SYSTEM_PROMPT
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0,
+        "temperature": temperature,
     }
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -357,6 +371,10 @@ def _build_query_prompt(
         - Анализируй только текст запроса в блоке выше.
         - Некоторые строки могут быть собраны динамически и не начинаться с символа "|".
         - Не отмечай нарушения, которые уже есть в статических находках.
+        - Если нарушение зависит от контекста (объем данных, индексы, назначение результата),
+          все равно укажи его как потенциальное и отметь в reason, что требуется проверка.
+        - При низкой уверенности допускается эвристика — лучше вернуть возможное нарушение,
+          чем пустой массив.
         - Для каждого нового нарушения верни объект с полями
           norm_id, severity (optional), evidence (массив объектов с file, lines и reason).
         - Не добавляй norm_text/section/category/source_reference — мы заполним их по norm_id.
