@@ -133,8 +133,9 @@ class ComAutomationDetector(BaseDetector):
     def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
         findings: list[DetectorFinding] = []
         pattern = re.compile(r"Новый\s+COM(Объект|Object)|CreateObject", re.IGNORECASE)
+        office_pattern = re.compile(r'\"\\s*(Excel|Word|PowerPoint)\\.Application\\s*\"', re.IGNORECASE)
         for line_no, line in self.iter_lines(ctx.source.content):
-            if pattern.search(line):
+            if pattern.search(line) and office_pattern.search(line):
                 findings.append(
                     self.create_finding(
                         ctx,

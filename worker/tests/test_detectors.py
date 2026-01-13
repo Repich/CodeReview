@@ -109,7 +109,8 @@ def test_com_automation_positive():
 
 
 def test_com_automation_negative():
-    assert not run(ComAutomationDetector, "Новый Структура();")
+    content = "Новый COMОбъект(\"ADODB.Command\");"
+    assert not run(ComAutomationDetector, content)
 
 
 def test_tls_verify_positive():
@@ -224,6 +225,11 @@ def test_query_uppercase_keywords_negative():
     assert not run(QueryUppercaseKeywordsDetector, content)
 
 
+def test_query_uppercase_keywords_negative_non_query_context():
+    content = "Функция ДанныеSQL(Соединение, ТекстЗапроса) Экспорт"
+    assert not run(QueryUppercaseKeywordsDetector, content)
+
+
 def test_form_element_naming_positive():
     content = 'Элементы.Добавить("Контрагент1", Тип("ПолеФормы"));'
     assert run(FormElementNamingDetector, content, module_type="FormModule")
@@ -290,6 +296,28 @@ def test_query_aliases_negative_order_by():
 | ИЗ Документ.Тест
 | УПОРЯДОЧИТЬ ПО
 | Документ.Ссылка";"""
+    assert not run(QueryExplicitAliasesDetector, content)
+
+
+def test_query_aliases_negative_case_multiline():
+    content = """Запрос.Текст = "ВЫБРАТЬ
+| ВЫБОР КОГДА &Флаг = 1 ТОГДА
+|     НЕОПРЕДЕЛЕНО
+| ИНАЧЕ
+|     Товары.Упаковка.Наименование
+| КОНЕЦ КАК Упаковка
+| ИЗ Документ.Тест";"""
+    assert not run(QueryExplicitAliasesDetector, content)
+
+
+def test_query_aliases_negative_union_tail():
+    content = """Запрос.Текст = "ВЫБРАТЬ
+| Таблица.Ссылка КАК Ссылка
+| ИЗ Справочник.Тест КАК Таблица
+| ОБЪЕДИНИТЬ ВСЕ
+| ВЫБРАТЬ
+| Таблица2.Ссылка
+| ИЗ Справочник.Тест2 КАК Таблица2";"""
     assert not run(QueryExplicitAliasesDetector, content)
 
 
@@ -402,6 +430,14 @@ def test_query_inside_loop_negative():
     content = """Запрос = Новый Запрос;
 Для Каждого Стр Из Таблица Цикл
     Сообщить(Стр);
+КонецЦикла;"""
+    assert not run(QueryInsideLoopDetector, content)
+
+
+def test_query_inside_loop_negative_set_param():
+    content = """Запрос = Новый Запрос;
+Для Каждого Стр Из Таблица Цикл
+    Запрос.УстановитьПараметр(Стр.Ключ, Стр.Значение);
 КонецЦикла;"""
     assert not run(QueryInsideLoopDetector, content)
 

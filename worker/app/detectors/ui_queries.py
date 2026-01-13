@@ -86,12 +86,9 @@ class QueryUppercaseKeywordsDetector(BaseDetector):
     severity = "minor"
 
     keyword_pattern = re.compile(r"\b(выбрать|из|где|объединить|соединение)\b", re.IGNORECASE)
-    query_prefixes = (
-        "запрос.текст",
-        "запрос =",
-        "текстзапроса",
-        "текстзапроса =",
-        "запрос.текст =",
+    query_inline_pattern = re.compile(
+        r"\b(запрос\.текст|текстзапроса)\s*=|запрос\s*=\s*новый\s+запрос\s*\(",
+        re.IGNORECASE,
     )
 
     def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
@@ -120,8 +117,9 @@ class QueryUppercaseKeywordsDetector(BaseDetector):
     def _is_query_line(self, stripped: str) -> bool:
         if stripped.startswith("|"):
             return True
-        lower = stripped.lower()
-        return any(prefix in lower for prefix in self.query_prefixes)
+        if '"' not in stripped:
+            return False
+        return bool(self.query_inline_pattern.search(stripped))
 
 
 @register
@@ -222,6 +220,9 @@ class QueryExplicitAliasesDetector(BaseDetector):
     detector_id = "detector.query_aliases"
     severity = "minor"
     alias_pattern = re.compile(r"(?:^|\s)(КАК|AS)(?=\s)", re.IGNORECASE)
+    case_start_pattern = re.compile(r"\bВЫБОР\b", re.IGNORECASE)
+    case_end_pattern = re.compile(r"\bКОНЕЦ\b", re.IGNORECASE)
+    union_prefix = "ОБЪЕДИНИТЬ"
 
     header_prefixes = (
         "ВЫБРАТЬ",
@@ -241,6 +242,13 @@ class QueryExplicitAliasesDetector(BaseDetector):
     def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
         findings: list[DetectorFinding] = []
         in_select = False
+        alias_required = True
+        skip_alias_for_next_select = False
+        case_depth = 0
+        case_has_alias = False
+        case_has_dot = False
+        case_start_line: int | None = None
+        case_start_expr: str | None = None
         for line_no, line in self.iter_lines(ctx.source.content):
             stripped = line.strip()
             if not stripped.startswith("|"):
@@ -251,20 +259,84 @@ class QueryExplicitAliasesDetector(BaseDetector):
             normalized_expr = " ".join(expr.split())
             expr_upper = normalized_expr.upper()
 
+            if expr_upper.startswith(";"):
+                in_select = False
+                alias_required = True
+                skip_alias_for_next_select = False
+                case_depth = 0
+                case_has_alias = False
+                case_has_dot = False
+                case_start_line = None
+                case_start_expr = None
+                continue
+
+            if expr_upper.startswith(self.union_prefix):
+                skip_alias_for_next_select = True
+                if in_select:
+                    in_select = False
+                case_depth = 0
+                case_has_alias = False
+                case_has_dot = False
+                case_start_line = None
+                case_start_expr = None
+                continue
+
             expr_to_check: str | None = None
             if expr_upper.startswith("ВЫБРАТЬ"):
                 in_select = True
+                alias_required = not skip_alias_for_next_select
+                skip_alias_for_next_select = False
                 remainder = normalized_expr[len("ВЫБРАТЬ") :].strip()
                 if remainder:
                     expr_to_check = remainder
             elif expr_upper.startswith(self.header_prefixes):
                 if in_select:
                     in_select = False
+                    alias_required = True
+                case_depth = 0
+                case_has_alias = False
+                case_has_dot = False
+                case_start_line = None
+                case_start_expr = None
                 continue
             else:
                 if not in_select:
                     continue
                 expr_to_check = normalized_expr
+
+            if not alias_required:
+                continue
+
+            if expr_to_check:
+                if self.case_start_pattern.search(expr_to_check):
+                    if case_depth == 0:
+                        case_start_line = line_no
+                        case_start_expr = expr_to_check
+                    case_depth += 1
+
+                if case_depth > 0:
+                    if "." in expr_to_check:
+                        case_has_dot = True
+                    if self.alias_pattern.search(expr_to_check):
+                        case_has_alias = True
+                    if self.case_end_pattern.search(expr_to_check):
+                        case_depth = max(case_depth - 1, 0)
+                        if case_depth == 0:
+                            if case_has_dot and not case_has_alias:
+                                findings.append(
+                                    self.create_finding(
+                                        ctx,
+                                        message="Поле запроса без псевдонима",
+                                        recommendation="Добавьте оператор КАК/AS, чтобы явно задать псевдоним для поля.",
+                                        line=case_start_line or line_no,
+                                        extra={"expression": case_start_expr or expr},
+                                    )
+                                )
+                            case_has_alias = False
+                            case_has_dot = False
+                            case_start_line = None
+                            case_start_expr = None
+                    continue
 
             if expr_to_check and "." in expr_to_check and not self.alias_pattern.search(expr_to_check):
                 findings.append(
@@ -416,6 +488,7 @@ class QueryInsideLoopDetector(BaseDetector):
     norm_id = "QUERY_GENERAL_02"
     detector_id = "detector.query_inside_loop"
     severity = "major"
+    query_pattern = re.compile(r"\bновый\s+запрос\b|запрос\.(?:выполн|текст)", re.IGNORECASE)
 
     def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
         findings: list[DetectorFinding] = []
@@ -429,7 +502,7 @@ class QueryInsideLoopDetector(BaseDetector):
             if loop_depth <= 0:
                 continue
             lowered = line.lower()
-            if "новый запрос" in lowered or "запрос." in lowered and ("выполн" in lowered or "установитьпараметр" in lowered):
+            if self.query_pattern.search(lowered):
                 findings.append(
                     self.create_finding(
                         ctx,
