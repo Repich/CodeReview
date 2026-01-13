@@ -17,6 +17,8 @@ from worker.app.config import get_settings
 from worker.app.models import AISuggestion, AnalysisTask, DetectorFinding, LLMDiagnostic
 from worker.app.services.code_units import CodeUnit, split_source_into_units
 from worker.app.services.norms_repo import NormCard, get_norm_repository
+from worker.app.services.query_norms import get_query_norm_repository
+from worker.app.services.query_units import QueryUnit, extract_query_units
 
 logger = logging.getLogger(__name__)
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -32,9 +34,21 @@ SYSTEM_PROMPT = (
     "Если подходящей нормы нет, верни пустой массив."
 )
 
+QUERY_SYSTEM_PROMPT = (
+    "Ты — эксперт по ревью текстов запросов 1С. "
+    "Ты получаешь только текст запроса из модуля. "
+    "Твоя задача — найти нарушения норм по запросам. "
+    "Используй только нормы из раздела «Выдержки стандартов» и не придумывай новые. "
+    "norm_id должен совпадать с идентификатором из выдержек. "
+    "Если подходящей нормы нет, верни пустой массив."
+)
+
 MAX_UNIT_CODE_CHARS = 6_000
 MAX_NORM_TEXT_CHARS = 8_000
 MAX_UNITS_PER_RUN = 40
+MAX_QUERY_TEXT_CHARS = 8_000
+MAX_QUERY_NORM_TEXT_CHARS = 40_000
+MAX_QUERY_UNITS_PER_RUN = 40
 
 
 @dataclass
@@ -56,11 +70,9 @@ def generate_ai_suggestions(
     units: list[CodeUnit] = []
     for source in task.sources:
         units.extend(split_source_into_units(source))
-    if not units:
-        logger.debug("No code units generated for run %s", task.review_run_id)
-        return None
 
-    logger.info("Run %s: generated %s code units", task.review_run_id, len(units))
+    if units:
+        logger.info("Run %s: generated %s code units", task.review_run_id, len(units))
 
     if len(units) > MAX_UNITS_PER_RUN:
         logger.info(
@@ -79,55 +91,131 @@ def generate_ai_suggestions(
 
     all_suggestions: list[AISuggestion] = []
     diagnostics: list[LLMDiagnostic] = []
+    prompt_versions: list[str] = []
     findings_list = list(findings)
-    for unit in units:
-        unit_findings = _filter_findings_for_unit(findings_list, unit)
-        keywords = _derive_keywords(unit, unit_findings)
-        norm_cards = norm_repo.search(keywords, limit=8)
-        logger.info(
-            "LLM unit %s (%s lines %s-%s): keywords=%s norms=%s findings=%s",
-            unit.unit_name,
-            unit.unit_type,
-            unit.start_line,
-            unit.end_line,
-            len(keywords),
-            [card.norm_id for card in norm_cards],
-            len(unit_findings),
-        )
-        prompt = _build_unit_prompt(unit, unit_findings, norm_cards)
-        response_text = _call_deepseek(prompt, api_key)
-        if not response_text:
-            logger.warning("LLM unit %s: no response", unit.unit_name)
-            continue
-        allowed_norm_ids = {card.norm_id for card in norm_cards}
-        unit_suggestions = _parse_response(
-            response_text,
-            unit_findings,
-            unit,
-            allowed_norm_ids,
-        )
-        if unit_suggestions:
-            logger.info(
-                "LLM unit %s: received %s suggestions",
-                unit.unit_name,
-                len(unit_suggestions),
-            )
-            all_suggestions.extend(unit_suggestions)
+    if units:
+        if not norm_repo.cards:
+            logger.warning("Norm repository is empty; skipping LLM stage for code units")
         else:
-            logger.info("LLM unit %s: no additional suggestions", unit.unit_name)
-        diagnostics.append(
-            LLMDiagnostic(
-                prompt=prompt,
-                response=response_text,
-                context_files=[f"norm:{card.norm_id}" for card in norm_cards],
-                source_paths=[unit.source_path],
-                static_findings=json.loads(_serialize_findings(unit_findings)),
-                created_at=datetime.utcnow().isoformat(),
-                prompt_version=norm_repo.version,
-                unit_id=unit.unit_id,
-                unit_name=unit.unit_name,
-            )
+            prompt_versions.append(norm_repo.version)
+            for unit in units:
+                unit_findings = _filter_findings_for_unit(findings_list, unit)
+                keywords = _derive_keywords(unit, unit_findings)
+                norm_cards = norm_repo.search(keywords, limit=8)
+                logger.info(
+                    "LLM unit %s (%s lines %s-%s): keywords=%s norms=%s findings=%s",
+                    unit.unit_name,
+                    unit.unit_type,
+                    unit.start_line,
+                    unit.end_line,
+                    len(keywords),
+                    [card.norm_id for card in norm_cards],
+                    len(unit_findings),
+                )
+                prompt = _build_unit_prompt(unit, unit_findings, norm_cards)
+                response_text = _call_deepseek(prompt, api_key)
+                if not response_text:
+                    logger.warning("LLM unit %s: no response", unit.unit_name)
+                    continue
+                allowed_norm_ids = {card.norm_id for card in norm_cards}
+                unit_suggestions = _parse_response(
+                    response_text,
+                    unit_findings,
+                    unit,
+                    allowed_norm_ids,
+                )
+                if unit_suggestions:
+                    logger.info(
+                        "LLM unit %s: received %s suggestions",
+                        unit.unit_name,
+                        len(unit_suggestions),
+                    )
+                    all_suggestions.extend(unit_suggestions)
+                else:
+                    logger.info("LLM unit %s: no additional suggestions", unit.unit_name)
+                diagnostics.append(
+                    LLMDiagnostic(
+                        prompt=prompt,
+                        response=response_text,
+                        context_files=[f"norm:{card.norm_id}" for card in norm_cards],
+                        source_paths=[unit.source_path],
+                        static_findings=json.loads(_serialize_findings(unit_findings)),
+                        created_at=datetime.utcnow().isoformat(),
+                        prompt_version=norm_repo.version,
+                        unit_id=unit.unit_id,
+                        unit_name=unit.unit_name,
+                    )
+                )
+
+    query_units: list[QueryUnit] = []
+    for source in task.sources:
+        query_units.extend(extract_query_units(source))
+    if query_units:
+        logger.info("Run %s: extracted %s query blocks", task.review_run_id, len(query_units))
+    if len(query_units) > MAX_QUERY_UNITS_PER_RUN:
+        logger.info(
+            "Truncating query units for run %s from %s to %s",
+            task.review_run_id,
+            len(query_units),
+            MAX_QUERY_UNITS_PER_RUN,
         )
+        query_units = query_units[:MAX_QUERY_UNITS_PER_RUN]
+
+    if query_units:
+        query_norm_repo = get_query_norm_repository()
+        if not query_norm_repo.cards:
+            logger.warning("Query norms are not available; skipping query LLM stage")
+            query_units = []
+        else:
+            query_norm_ids = set(query_norm_repo.norm_ids)
+            prompt_versions.append(f"query:{query_norm_repo.version}")
+            for unit in query_units:
+                unit_findings = [
+                    item
+                    for item in _filter_findings_for_unit(findings_list, unit)
+                    if item.norm_id in query_norm_ids
+                ]
+                logger.info(
+                    "LLM query %s lines %s-%s: norms=%s findings=%s",
+                    unit.unit_name,
+                    unit.start_line,
+                    unit.end_line,
+                    len(query_norm_repo.cards),
+                    len(unit_findings),
+                )
+                prompt = _build_query_prompt(unit, unit_findings, query_norm_repo.cards)
+                response_text = _call_deepseek(prompt, api_key, system_prompt=QUERY_SYSTEM_PROMPT)
+                if not response_text:
+                    logger.warning("LLM query %s: no response", unit.unit_name)
+                    continue
+                unit_suggestions = _parse_response(
+                    response_text,
+                    unit_findings,
+                    unit,
+                    query_norm_ids,
+                )
+                if unit_suggestions:
+                    logger.info(
+                        "LLM query %s: received %s suggestions",
+                        unit.unit_name,
+                        len(unit_suggestions),
+                    )
+                    all_suggestions.extend(unit_suggestions)
+                else:
+                    logger.info("LLM query %s: no additional suggestions", unit.unit_name)
+                diagnostics.append(
+                    LLMDiagnostic(
+                        prompt=prompt,
+                        response=response_text,
+                        context_files=[f"norm:{card.norm_id}" for card in query_norm_repo.cards],
+                        source_paths=[unit.source_path],
+                        static_findings=json.loads(_serialize_findings(unit_findings)),
+                        created_at=datetime.utcnow().isoformat(),
+                        prompt_version=query_norm_repo.version,
+                        unit_id=unit.unit_id,
+                        unit_name=unit.unit_name,
+                    )
+                )
 
     if not all_suggestions:
         logger.info("Run %s: LLM produced zero suggestions", task.review_run_id)
@@ -142,18 +230,18 @@ def generate_ai_suggestions(
 
     return LLMResult(
         suggestions=all_suggestions,
-        prompt_version=norm_repo.version,
+        prompt_version=";".join(prompt_versions) if prompt_versions else None,
         log_entries=diagnostics,
     )
 
 
-def _call_deepseek(prompt: str, api_key: str) -> str | None:
+def _call_deepseek(prompt: str, api_key: str, system_prompt: str = SYSTEM_PROMPT) -> str | None:
     settings = get_settings()
     url = settings.llm_api_base.rstrip("/") + "/v1/chat/completions"
     payload = {
         "model": settings.llm_model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
         "temperature": 0,
@@ -232,6 +320,47 @@ def _build_unit_prompt(
     ).strip()
 
 
+def _build_query_prompt(
+    unit: QueryUnit,
+    findings: list[DetectorFinding],
+    norm_cards: list[NormCard],
+) -> str:
+    query_block = _format_query_lines(unit)
+    serialized_findings = _serialize_findings(findings)
+    norm_text = _truncate_text(
+        _format_norm_cards(norm_cards), MAX_QUERY_NORM_TEXT_CHARS, "нормы"
+    )
+    return textwrap.dedent(
+        f"""
+        Модуль: {unit.source_path}
+        Блок запроса: строки {unit.start_line}–{unit.end_line}
+
+        Текст запроса (строки из исходного файла):
+        ```
+        {query_block}
+        ```
+
+        Статические нарушения (JSON, может быть пустым):
+        {serialized_findings}
+
+        Выдержки стандартов:
+        {norm_text}
+
+        Инструкция:
+        - Анализируй только текст запроса в блоке выше.
+        - Некоторые строки могут быть собраны динамически и не начинаться с символа "|".
+        - Не отмечай нарушения, которые уже есть в статических находках.
+        - Для каждого нового нарушения верни объект с полями
+          norm_id, section, category, norm_text, source_reference, severity (optional),
+          evidence (массив объектов с file, lines и reason).
+        - lines указывай относительно исходного файла (например "CommonModules/Module.bsl:210-235").
+        - Если нарушений нет, верни пустой массив [].
+
+        Ответ: строго JSON-массив без пояснений.
+        """
+    ).strip()
+
+
 def _serialize_findings(findings: Iterable[DetectorFinding]) -> str:
     payload = []
     for item in findings:
@@ -250,7 +379,7 @@ def _serialize_findings(findings: Iterable[DetectorFinding]) -> str:
 
 
 def _filter_findings_for_unit(
-    findings: list[DetectorFinding], unit: CodeUnit
+    findings: list[DetectorFinding], unit: CodeUnit | QueryUnit
 ) -> list[DetectorFinding]:
     unit_findings: list[DetectorFinding] = []
     for item in findings:
@@ -455,3 +584,8 @@ def _extract_relevant_code(unit: CodeUnit) -> str:
         marker = ">" if any(start <= absolute_line <= end for start, end in unit.review_ranges) else " "
         snippet.append(f"{marker} {absolute_line:>5}: {lines[idx]}")
     return _truncate_text("\n".join(snippet), MAX_UNIT_CODE_CHARS, "фрагмент кода")
+
+
+def _format_query_lines(unit: QueryUnit) -> str:
+    numbered = [f"{line_no:>5}: {line}" for line_no, line in unit.line_map]
+    return _truncate_text("\n".join(numbered), MAX_QUERY_TEXT_CHARS, "текст запроса")

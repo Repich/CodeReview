@@ -307,8 +307,8 @@ class FullOuterJoinDetector(BaseDetector):
                 findings.append(
                     self.create_finding(
                         ctx,
-                        message="Используется FULL OUTER JOIN, который не поддерживается",
-                        recommendation="Перепишите запрос, разделив его на левое/правое соединение или используйте объединение.",
+                        message="Используется ПОЛНОЕ СОЕДИНЕНИЕ (FULL OUTER JOIN), что не рекомендуется для PostgreSQL",
+                        recommendation="По возможности перепишите запрос, заменив ПОЛНОЕ СОЕДИНЕНИЕ на объединение или комбинацию левого/правого соединений.",
                         line=line_no,
                         extra={"line": line.strip()},
                     )

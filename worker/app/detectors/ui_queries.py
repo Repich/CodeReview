@@ -516,6 +516,69 @@ class QueryInsideLoopDetector(BaseDetector):
 
 
 @register
+class VirtualTableParamsDetector(BaseDetector):
+    norm_id = "STD_657"
+    detector_id = "detector.virtual_table_params"
+    severity = "major"
+
+    virtual_table_pattern = re.compile(
+        r"(РегистрНакопления|РегистрСведений)\.[\\wА-Яа-яЁё]+\\."
+        r"(Остатки|Обороты|ОстаткиИОбороты|СрезПоследних|СрезПервых)"
+        r"\\s*\\(([^)]*)\\)\\s*(?:КАК\\s+([\\wА-Яа-яЁё]+))?",
+        re.IGNORECASE,
+    )
+    condition_prefix = re.compile(r"^(ГДЕ|ПО|И|ИЛИ)\\b", re.IGNORECASE)
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        aliases_without_params: dict[str, int] = {}
+        reported_aliases: set[str] = set()
+
+        for line_no, line in self.iter_lines(ctx.source.content):
+            stripped = line.strip()
+            if not stripped.startswith("|"):
+                continue
+            expr = stripped.lstrip("|").strip()
+            if not expr:
+                continue
+
+            expr_upper = expr.upper()
+            if expr_upper.startswith(";"):
+                aliases_without_params.clear()
+                reported_aliases.clear()
+                continue
+
+            match = self.virtual_table_pattern.search(expr)
+            if match:
+                params = (match.group(3) or "").strip().strip(",")
+                alias = match.group(4)
+                if alias and not params:
+                    aliases_without_params[alias] = line_no
+
+            if not aliases_without_params or not self.condition_prefix.match(expr):
+                continue
+
+            for alias in list(aliases_without_params.keys()):
+                if alias in reported_aliases:
+                    continue
+                if re.search(rf"\\b{re.escape(alias)}\\.", expr):
+                    findings.append(
+                        self.create_finding(
+                            ctx,
+                            message="Условия виртуальной таблицы заданы вне параметров",
+                            recommendation=(
+                                "Передавайте условия для виртуальной таблицы в ее параметры, "
+                                "а не в секции ГДЕ/ПО, чтобы улучшить план выполнения."
+                            ),
+                            line=line_no,
+                            extra={"line": expr, "virtual_table": alias},
+                        )
+                    )
+                    reported_aliases.add(alias)
+        return findings
+
+
+@register
 class TodoCommentDetector(BaseDetector):
     norm_id = "COMMENT_NO_TODO_MARKERS"
     detector_id = "detector.todo_comment"

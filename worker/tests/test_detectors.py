@@ -442,6 +442,26 @@ def test_query_inside_loop_negative_set_param():
     assert not run(QueryInsideLoopDetector, content)
 
 
+def test_virtual_table_params_positive():
+    content = """Запрос.Текст = "ВЫБРАТЬ
+| Номенклатура
+| ИЗ
+| РегистрНакопления.ТоварыНаСкладах.Остатки() КАК Остатки
+| ГДЕ
+| Остатки.Склад = &Склад";"""
+    assert run(VirtualTableParamsDetector, content)
+
+
+def test_virtual_table_params_negative_with_params():
+    content = """Запрос.Текст = "ВЫБРАТЬ
+| Номенклатура
+| ИЗ
+| РегистрНакопления.ТоварыНаСкладах.Остатки(, Склад = &Склад) КАК Остатки
+| ГДЕ
+| Остатки.Склад = &Склад";"""
+    assert not run(VirtualTableParamsDetector, content)
+
+
 def test_session_date_usage_positive():
     content = """&НаСервере
 Функция Получить()

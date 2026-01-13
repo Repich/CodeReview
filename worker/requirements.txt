@@ -2,3 +2,4 @@ pydantic>=2.0
 pydantic-settings
 httpx
 redis
+pyyaml
