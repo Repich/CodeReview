@@ -46,7 +46,7 @@ QUERY_SYSTEM_PROMPT = (
 MAX_UNIT_CODE_CHARS = 6_000
 MAX_NORM_TEXT_CHARS = 8_000
 MAX_UNITS_PER_RUN = 40
-MAX_QUERY_TEXT_CHARS = 8_000
+MAX_QUERY_TEXT_CHARS = 32_000
 MAX_QUERY_NORM_TEXT_CHARS = 40_000
 MAX_QUERY_UNITS_PER_RUN = 40
 
@@ -219,7 +219,13 @@ def generate_ai_suggestions(
 
     if not all_suggestions:
         logger.info("Run %s: LLM produced zero suggestions", task.review_run_id)
-        return None
+        if not diagnostics:
+            return None
+        return LLMResult(
+            suggestions=[],
+            prompt_version=";".join(prompt_versions) if prompt_versions else None,
+            log_entries=diagnostics,
+        )
 
     logger.info(
         "Run %s: LLM produced %s suggestions across %s units",
