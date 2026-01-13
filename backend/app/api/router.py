@@ -2,21 +2,19 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from backend.app.api.routes import (
-    admin_review_runs,
-    ai_findings,
-    auth,
-    audit,
-    access_logs,
-    caddy_logs,
-    feedback,
-    findings,
-    health,
-    norms,
-    review_runs,
-    users,
-    wallets,
-)
+import backend.app.api.routes.admin_review_runs as admin_review_runs
+import backend.app.api.routes.ai_findings as ai_findings
+import backend.app.api.routes.auth as auth
+import backend.app.api.routes.audit as audit
+import backend.app.api.routes.access_logs as access_logs
+import backend.app.api.routes.caddy_logs as caddy_logs
+import backend.app.api.routes.feedback as feedback
+import backend.app.api.routes.findings as findings
+import backend.app.api.routes.health as health
+import backend.app.api.routes.norms as norms
+import backend.app.api.routes.review_runs as review_runs
+import backend.app.api.routes.users as users
+import backend.app.api.routes.wallets as wallets
 
 api_router = APIRouter()
 api_router.include_router(health.router)
