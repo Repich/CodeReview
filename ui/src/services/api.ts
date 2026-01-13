@@ -217,8 +217,8 @@ export interface RunSource {
   change_ranges?: { start: number; end: number }[] | null;
 }
 
-export async function fetchRuns() {
-  const { data } = await client.get<ReviewRun[]>('/review-runs');
+export async function fetchRuns(params?: { skip?: number; limit?: number; user_id?: string }) {
+  const { data } = await client.get<ReviewRun[]>('/review-runs', { params });
   return data;
 }
 
@@ -239,6 +239,16 @@ export async function rerunReviewRun(id: string) {
 
 export async function deleteReviewRun(id: string) {
   await client.delete(`/review-runs/${id}`);
+}
+
+export async function forceFailReviewRun(id: string) {
+  const { data } = await client.post<ReviewRun>(`/admin/review-runs/${id}/force-fail`);
+  return data;
+}
+
+export async function requeueReviewRun(id: string) {
+  const { data } = await client.post<ReviewRun>(`/admin/review-runs/${id}/requeue`);
+  return data;
 }
 
 export interface FindingListResponse {

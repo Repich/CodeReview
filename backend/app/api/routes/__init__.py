@@ -1,4 +1,5 @@
 from backend.app.api.routes import (
+    admin_review_runs,
     ai_findings,
     audit,
     caddy_logs,
@@ -12,6 +13,7 @@ from backend.app.api.routes import (
 )
 
 __all__ = [
+    "admin_review_runs",
     "ai_findings",
     "audit",
     "caddy_logs",

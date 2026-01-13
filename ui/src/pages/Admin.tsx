@@ -3,11 +3,15 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   AccessLogEntry,
   CaddyAccessLogEntry,
+  ReviewRun,
   adjustWalletBalance,
   fetchAccessLogs,
   fetchCaddyLogs,
   fetchCurrentUser,
+  fetchRuns,
   fetchUsers,
+  forceFailReviewRun,
+  requeueReviewRun,
   updateUserStatus,
   UserProfile,
 } from '../services/api';
@@ -35,6 +39,9 @@ function AdminPage() {
   const [adjustMessage, setAdjustMessage] = useState<string | null>(null);
   const [adjustState, setAdjustState] = useState<'idle' | 'success' | 'error'>('idle');
   const [isSubmittingAdjust, setSubmittingAdjust] = useState(false);
+  const [runsLimit, setRunsLimit] = useState('100');
+  const [runsStatusFilter, setRunsStatusFilter] = useState('');
+  const [runsUserFilter, setRunsUserFilter] = useState('');
 
   const usersQuery = useQuery({
     queryKey: ['admin-users', userEmailFilter, userStatusFilter, usersLimit],
@@ -72,11 +79,30 @@ function AdminPage() {
     enabled: isAdmin,
   });
 
+  const runsQuery = useQuery({
+    queryKey: ['admin-runs', runsLimit],
+    queryFn: () => fetchRuns({ limit: Number(runsLimit) || 100 }),
+    enabled: isAdmin,
+    refetchInterval: (query) => {
+      const runs = query.state.data;
+      const hasActive = runs?.some((run) => run.status === 'queued' || run.status === 'running');
+      return hasActive ? 5000 : false;
+    },
+  });
+
   const statusMutation = useMutation({
     mutationFn: ({ userId, status }: { userId: string; status: string }) =>
       updateUserStatus(userId, status),
     onSuccess: () => {
       usersQuery.refetch();
+    },
+  });
+
+  const runActionMutation = useMutation({
+    mutationFn: ({ runId, action }: { runId: string; action: 'fail' | 'requeue' }) =>
+      action === 'fail' ? forceFailReviewRun(runId) : requeueReviewRun(runId),
+    onSuccess: () => {
+      runsQuery.refetch();
     },
   });
 
@@ -133,6 +159,18 @@ function AdminPage() {
     return { active, disabled, total: users.length };
   }, [usersQuery.data]);
 
+  const filteredRuns = useMemo(() => {
+    const runs = runsQuery.data || [];
+    return runs.filter((run) => {
+      const matchesStatus = runsStatusFilter ? run.status === runsStatusFilter : true;
+      const owner = `${run.user_name || ''} ${run.user_email || ''}`.toLowerCase();
+      const matchesUser = runsUserFilter
+        ? owner.includes(runsUserFilter.toLowerCase()) || run.id.includes(runsUserFilter)
+        : true;
+      return matchesStatus && matchesUser;
+    });
+  }, [runsQuery.data, runsStatusFilter, runsUserFilter]);
+
   if (userQuery.isLoading) {
     return <p>Загружаем админ-панель...</p>;
   }
@@ -179,6 +217,67 @@ function AdminPage() {
       <td>{entry.user_agent ? entry.user_agent.slice(0, 80) : '—'}</td>
     </tr>
   );
+
+  const statusLabels: Record<string, string> = {
+    queued: 'В очереди',
+    running: 'Выполняется',
+    completed: 'Завершён',
+    failed: 'Ошибка',
+  };
+
+  const formatDuration = (ms: number) => {
+    if (ms <= 0) return '0 с';
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const parts: string[] = [];
+    if (hours) parts.push(`${hours} ч`);
+    if (minutes || hours) parts.push(`${minutes} мин`);
+    parts.push(`${seconds} с`);
+    return parts.join(' ');
+  };
+
+  const relativeTime = (value?: string | null) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    const diffMs = date.getTime() - Date.now();
+    const minutes = Math.round(diffMs / 60000);
+    const rtf = new Intl.RelativeTimeFormat('ru', { numeric: 'auto' });
+    if (Math.abs(minutes) < 60) {
+      return rtf.format(minutes, 'minute');
+    }
+    const hours = Math.round(minutes / 60);
+    return rtf.format(hours, 'hour');
+  };
+
+  const getRunProgress = (run: ReviewRun) => {
+    if (run.status === 'queued') {
+      const base = run.queued_at ? new Date(run.queued_at).getTime() : null;
+      if (base) {
+        const diff = Date.now() - base;
+        if (diff > 0) {
+          return `В очереди ${formatDuration(diff)}`;
+        }
+      }
+      return 'В очереди';
+    }
+    if (run.status === 'running') {
+      const base = run.started_at
+        ? new Date(run.started_at).getTime()
+        : run.queued_at
+          ? new Date(run.queued_at).getTime()
+          : null;
+      if (base) {
+        const diff = Date.now() - base;
+        if (diff > 0) {
+          return `Выполняется ${formatDuration(diff)}`;
+        }
+      }
+      return 'Выполняется';
+    }
+    return '—';
+  };
 
   return (
     <div>
@@ -275,6 +374,138 @@ function AdminPage() {
                 <tr>
                   <td colSpan={7} className="muted">
                     Пользователи не найдены.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card-header">
+          <div>
+            <h2 className="card-title">Запуски</h2>
+            <p className="muted">Админ-управление очередью и зависшими запусками.</p>
+          </div>
+        </div>
+        <form className="form-grid" style={{ gap: '1rem' }}>
+          <div className="field">
+            <label htmlFor="runs-status-filter">Статус</label>
+            <select
+              id="runs-status-filter"
+              value={runsStatusFilter}
+              onChange={(event) => setRunsStatusFilter(event.target.value)}
+            >
+              <option value="">Все</option>
+              <option value="queued">В очереди</option>
+              <option value="running">Выполняется</option>
+              <option value="completed">Завершён</option>
+              <option value="failed">Ошибка</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="runs-user-filter">Пользователь / Run</label>
+            <input
+              id="runs-user-filter"
+              type="text"
+              value={runsUserFilter}
+              onChange={(event) => setRunsUserFilter(event.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="runs-limit">Лимит</label>
+            <input
+              id="runs-limit"
+              type="number"
+              min={1}
+              max={500}
+              value={runsLimit}
+              onChange={(event) => setRunsLimit(event.target.value)}
+            />
+          </div>
+          <button type="button" className="btn btn-primary" onClick={() => runsQuery.refetch()}>
+            Обновить
+          </button>
+        </form>
+        {runsQuery.isLoading && <p className="muted">Загружаем запуски...</p>}
+        {runsQuery.error && <p className="alert alert-error">Не удалось получить список запусков.</p>}
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>Пользователь</th>
+                <th>Статус</th>
+                <th>Прогресс</th>
+                <th>Создан</th>
+                <th>Старт</th>
+                <th>Обновление</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRuns.map((run) => (
+                <tr key={run.id}>
+                  <td>{run.id.slice(0, 8)}…</td>
+                  <td>{run.user_name || run.user_email || '—'}</td>
+                  <td>
+                    <span className={`status-pill ${run.status}`}>
+                      {statusLabels[run.status] ?? run.status}
+                    </span>
+                  </td>
+                  <td>{getRunProgress(run)}</td>
+                  <td>{new Date(run.queued_at).toLocaleString()}</td>
+                  <td>{run.started_at ? new Date(run.started_at).toLocaleString() : '—'}</td>
+                  <td>{relativeTime(run.finished_at || run.started_at || run.queued_at)}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button
+                        className="btn btn-secondary"
+                        disabled={
+                          runActionMutation.isPending ||
+                          run.status === 'completed' ||
+                          run.status === 'failed'
+                        }
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              'Пометить запуск как ошибочный? Очередь продолжит работу.',
+                            )
+                          ) {
+                            runActionMutation.mutate({ runId: run.id, action: 'fail' });
+                          }
+                        }}
+                      >
+                        Снять
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        disabled={
+                          runActionMutation.isPending ||
+                          run.status === 'completed' ||
+                          run.status === 'failed'
+                        }
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              'Поставить запуск в очередь заново? Это подходит для зависших запусков.',
+                            )
+                          ) {
+                            runActionMutation.mutate({ runId: run.id, action: 'requeue' });
+                          }
+                        }}
+                      >
+                        В очередь
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!runsQuery.isLoading && !filteredRuns.length && (
+                <tr>
+                  <td colSpan={8} className="muted">
+                    Запуски не найдены.
                   </td>
                 </tr>
               )}
