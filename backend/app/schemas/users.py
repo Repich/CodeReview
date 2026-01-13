@@ -29,6 +29,8 @@ class UserRead(ORMModel):
     status: str
     role: UserRole
     created_at: datetime
+    wallet_balance: int | None = None
+    wallet_currency: str | None = None
 
 
 class UserStatusUpdate(ORMModel):

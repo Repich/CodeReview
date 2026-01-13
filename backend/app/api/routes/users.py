@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.deps import get_current_admin, get_current_user, get_db
 from backend.app.core.security import hash_password
 from backend.app.models.enums import UserRole
-from backend.app.models.user import UserAccount
+from backend.app.models.user import UserAccount, Wallet
 from backend.app.schemas.users import UserCreate, UserRead, UserStatusUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -24,14 +24,33 @@ def list_users(
     status: str | None = Query(default=None),
     role: UserRole | None = Query(default=None),
 ) -> list[UserAccount]:
-    query = db.query(UserAccount).order_by(UserAccount.created_at.desc())
+    query = (
+        db.query(UserAccount, Wallet)
+        .outerjoin(Wallet, Wallet.user_id == UserAccount.id)
+        .order_by(UserAccount.created_at.desc())
+    )
     if email:
         query = query.filter(UserAccount.email.ilike(f"%{email}%"))
     if status:
         query = query.filter(UserAccount.status == status)
     if role:
         query = query.filter(UserAccount.role == role)
-    return query.offset(offset).limit(limit).all()
+    rows = query.offset(offset).limit(limit).all()
+    payloads: list[UserRead] = []
+    for user, wallet in rows:
+        payloads.append(
+            UserRead(
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                status=user.status,
+                role=user.role,
+                created_at=user.created_at,
+                wallet_balance=wallet.balance if wallet else None,
+                wallet_currency=wallet.currency if wallet else None,
+            )
+        )
+    return payloads
 
 
 @router.post("", response_model=UserRead, status_code=201)

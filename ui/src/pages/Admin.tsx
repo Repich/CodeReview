@@ -246,6 +246,7 @@ function AdminPage() {
                 <th>Email</th>
                 <th>Имя</th>
                 <th>Роль</th>
+                <th>Баланс</th>
                 <th>Статус</th>
                 <th>Создан</th>
                 <th>Действия</th>
@@ -258,6 +259,10 @@ function AdminPage() {
                   <td>{user.name || '—'}</td>
                   <td>{user.role}</td>
                   <td>
+                    {user.wallet_balance ?? '—'}
+                    {user.wallet_currency ? ` ${user.wallet_currency}` : ''}
+                  </td>
+                  <td>
                     <span className="table-badge">
                       {user.status === 'active' ? 'Активен' : 'Заблокирован'}
                     </span>
@@ -268,7 +273,7 @@ function AdminPage() {
               ))}
               {!usersQuery.isLoading && !usersQuery.data?.length && (
                 <tr>
-                  <td colSpan={6} className="muted">
+                  <td colSpan={7} className="muted">
                     Пользователи не найдены.
                   </td>
                 </tr>

@@ -49,12 +49,23 @@ def list_review_runs(
     db: Session = Depends(get_db),
     current_user: UserAccount = Depends(get_current_user),
 ) -> list[ReviewRunRead]:
-    query = db.query(ReviewRun).order_by(ReviewRun.queued_at.desc())
+    query = (
+        db.query(ReviewRun, UserAccount)
+        .outerjoin(UserAccount, UserAccount.id == ReviewRun.user_id)
+        .order_by(ReviewRun.queued_at.desc())
+    )
     if current_user.role != UserRole.ADMIN:
         query = query.filter(ReviewRun.user_id == current_user.id)
     elif user_id:
         query = query.filter(ReviewRun.user_id == user_id)
-    return query.offset(skip).limit(limit).all()
+    rows = query.offset(skip).limit(limit).all()
+    payloads: list[ReviewRunRead] = []
+    for review_run, user in rows:
+        payload = ReviewRunRead.model_validate(review_run)
+        payload.user_email = user.email if user else None
+        payload.user_name = user.name if user else None
+        payloads.append(payload)
+    return payloads
 
 
 @router.post("", response_model=ReviewRunRead, status_code=201)

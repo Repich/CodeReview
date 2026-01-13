@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { fetchRuns, ReviewRun, fetchWallet, deleteReviewRun } from '../services/api';
+import { fetchRuns, ReviewRun, fetchWallet, deleteReviewRun, fetchCurrentUser } from '../services/api';
 import RunCreateForm from '../components/RunCreateForm';
 
 const statusLabels: Record<string, string> = {
@@ -56,6 +56,10 @@ function RunListPage() {
   const walletQuery = useQuery({
     queryKey: ['wallet'],
     queryFn: fetchWallet,
+  });
+  const currentUserQuery = useQuery({
+    queryKey: ['current-user'],
+    queryFn: fetchCurrentUser,
   });
 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -130,6 +134,7 @@ function RunListPage() {
 
   const balance = walletQuery.data?.balance ?? '—';
   const currency = walletQuery.data?.currency ?? 'points';
+  const isAdmin = (currentUserQuery.data?.role || '').toLowerCase() === 'admin';
 
   return (
     <div>
@@ -162,6 +167,7 @@ function RunListPage() {
             <thead>
               <tr>
                 <th>Run</th>
+                {isAdmin && <th>Пользователь</th>}
                 <th>Статус</th>
                 <th>Прогресс</th>
                 <th>Создан</th>
@@ -176,6 +182,9 @@ function RunListPage() {
                   <td>
                     <Link to={`/runs/${run.id}`}>{run.id.slice(0, 8)}…</Link>
                   </td>
+                  {isAdmin && (
+                    <td>{run.user_name || run.user_email || '—'}</td>
+                  )}
                   <td>
                     <span className={`status-pill ${run.status}`}>
                       {statusLabels[run.status] ?? run.status}
@@ -212,7 +221,7 @@ function RunListPage() {
               ))}
               {!latestRuns.length && (
                 <tr>
-                  <td colSpan={7} className="muted">
+                  <td colSpan={isAdmin ? 8 : 7} className="muted">
                     Запусков пока нет.
                   </td>
                 </tr>

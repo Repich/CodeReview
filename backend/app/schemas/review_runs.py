@@ -44,6 +44,8 @@ class ReviewRunUpdate(ORMModel):
 class ReviewRunRead(ReviewRunBase):
     id: uuid.UUID
     user_id: uuid.UUID | None = None
+    user_email: str | None = None
+    user_name: str | None = None
     status: ReviewStatus
     queued_at: datetime
     started_at: datetime | None = None

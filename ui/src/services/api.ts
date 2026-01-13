@@ -40,6 +40,8 @@ export interface ReviewRun {
   finished_at?: string | null;
   cost_points?: number | null;
   llm_prompt_version?: string | null;
+  user_email?: string | null;
+  user_name?: string | null;
 }
 
 export interface SourceUnitPayload {
@@ -147,6 +149,8 @@ export interface UserProfile {
   status: string;
   role: string;
   created_at: string;
+  wallet_balance?: number | null;
+  wallet_currency?: string | null;
 }
 
 export interface AccessLogEntry {
