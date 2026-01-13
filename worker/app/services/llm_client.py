@@ -188,13 +188,13 @@ def generate_ai_suggestions(
                 if not response_text:
                     logger.warning("LLM query %s: no response", unit.unit_name)
                     continue
-            unit_suggestions = _parse_response(
-                response_text,
-                unit_findings,
-                unit,
-                query_norm_ids,
-                norm_lookup=query_norm_repo.entries,
-            )
+                unit_suggestions = _parse_response(
+                    response_text,
+                    unit_findings,
+                    unit,
+                    query_norm_ids,
+                    norm_lookup=query_norm_repo.entries,
+                )
                 if unit_suggestions:
                     logger.info(
                         "LLM query %s: received %s suggestions",
