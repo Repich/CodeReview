@@ -358,6 +358,15 @@ class ExceptionSwallowDetector(BaseDetector):
         "ЗаписьЖурналаРегистрации",
         "ТребуетсяЖурналРегистрации",
     )
+    error_info_pattern = re.compile(r"(ИнформацияОбОшибке|ОписаниеОшибки)\s*\(", re.IGNORECASE)
+    error_field_pattern = re.compile(
+        r"\.\s*(ТекстОшибки|ОписаниеОшибки|СообщениеОбОшибке|Ошибка)\s*=",
+        re.IGNORECASE,
+    )
+    success_flag_pattern = re.compile(
+        r"\.\s*(Успешно|ЕстьОшибки)\s*=\s*(Ложь|Истина)",
+        re.IGNORECASE,
+    )
 
     def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
         content_lines = ctx.source.content.splitlines()
@@ -375,7 +384,16 @@ class ExceptionSwallowDetector(BaseDetector):
                 if j == len(content_lines):
                     break
                 block_text = "\n".join(block_lines)
-                if not any(token in block_text for token in self.safe_tokens):
+                has_safe_token = any(token in block_text for token in self.safe_tokens)
+                has_error_payload = (
+                    self.error_info_pattern.search(block_text)
+                    and self.error_field_pattern.search(block_text)
+                )
+                has_error_status = (
+                    self.error_info_pattern.search(block_text)
+                    and self.success_flag_pattern.search(block_text)
+                )
+                if not (has_safe_token or has_error_payload or has_error_status):
                     findings.append(
                         self.create_finding(
                             ctx,

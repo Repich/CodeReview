@@ -476,6 +476,16 @@ def test_exception_swallow_negative_with_log():
     assert not run(ExceptionSwallowDetector, content)
 
 
+def test_exception_swallow_negative_with_error_payload():
+    content = """Попытка
+        НачатьТранзакцию();
+    Исключение
+        Результат.ТекстОшибки = ОбработкаОшибок.ПодробноеПредставлениеОшибки(ИнформацияОбОшибке());
+        Результат.Успешно = Ложь;
+    КонецПопытки;"""
+    assert not run(ExceptionSwallowDetector, content)
+
+
 def test_form_direct_data_write_positive():
     content = "Справочники.Номенклатура.СоздатьЭлемент();"
     assert run(FormDirectDataWriteDetector, content, module_type="FormModule", path="Forms/Item/FormModule.bsl")
