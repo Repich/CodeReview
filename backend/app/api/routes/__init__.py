@@ -1,4 +1,4 @@
-from backend.app.api.routes import (
+from . import (
     admin_review_runs,
     ai_findings,
     audit,
