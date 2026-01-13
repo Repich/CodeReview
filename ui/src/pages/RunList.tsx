@@ -44,7 +44,7 @@ const relativeTime = (value?: string | null) => {
 function RunListPage() {
   const { data, isLoading, error, refetch, isFetching } = useQuery<ReviewRun[]>({
     queryKey: ['runs'],
-    queryFn: fetchRuns,
+    queryFn: () => fetchRuns(),
     refetchInterval: (query) => {
       const runs = query.state.data;
       const hasActive = runs?.some((run: ReviewRun) => run.status === 'queued' || run.status === 'running');
