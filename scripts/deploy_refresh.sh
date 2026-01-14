@@ -23,7 +23,7 @@ if [[ "${RUN_MIGRATIONS:-}" == "1" ]]; then
   docker-compose exec backend bash -c "cd /app/backend && PYTHONPATH=/app alembic upgrade head"
 fi
 
-echo "==> rebuild backend container"
-docker-compose up -d --build backend
+echo "==> rebuild backend + worker containers"
+docker-compose up -d --build backend worker
 
 echo "==> done"

@@ -16,7 +16,14 @@ import {
   rerunReviewRun,
   fetchRunSources,
 } from '../services/api';
-import type { Finding, AIFinding, AIFindingStatus, LLMLogEntry, RunSource } from '../services/api';
+import type {
+  Finding,
+  AIFinding,
+  AIFindingStatus,
+  LLMLogEntry,
+  RunSource,
+  CognitiveComplexitySummary,
+} from '../services/api';
 import FindingCard from '../components/FindingCard';
 import FindingFilters from '../components/FindingFilters';
 import AuditLogList from '../components/AuditLogList';
@@ -42,6 +49,11 @@ const formatDuration = (ms: number) => {
   if (minutes || hours) parts.push(`${minutes} мин`);
   parts.push(`${seconds} с`);
   return parts.join(' ');
+};
+
+const formatDecimal = (value?: number | null) => {
+  if (value === null || value === undefined) return '—';
+  return value.toFixed(3);
 };
 
 function RunDetailsPage() {
@@ -194,6 +206,21 @@ function RunDetailsPage() {
 
   const run = runQuery.data;
   const aiFindings: AIFinding[] = aiFindingsQuery.data?.items ?? [];
+  const complexityMetrics = run?.context?.metrics?.cognitive_complexity as
+    | CognitiveComplexitySummary
+    | undefined;
+  const complexityProcedures = useMemo(() => {
+    if (!complexityMetrics?.procedures) return [];
+    return [...complexityMetrics.procedures].sort((a, b) => {
+      if (b.complexity !== a.complexity) {
+        return b.complexity - a.complexity;
+      }
+      if (b.loc !== a.loc) {
+        return b.loc - a.loc;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [complexityMetrics]);
   const diffSources: RunSource[] = useMemo(
     () => (runSourcesQuery.data ?? []).filter((src) => (src.change_ranges?.length ?? 0) > 0),
     [runSourcesQuery.data],
@@ -320,6 +347,74 @@ function RunDetailsPage() {
           </div>
         </div>
       </div>
+
+      <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card-header">
+          <div>
+            <h2 className="card-title">Когнитивная сложность</h2>
+            <p className="muted">Метрики по процедурам и функциям</p>
+          </div>
+          {complexityMetrics && (
+            <span className="muted">{complexityMetrics.procedures?.length ?? 0} процедур</span>
+          )}
+        </div>
+        {!complexityMetrics && (
+          <div className="empty-state">Метрики пока не рассчитаны для этого запуска.</div>
+        )}
+        {complexityMetrics && (
+          <>
+            <div className="section-grid" style={{ marginBottom: '1rem' }}>
+              <div>
+                <p className="muted">Суммарная сложность</p>
+                <strong>{complexityMetrics.total}</strong>
+              </div>
+              <div>
+                <p className="muted">Строк кода</p>
+                <strong>{complexityMetrics.total_loc}</strong>
+              </div>
+              <div>
+                <p className="muted">Сложность на строку</p>
+                <strong>{formatDecimal(complexityMetrics.avg_per_line)}</strong>
+              </div>
+            </div>
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Процедура</th>
+                    <th>Файл</th>
+                    <th>Строки</th>
+                    <th>Сложность</th>
+                    <th>LOC</th>
+                    <th>На строку</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {complexityProcedures.map((proc) => (
+                    <tr key={`${proc.file_path}:${proc.name}:${proc.start_line}`}>
+                      <td>{proc.name}</td>
+                      <td className="muted">{proc.file_path}</td>
+                      <td>
+                        {proc.start_line}-{proc.end_line}
+                      </td>
+                      <td>{proc.complexity}</td>
+                      <td>{proc.loc}</td>
+                      <td>{formatDecimal(proc.avg_per_line)}</td>
+                    </tr>
+                  ))}
+                  {!complexityProcedures.length && (
+                    <tr>
+                      <td colSpan={6} className="muted">
+                        Процедуры и функции не обнаружены.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
         <div className="card-header">

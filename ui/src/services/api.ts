@@ -42,6 +42,32 @@ export interface ReviewRun {
   llm_prompt_version?: string | null;
   user_email?: string | null;
   user_name?: string | null;
+  context?: ReviewRunContext | null;
+}
+
+export interface CognitiveComplexityProcedure {
+  file_path: string;
+  name: string;
+  start_line: number;
+  end_line: number;
+  complexity: number;
+  loc: number;
+  avg_per_line: number;
+}
+
+export interface CognitiveComplexitySummary {
+  total: number;
+  total_loc: number;
+  avg_per_line: number;
+  procedures: CognitiveComplexityProcedure[];
+}
+
+export interface RunMetrics {
+  cognitive_complexity?: CognitiveComplexitySummary;
+}
+
+export interface ReviewRunContext extends Record<string, unknown> {
+  metrics?: RunMetrics | null;
 }
 
 export interface SourceUnitPayload {
