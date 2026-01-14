@@ -259,7 +259,7 @@ def _has_direct_recursion(line: str, proc_name: str) -> bool:
         return False
     if PROC_START_RE.match(line):
         return False
-    pattern = rf"\\b{re.escape(proc_name)}\\s*\\("
+    pattern = rf"\b{re.escape(proc_name)}\s*\("
     return re.search(pattern, line, re.IGNORECASE) is not None
 
 
