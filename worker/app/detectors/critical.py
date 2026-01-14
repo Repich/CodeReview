@@ -63,7 +63,7 @@ class ExecEvalServerDetector(BaseDetector):
         for line_no, line in self.iter_lines(ctx.source.content):
             if not ctx.source.is_server_line(line_no):
                 continue
-            if pattern.search(line):
+            if pattern.search(self._strip_strings(line)):
                 findings.append(
                     self.create_finding(
                         ctx,

@@ -33,7 +33,8 @@ def extract_query_units(source: SourceUnit) -> list[QueryUnit]:
     units: list[QueryUnit] = []
     idx = 0
     while idx < len(lines):
-        line = lines[idx]
+        raw_line = lines[idx]
+        line = _strip_line_comment(raw_line)
         match = QUERY_ASSIGN_RE.search(line) or QUERY_NEW_RE.search(line)
         if not match:
             idx += 1
@@ -54,6 +55,39 @@ def extract_query_units(source: SourceUnit) -> list[QueryUnit]:
         units.append(unit)
         idx = end_idx + 1
     return units
+
+
+def _strip_line_comment(line: str) -> str:
+    result_chars: list[str] = []
+    i = 0
+    in_string = False
+    while i < len(line):
+        ch = line[i]
+        nxt = line[i + 1] if i + 1 < len(line) else ""
+        if in_string:
+            if ch == '"' and nxt == '"':
+                result_chars.append('"')
+                result_chars.append('"')
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+                result_chars.append(ch)
+                i += 1
+                continue
+            result_chars.append(ch)
+            i += 1
+            continue
+        if ch == "/" and nxt == "/":
+            break
+        if ch == '"':
+            in_string = True
+            result_chars.append(ch)
+            i += 1
+            continue
+        result_chars.append(ch)
+        i += 1
+    return "".join(result_chars)
 
 
 def _collect_string_literals(

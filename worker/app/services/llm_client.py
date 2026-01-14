@@ -627,9 +627,10 @@ def _extract_relevant_code(unit: CodeUnit) -> str:
     if not text:
         return ""
     lines = unit.text.splitlines()
+    cleaned_lines = _strip_comments(lines)
     if not unit.review_ranges:
         numbered = [
-            f"{unit.start_line + idx:>5}: {line}" for idx, line in enumerate(lines)
+            f"{unit.start_line + idx:>5}: {line}" for idx, line in enumerate(cleaned_lines)
         ]
         return _truncate_text("\n".join(numbered), MAX_UNIT_CODE_CHARS, "фрагмент кода")
 
@@ -642,10 +643,58 @@ def _extract_relevant_code(unit: CodeUnit) -> str:
     for idx in range(start_idx, end_idx + 1):
         absolute_line = unit.start_line + idx
         marker = ">" if any(start <= absolute_line <= end for start, end in unit.review_ranges) else " "
-        snippet.append(f"{marker} {absolute_line:>5}: {lines[idx]}")
+        snippet.append(f"{marker} {absolute_line:>5}: {cleaned_lines[idx]}")
     return _truncate_text("\n".join(snippet), MAX_UNIT_CODE_CHARS, "фрагмент кода")
 
 
 def _format_query_lines(unit: QueryUnit) -> str:
     numbered = [f"{line_no:>5}: {line}" for line_no, line in unit.line_map]
     return _truncate_text("\n".join(numbered), MAX_QUERY_TEXT_CHARS, "текст запроса")
+
+
+def _strip_comments(lines: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    in_block_comment = False
+    for raw in lines:
+        result_chars: list[str] = []
+        i = 0
+        in_string = False
+        while i < len(raw):
+            ch = raw[i]
+            nxt = raw[i + 1] if i + 1 < len(raw) else ""
+            if in_block_comment:
+                if ch == "*" and nxt == "/":
+                    in_block_comment = False
+                    i += 2
+                    continue
+                i += 1
+                continue
+            if in_string:
+                if ch == '"' and nxt == '"':
+                    result_chars.append('"')
+                    result_chars.append('"')
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_string = False
+                    result_chars.append(ch)
+                    i += 1
+                    continue
+                result_chars.append(ch)
+                i += 1
+                continue
+            if ch == "/" and nxt == "/":
+                break
+            if ch == "/" and nxt == "*":
+                in_block_comment = True
+                i += 2
+                continue
+            if ch == '"':
+                in_string = True
+                result_chars.append(ch)
+                i += 1
+                continue
+            result_chars.append(ch)
+            i += 1
+        cleaned.append("".join(result_chars))
+    return cleaned

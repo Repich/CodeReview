@@ -63,5 +63,77 @@ class BaseDetector(abc.ABC):
 
     @staticmethod
     def iter_lines(text: str) -> Iterable[tuple[int, str]]:
+        in_block_comment = False
         for idx, line in enumerate(text.splitlines(), start=1):
-            yield idx, line
+            stripped, in_block_comment = BaseDetector._strip_comments(line, in_block_comment)
+            yield idx, stripped
+
+    @staticmethod
+    def _strip_comments(line: str, in_block_comment: bool) -> tuple[str, bool]:
+        result_chars: list[str] = []
+        i = 0
+        in_string = False
+        while i < len(line):
+            ch = line[i]
+            nxt = line[i + 1] if i + 1 < len(line) else ""
+            if in_block_comment:
+                if ch == "*" and nxt == "/":
+                    in_block_comment = False
+                    i += 2
+                    continue
+                i += 1
+                continue
+            if in_string:
+                if ch == '"' and nxt == '"':
+                    result_chars.append('"')
+                    result_chars.append('"')
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_string = False
+                    result_chars.append(ch)
+                    i += 1
+                    continue
+                result_chars.append(ch)
+                i += 1
+                continue
+            if ch == "/" and nxt == "/":
+                break
+            if ch == "/" and nxt == "*":
+                in_block_comment = True
+                i += 2
+                continue
+            if ch == '"':
+                in_string = True
+                result_chars.append(ch)
+                i += 1
+                continue
+            result_chars.append(ch)
+            i += 1
+        return "".join(result_chars), in_block_comment
+
+    @staticmethod
+    def _strip_strings(line: str) -> str:
+        result_chars: list[str] = []
+        i = 0
+        in_string = False
+        while i < len(line):
+            ch = line[i]
+            nxt = line[i + 1] if i + 1 < len(line) else ""
+            if in_string:
+                if ch == '"' and nxt == '"':
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_string = False
+                    i += 1
+                    continue
+                i += 1
+                continue
+            if ch == '"':
+                in_string = True
+                i += 1
+                continue
+            result_chars.append(ch)
+            i += 1
+        return "".join(result_chars)

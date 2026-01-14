@@ -121,7 +121,8 @@ def _create_unit(
     unit_hash = hashlib.sha1(
         f"{source_path}:{unit_name}:{start_line}:{end_line}".encode("utf-8")
     ).hexdigest()[:16]
-    tags = _extract_tags(text.lower())
+    cleaned_text = "\n".join(_strip_comments(text.splitlines()))
+    tags = _extract_tags(cleaned_text.lower())
     return CodeUnit(
         unit_id=unit_hash,
         source_path=source_path,
@@ -133,6 +134,54 @@ def _create_unit(
         tags=tags,
         review_ranges=[],
     )
+
+
+def _strip_comments(lines: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    in_block_comment = False
+    for raw in lines:
+        result_chars: list[str] = []
+        i = 0
+        in_string = False
+        while i < len(raw):
+            ch = raw[i]
+            nxt = raw[i + 1] if i + 1 < len(raw) else ""
+            if in_block_comment:
+                if ch == "*" and nxt == "/":
+                    in_block_comment = False
+                    i += 2
+                    continue
+                i += 1
+                continue
+            if in_string:
+                if ch == '"' and nxt == '"':
+                    result_chars.append('"')
+                    result_chars.append('"')
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_string = False
+                    result_chars.append(ch)
+                    i += 1
+                    continue
+                result_chars.append(ch)
+                i += 1
+                continue
+            if ch == "/" and nxt == "/":
+                break
+            if ch == "/" and nxt == "*":
+                in_block_comment = True
+                i += 2
+                continue
+            if ch == '"':
+                in_string = True
+                result_chars.append(ch)
+                i += 1
+                continue
+            result_chars.append(ch)
+            i += 1
+        cleaned.append("".join(result_chars))
+    return cleaned
 
 
 def _intersect_ranges(
