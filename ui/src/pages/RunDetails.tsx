@@ -64,6 +64,7 @@ function RunDetailsPage() {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [nowTs, setNowTs] = useState(() => Date.now());
+  const [activeTab, setActiveTab] = useState('findings');
 
   const runQuery = useQuery({
     queryKey: ['run', id],
@@ -206,6 +207,35 @@ function RunDetailsPage() {
 
   const run = runQuery.data;
   const aiFindings: AIFinding[] = aiFindingsQuery.data?.items ?? [];
+  const totalFindings = findingsQuery.data?.total ?? 0;
+  const severityCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      critical: 0,
+      major: 0,
+      minor: 0,
+      warning: 0,
+      info: 0,
+    };
+    for (const item of findingsQuery.data?.items ?? []) {
+      const key = (item.severity || '').toLowerCase();
+      if (key in counts) {
+        counts[key] += 1;
+      }
+    }
+    return counts;
+  }, [findingsQuery.data]);
+  const aiCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      suggested: 0,
+      pending: 0,
+      confirmed: 0,
+      rejected: 0,
+    };
+    for (const item of aiFindings) {
+      counts[item.status] = (counts[item.status] || 0) + 1;
+    }
+    return counts;
+  }, [aiFindings]);
   const complexityMetrics = run?.context?.metrics?.cognitive_complexity as
     | CognitiveComplexitySummary
     | undefined;
@@ -225,6 +255,34 @@ function RunDetailsPage() {
     () => (runSourcesQuery.data ?? []).filter((src) => (src.change_ranges?.length ?? 0) > 0),
     [runSourcesQuery.data],
   );
+  const tabs = useMemo(() => {
+    const items = [
+      { id: 'findings', label: 'Найденные нарушения', count: totalFindings },
+      { id: 'ai', label: 'Предложения LLM', count: aiFindings.length },
+      {
+        id: 'complexity',
+        label: 'Когнитивная сложность',
+        count: complexityMetrics?.procedures?.length ?? 0,
+      },
+      {
+        id: 'llm',
+        label: 'Диагностика LLM',
+        count: llmLogsQuery.data?.length ?? 0,
+        adminOnly: true,
+      },
+      { id: 'audit', label: 'Журнал событий', count: auditQuery.data?.length ?? 0 },
+      { id: 'artifacts', label: 'Артефакты', count: artifactsQuery.data?.length ?? 0 },
+    ];
+    return items.filter((item) => (item.adminOnly ? isAdmin : true));
+  }, [
+    totalFindings,
+    aiFindings.length,
+    complexityMetrics,
+    llmLogsQuery.data,
+    auditQuery.data,
+    artifactsQuery.data,
+    isAdmin,
+  ]);
 
   if (runQuery.isLoading || findingsQuery.isLoading) {
     return <p>Загружаем запуск...</p>;
@@ -351,138 +409,225 @@ function RunDetailsPage() {
       <section className="card" style={{ marginBottom: '1.5rem' }}>
         <div className="card-header">
           <div>
-            <h2 className="card-title">Когнитивная сложность</h2>
-            <p className="muted">Метрики по процедурам и функциям</p>
+            <h2 className="card-title">Сводка запуска</h2>
+            <p className="muted">Ключевые метрики</p>
           </div>
-          {complexityMetrics && (
-            <span className="muted">{complexityMetrics.procedures?.length ?? 0} процедур</span>
-          )}
         </div>
-        {!complexityMetrics && (
-          <div className="empty-state">Метрики пока не рассчитаны для этого запуска.</div>
-        )}
-        {complexityMetrics && (
-          <>
-            <div className="section-grid" style={{ marginBottom: '1rem' }}>
-              <div>
-                <p className="muted">Суммарная сложность</p>
-                <strong>{complexityMetrics.total}</strong>
-              </div>
-              <div>
-                <p className="muted">Строк кода</p>
-                <strong>{complexityMetrics.total_loc}</strong>
-              </div>
-              <div>
-                <p className="muted">Сложность на строку</p>
-                <strong>{formatDecimal(complexityMetrics.avg_per_line)}</strong>
-              </div>
-            </div>
-            <div className="table-container">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Процедура</th>
-                    <th>Файл</th>
-                    <th>Строки</th>
-                    <th>Сложность</th>
-                    <th>LOC</th>
-                    <th>На строку</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {complexityProcedures.map((proc) => (
-                    <tr key={`${proc.file_path}:${proc.name}:${proc.start_line}`}>
-                      <td>{proc.name}</td>
-                      <td className="muted">{proc.file_path}</td>
-                      <td>
-                        {proc.start_line}-{proc.end_line}
-                      </td>
-                      <td>{proc.complexity}</td>
-                      <td>{proc.loc}</td>
-                      <td>{formatDecimal(proc.avg_per_line)}</td>
-                    </tr>
-                  ))}
-                  {!complexityProcedures.length && (
-                    <tr>
-                      <td colSpan={6} className="muted">
-                        Процедуры и функции не обнаружены.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </section>
-
-      <section className="card" style={{ marginBottom: '1.5rem' }}>
-        <div className="card-header">
+        <div className="section-grid">
           <div>
-            <h2 className="card-title">Найденные нарушения</h2>
-            <p className="muted">
-              {filteredFindings.length}/{findingsQuery.data?.total ?? 0}
-            </p>
+            <p className="muted">Нарушения</p>
+            <strong>{totalFindings}</strong>
+            <div className="pill-row">
+              {(['critical', 'major', 'minor', 'warning', 'info'] as const)
+                .filter((level) => severityCounts[level] > 0)
+                .map((level) => (
+                  <span key={level} className={`status-pill ${level}`}>
+                    {level}: {severityCounts[level]}
+                  </span>
+                ))}
+              {!totalFindings && <span className="muted">Пока нет</span>}
+            </div>
           </div>
-        </div>
-        <FindingFilters severity={severity} setSeverity={setSeverity} query={query} setQuery={setQuery} />
-        <div className="card-list">
-          {filteredFindings.map((finding) => (
-            <FindingCard key={finding.id} finding={finding} />
-          ))}
-          {!filteredFindings.length && (
-            <div className="empty-state">Нет нарушений под текущий фильтр.</div>
-          )}
+          <div>
+            <p className="muted">Предложения LLM</p>
+            <strong>{aiFindings.length}</strong>
+            <div className="pill-row">
+              {(['pending', 'confirmed', 'rejected'] as const)
+                .filter((status) => aiCounts[status] > 0)
+                .map((status) => (
+                  <span key={status} className="table-badge">
+                    {status}: {aiCounts[status]}
+                  </span>
+                ))}
+              {!aiFindings.length && <span className="muted">Нет новых</span>}
+            </div>
+          </div>
+          <div>
+            <p className="muted">Когнитивная сложность</p>
+            <strong>{complexityMetrics?.total ?? '—'}</strong>
+            <div className="pill-row">
+              <span className="table-badge">
+                LOC: {complexityMetrics?.total_loc ?? '—'}
+              </span>
+              <span className="table-badge">
+                на строку: {formatDecimal(complexityMetrics?.avg_per_line ?? null)}
+              </span>
+            </div>
+          </div>
+          <div>
+            <p className="muted">Артефакты</p>
+            <strong>{artifactsQuery.data?.length ?? 0}</strong>
+            <div className="pill-row">
+              <span className="table-badge">LLM логи: {llmLogsQuery.data?.length ?? 0}</span>
+            </div>
+          </div>
         </div>
       </section>
 
-      {diffSources.length > 0 && (
+      <div className="tabs">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+            type="button"
+          >
+            {tab.label}
+            <span className="tab-count">{tab.count}</span>
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'findings' && (
+        <>
+          <section className="card" style={{ marginBottom: '1.5rem' }}>
+            <div className="card-header">
+              <div>
+                <h2 className="card-title">Найденные нарушения</h2>
+                <p className="muted">
+                  {filteredFindings.length}/{totalFindings}
+                </p>
+              </div>
+            </div>
+            <FindingFilters severity={severity} setSeverity={setSeverity} query={query} setQuery={setQuery} />
+            <div className="card-list">
+              {filteredFindings.map((finding) => (
+                <FindingCard key={finding.id} finding={finding} />
+              ))}
+              {!filteredFindings.length && (
+                <div className="empty-state">Нет нарушений под текущий фильтр.</div>
+              )}
+            </div>
+          </section>
+
+          {diffSources.length > 0 && (
+            <section className="card" style={{ marginBottom: '1.5rem' }}>
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Изменения в коде</h2>
+                  <p className="muted">{diffSources.length} файлов</p>
+                </div>
+                {runSourcesQuery.isLoading && <span className="muted">Загружаем…</span>}
+              </div>
+              {runSourcesQuery.error && (
+                <p className="alert alert-error">Не удалось загрузить информацию об изменениях.</p>
+              )}
+              {!runSourcesQuery.error && <RunDiffView sources={diffSources} />}
+            </section>
+          )}
+
+          <section className="card">
+            <h2 className="card-title">Обратная связь</h2>
+            {feedbackQuery.isLoading && <p className="muted">Загружаем обратную связь...</p>}
+            {feedbackQuery.error && <p className="alert alert-error">Не удалось загрузить отзывы.</p>}
+            {feedbackQuery.data && <FeedbackList items={feedbackQuery.data.items} />}
+          </section>
+        </>
+      )}
+
+      {activeTab === 'ai' && (
         <section className="card" style={{ marginBottom: '1.5rem' }}>
           <div className="card-header">
             <div>
-              <h2 className="card-title">Изменения в коде</h2>
-              <p className="muted">{diffSources.length} файлов</p>
+              <h2 className="card-title">Предложения LLM</h2>
+              <p className="muted">
+                {aiFindings.length}/{aiFindingsQuery.data?.total ?? 0}
+              </p>
             </div>
-            {runSourcesQuery.isLoading && <span className="muted">Загружаем…</span>}
+            {aiFindingsQuery.isLoading && <span className="muted">Обновляем…</span>}
           </div>
-          {runSourcesQuery.error && (
-            <p className="alert alert-error">Не удалось загрузить информацию об изменениях.</p>
+          {aiFindingsQuery.error && (
+            <p className="alert alert-error">Не удалось загрузить предложения LLM.</p>
           )}
-          {!runSourcesQuery.error && <RunDiffView sources={diffSources} />}
+          <div className="card-list">
+            {aiFindings.map((finding) => (
+              <AIFindingCard
+                key={finding.id}
+                finding={finding}
+                onChangeStatus={(status) => handleAiStatusChange(finding.id, status)}
+                isUpdating={
+                  updateAiFinding.isPending && updateAiFinding.variables?.findingId === finding.id
+                }
+              />
+            ))}
+            {!aiFindings.length && !aiFindingsQuery.isLoading && (
+              <div className="empty-state">LLM не предложила дополнительных норм.</div>
+            )}
+          </div>
         </section>
       )}
 
-      <section className="card" style={{ marginBottom: '1.5rem' }}>
-        <div className="card-header">
-          <div>
-            <h2 className="card-title">Предложения LLM</h2>
-            <p className="muted">
-              {aiFindings.length}/{aiFindingsQuery.data?.total ?? 0}
-            </p>
+      {activeTab === 'complexity' && (
+        <section className="card" style={{ marginBottom: '1.5rem' }}>
+          <div className="card-header">
+            <div>
+              <h2 className="card-title">Когнитивная сложность</h2>
+              <p className="muted">Метрики по процедурам и функциям</p>
+            </div>
+            {complexityMetrics && (
+              <span className="muted">{complexityMetrics.procedures?.length ?? 0} процедур</span>
+            )}
           </div>
-          {aiFindingsQuery.isLoading && <span className="muted">Обновляем…</span>}
-        </div>
-        {aiFindingsQuery.error && (
-          <p className="alert alert-error">Не удалось загрузить предложения LLM.</p>
-        )}
-        <div className="card-list">
-          {aiFindings.map((finding) => (
-            <AIFindingCard
-              key={finding.id}
-              finding={finding}
-              onChangeStatus={(status) => handleAiStatusChange(finding.id, status)}
-              isUpdating={
-                updateAiFinding.isPending && updateAiFinding.variables?.findingId === finding.id
-              }
-            />
-          ))}
-          {!aiFindings.length && !aiFindingsQuery.isLoading && (
-            <div className="empty-state">LLM не предложила дополнительных норм.</div>
+          {!complexityMetrics && (
+            <div className="empty-state">Метрики пока не рассчитаны для этого запуска.</div>
           )}
-        </div>
-      </section>
+          {complexityMetrics && (
+            <>
+              <div className="section-grid" style={{ marginBottom: '1rem' }}>
+                <div>
+                  <p className="muted">Суммарная сложность</p>
+                  <strong>{complexityMetrics.total}</strong>
+                </div>
+                <div>
+                  <p className="muted">Строк кода</p>
+                  <strong>{complexityMetrics.total_loc}</strong>
+                </div>
+                <div>
+                  <p className="muted">Сложность на строку</p>
+                  <strong>{formatDecimal(complexityMetrics.avg_per_line)}</strong>
+                </div>
+              </div>
+              <div className="table-container">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Процедура</th>
+                      <th>Файл</th>
+                      <th>Строки</th>
+                      <th>Сложность</th>
+                      <th>LOC</th>
+                      <th>На строку</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {complexityProcedures.map((proc) => (
+                      <tr key={`${proc.file_path}:${proc.name}:${proc.start_line}`}>
+                        <td>{proc.name}</td>
+                        <td className="muted">{proc.file_path}</td>
+                        <td>
+                          {proc.start_line}-{proc.end_line}
+                        </td>
+                        <td>{proc.complexity}</td>
+                        <td>{proc.loc}</td>
+                        <td>{formatDecimal(proc.avg_per_line)}</td>
+                      </tr>
+                    ))}
+                    {!complexityProcedures.length && (
+                      <tr>
+                        <td colSpan={6} className="muted">
+                          Процедуры и функции не обнаружены.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </section>
+      )}
 
-      {isAdmin && (
+      {activeTab === 'llm' && isAdmin && (
         <section className="card" style={{ marginBottom: '1.5rem' }}>
           <div className="card-header">
             <div>
@@ -507,32 +652,29 @@ function RunDetailsPage() {
         </section>
       )}
 
-      <section className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 className="card-title">Журнал событий</h2>
-        {auditQuery.isLoading && <p className="muted">Загружаем журнал...</p>}
-        {auditQuery.error && <p className="alert alert-error">Не удалось загрузить журнал.</p>}
-        {auditQuery.data && <AuditLogList logs={auditQuery.data} />}
-      </section>
+      {activeTab === 'audit' && (
+        <section className="card" style={{ marginBottom: '1.5rem' }}>
+          <h2 className="card-title">Журнал событий</h2>
+          {auditQuery.isLoading && <p className="muted">Загружаем журнал...</p>}
+          {auditQuery.error && <p className="alert alert-error">Не удалось загрузить журнал.</p>}
+          {auditQuery.data && <AuditLogList logs={auditQuery.data} />}
+        </section>
+      )}
 
-      <section className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 className="card-title">Обратная связь</h2>
-        {feedbackQuery.isLoading && <p className="muted">Загружаем обратную связь...</p>}
-        {feedbackQuery.error && <p className="alert alert-error">Не удалось загрузить отзывы.</p>}
-        {feedbackQuery.data && <FeedbackList items={feedbackQuery.data.items} />}
-      </section>
-
-      <section className="card">
-        <div className="card-header">
-          <h2 className="card-title">Артефакты</h2>
-          <button className="btn btn-secondary" onClick={handleDownloadFindings} disabled={isDownloading}>
-            {isDownloading ? 'Готовим файл...' : 'Скачать findings JSONL'}
-          </button>
-        </div>
-        {downloadError && <p className="alert alert-error">{downloadError}</p>}
-        {artifactsQuery.isLoading && <p className="muted">Загружаем артефакты...</p>}
-        {artifactsQuery.error && <p className="alert alert-error">Не удалось загрузить артефакты.</p>}
-        {artifactsQuery.data && <ArtifactsTable artifacts={artifactsQuery.data} />}
-      </section>
+      {activeTab === 'artifacts' && (
+        <section className="card">
+          <div className="card-header">
+            <h2 className="card-title">Артефакты</h2>
+            <button className="btn btn-secondary" onClick={handleDownloadFindings} disabled={isDownloading}>
+              {isDownloading ? 'Готовим файл...' : 'Скачать findings JSONL'}
+            </button>
+          </div>
+          {downloadError && <p className="alert alert-error">{downloadError}</p>}
+          {artifactsQuery.isLoading && <p className="muted">Загружаем артефакты...</p>}
+          {artifactsQuery.error && <p className="alert alert-error">Не удалось загрузить артефакты.</p>}
+          {artifactsQuery.data && <ArtifactsTable artifacts={artifactsQuery.data} />}
+        </section>
+      )}
     </div>
   );
 }
