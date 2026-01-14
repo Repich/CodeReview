@@ -134,9 +134,10 @@ function RunDetailsPage() {
   const updateAiFinding = useMutation<
     AIFinding,
     unknown,
-    { findingId: string; status: AIFindingStatus }
+    { findingId: string; status: AIFindingStatus; reviewerComment?: string }
   >({
-    mutationFn: ({ findingId, status }) => updateAIFindingStatus(findingId, status),
+    mutationFn: ({ findingId, status, reviewerComment }) =>
+      updateAIFindingStatus(findingId, status, reviewerComment),
     onSuccess: () => {
       aiFindingsQuery.refetch();
     },
@@ -314,8 +315,12 @@ function RunDetailsPage() {
     }
   };
 
-  const handleAiStatusChange = (findingId: string, status: AIFindingStatus) => {
-    updateAiFinding.mutate({ findingId, status });
+  const handleAiStatusChange = (
+    findingId: string,
+    status: AIFindingStatus,
+    reviewerComment?: string,
+  ) => {
+    updateAiFinding.mutate({ findingId, status, reviewerComment });
   };
 
   const handleDeleteRun = () => {
@@ -544,7 +549,9 @@ function RunDetailsPage() {
               <AIFindingCard
                 key={finding.id}
                 finding={finding}
-                onChangeStatus={(status) => handleAiStatusChange(finding.id, status)}
+              onChangeStatus={(status, reviewerComment) =>
+                handleAiStatusChange(finding.id, status, reviewerComment)
+              }
                 isUpdating={
                   updateAiFinding.isPending && updateAiFinding.variables?.findingId === finding.id
                 }

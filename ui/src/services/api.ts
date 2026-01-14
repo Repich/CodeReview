@@ -121,6 +121,7 @@ export interface AIFinding {
   source_reference?: string | null;
   norm_source_reference?: string | null;
   norm_source_excerpt?: string | null;
+  reviewer_comment?: string | null;
   evidence?: AIFindingEvidence[] | null;
   llm_raw_response?: Record<string, unknown> | null;
   created_at: string;
@@ -431,7 +432,14 @@ export async function fetchCaddyLogs(params?: {
   return data;
 }
 
-export async function updateAIFindingStatus(id: string, status: AIFindingStatus) {
-  const { data } = await client.patch<AIFinding>(`/ai-findings/${id}`, { status });
+export async function updateAIFindingStatus(
+  id: string,
+  status: AIFindingStatus,
+  reviewer_comment?: string | null,
+) {
+  const { data } = await client.patch<AIFinding>(`/ai-findings/${id}`, {
+    status,
+    reviewer_comment,
+  });
   return data;
 }

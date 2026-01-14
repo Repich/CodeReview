@@ -39,6 +39,7 @@ class AIFinding(Base):
     severity: Mapped[str | None] = mapped_column(String(50))
     norm_text: Mapped[str] = mapped_column(Text, nullable=False)
     source_reference: Mapped[str | None] = mapped_column(String(500))
+    reviewer_comment: Mapped[str | None] = mapped_column(Text)
     evidence: Mapped[list[dict] | None] = mapped_column(JSONB)
     llm_raw_response: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(

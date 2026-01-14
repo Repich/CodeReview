@@ -2,7 +2,7 @@ import type { AIFinding, AIFindingStatus } from '../services/api';
 
 interface Props {
   finding: AIFinding;
-  onChangeStatus?: (status: AIFindingStatus) => void;
+  onChangeStatus?: (status: AIFindingStatus, reviewerComment?: string) => void;
   isUpdating?: boolean;
 }
 
@@ -23,6 +23,18 @@ const statusClassName: Record<AIFindingStatus, string> = {
 function AIFindingCard({ finding, onChangeStatus, isUpdating }: Props) {
   const handleStatusChange = (status: AIFindingStatus) => {
     if (isUpdating) return;
+    if (status === 'confirmed' || status === 'rejected') {
+      const promptLabel =
+        status === 'confirmed'
+          ? 'Комментарий к подтверждению (опционально)'
+          : 'Комментарий к отклонению (опционально)';
+      const comment = window.prompt(promptLabel, finding.reviewer_comment ?? '');
+      if (comment === null) {
+        return;
+      }
+      onChangeStatus?.(status, comment.trim() || undefined);
+      return;
+    }
     onChangeStatus?.(status);
   };
 
@@ -58,6 +70,13 @@ function AIFindingCard({ finding, onChangeStatus, isUpdating }: Props) {
             <p style={{ whiteSpace: 'pre-wrap' }}>{finding.norm_source_excerpt}</p>
           )}
         </details>
+      )}
+
+      {finding.reviewer_comment && (
+        <div className="muted" style={{ marginBottom: '0.75rem' }}>
+          <strong style={{ display: 'block', marginBottom: '0.25rem' }}>Комментарий</strong>
+          <p style={{ margin: 0, whiteSpace: 'pre-line' }}>{finding.reviewer_comment}</p>
+        </div>
       )}
 
       {finding.evidence && finding.evidence.length > 0 && (

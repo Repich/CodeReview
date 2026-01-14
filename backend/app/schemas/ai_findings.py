@@ -21,6 +21,7 @@ class AIFindingBase(ORMModel):
     severity: str | None = None
     norm_text: str
     source_reference: str | None = None
+    reviewer_comment: str | None = None
     evidence: list[EvidenceEntry] | None = None
     status: AIFindingStatus
 
@@ -32,6 +33,7 @@ class AIFindingCreate(AIFindingBase):
 
 class AIFindingUpdate(ORMModel):
     status: AIFindingStatus | None = None
+    reviewer_comment: str | None = None
 
 
 class AIFindingRead(AIFindingBase):

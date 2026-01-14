@@ -258,6 +258,7 @@ def submit_results(
             severity=ai_payload.severity,
             norm_text=ai_payload.norm_text,
             source_reference=ai_payload.source_reference,
+            reviewer_comment=None,
             evidence=ai_payload.evidence,
             llm_raw_response=ai_payload.llm_raw_response,
         )

@@ -70,6 +70,8 @@ def update_ai_finding(
         finding.status = payload.status
     else:
         raise HTTPException(status_code=400, detail="Status is required")
+    if payload.reviewer_comment is not None:
+        finding.reviewer_comment = payload.reviewer_comment
     db.add(finding)
     db.commit()
     db.refresh(finding)
