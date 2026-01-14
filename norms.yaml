@@ -57545,3 +57545,1052 @@ norms:
   check_type: semantic
   default_severity: minor
   detector_type: manual_review
+- norm_id: EXP_001
+  section: Запросы
+  category: queries_performance
+  title: Выбирать только необходимые поля в запросе
+  norm_text: В запросах выбирайте только те поля, которые реально нужны для дальнейшей
+    логики. Избегайте выборки «*» или «<Таблица>.*», если используется лишь часть
+    реквизитов.
+  source_reference: Раздел 4.20 «Работа с запросами. Порядок написания запросов. Список
+    правил», правило 1, стр. 215
+  source_excerpt: «Выбирать в запросе только то, что нужно.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_002
+  section: Производительность
+  category: performance_runtime
+  title: Не выполнять запросы и чтение объектной модели в цикле
+  norm_text: Не выполняйте запросы в циклах и не заменяйте их чтением через объектную
+    модель. Для массовых операций формируйте один запрос/пакетный запрос и обрабатывайте
+    результат наборами данных.
+  source_reference: Раздел 4.20 «Работа с запросами. Порядок написания запросов. Список
+    правил», правило 2, стр. 215; раздел 3.15 «Запросы через объектную модель...»,
+    стр. 106
+  source_excerpt: «Нельзя зацикливать запросы... важно избегать выполнения запросов
+    через объектную модель.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: critical
+  detector_type: manual_review
+- norm_id: EXP_003
+  section: Запросы
+  category: queries_performance
+  title: В запросах «ДЛЯ ИЗМЕНЕНИЯ» явно указывать блокируемые таблицы
+  norm_text: Если используется конструкция «ДЛЯ ИЗМЕНЕНИЯ» в запросе с несколькими
+    таблицами (соединения/несколько источников), явно перечисляйте, какие таблицы
+    должны блокироваться. Не полагайтесь на «ДЛЯ ИЗМЕНЕНИЯ» без списка, когда источников
+    больше одного.
+  source_reference: Раздел 4.20 «Работа с запросами. Порядок написания запросов. Список
+    правил», правило 3, стр. 215
+  source_excerpt: '«Если ... несколько таблиц, важно указать, какие таблицы должны
+    быть заблокированы: ДЛЯ ИЗМЕНЕНИЯ ...»'
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_004
+  section: Запросы
+  category: queries_performance
+  title: Условия для виртуальных таблиц задавать в параметрах, а не в WHERE
+  norm_text: При обращении к виртуальным таблицам (Остатки/Обороты/СрезПоследних и
+    т. п.) переносите отбор в параметры виртуальной таблицы, а не оставляйте его для
+    секции WHERE. Это повышает вероятность оптимального плана и снижает объем обрабатываемых
+    данных.
+  source_reference: Раздел 4.20 «Работа с запросами. Порядок написания запросов. Список
+    правил», правило 5, стр. 215
+  source_excerpt: «Условия лучше ставить в параметрах виртуальных таблиц, а не в секции
+    ГДЕ.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_005
+  section: Запросы
+  category: queries_performance
+  title: Не агрегировать повторно уже агрегированные данные виртуальных таблиц
+  norm_text: Не применяйте избыточные агрегатные функции к показателям виртуальных
+    таблиц, которые уже возвращаются агрегированными (остатки/обороты/суммы). Если
+    поле уже «...Остаток/Оборот», повторная СУММА/СРЕДНЕЕ и т. п. обычно не нужна.
+  source_reference: Раздел 4.20 «Работа с запросами. Порядок написания запросов. Список
+    правил», правило 6, стр. 216
+  source_excerpt: «Не применять избыточное агрегирование. Механизм виртуальных таблиц
+    сам считает сумму.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_006
+  section: Запросы
+  category: queries_performance
+  title: Условия по присоединяемым таблицам размещать в ON или во временных таблицах,
+    а не в WHERE
+  norm_text: При соединении таблиц размещайте условия, относящиеся к полям присоединяемой
+    таблицы, в секции «ПО» (условии соединения) или предварительно отфильтровывайте
+    данные во временной таблице. Не оставляйте такие условия до секции WHERE, если
+    это не меняет логику результата.
+  source_reference: Раздел 4.20 «Работа с запросами. Порядок написания запросов. Список
+    правил», правило 7, стр. 216
+  source_excerpt: «...ставить в условия соединения или пользоваться временными таблицами,
+    а не оставлять их до секции ГДЕ.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_007
+  section: Запросы
+  category: queries_performance
+  title: Заменять подзапросы в JOIN/WHERE временными таблицами
+  norm_text: Не используйте подзапросы в условиях соединения или в секции WHERE; вместо
+    этого формируйте временные таблицы (пакетный запрос) и соединяйте физические выборки.
+    Это упрощает оптимизацию и снижает риск выбора плохого плана.
+  source_reference: Раздел 4.20 «Работа с запросами. Порядок написания запросов. Список
+    правил», правила 8–9, стр. 216; пример пакетного запроса, стр. 223
+  source_excerpt: «Не использовать подзапросы... Нужно использовать временные таблицы.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_008
+  section: Запросы
+  category: queries_performance
+  title: Не соединять виртуальные таблицы напрямую с реальными/виртуальными — использовать
+    ВТ + индексацию
+  norm_text: Не соединяйте виртуальные таблицы с реальными таблицами и не соединяйте
+    виртуальные таблицы между собой. Сначала выгрузите результат виртуальной таблицы
+    во временную таблицу, проиндексируйте ее по полям соединения, затем выполняйте
+    соединение с основными таблицами.
+  source_reference: Раздел 4.20 «Работа с запросами. Порядок написания запросов. Список
+    правил», правило 10, стр. 216; пример замены виртуальной таблицы на временную,
+    стр. 226
+  source_excerpt: «Не соединять виртуальные таблицы... сначала ... во временную таблицу,
+    индексировать... а затем уже соединять.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_009
+  section: Запросы
+  category: queries_performance
+  title: Избегать ИЛИ в условиях соединения (ON)
+  norm_text: Не используйте логическое «ИЛИ» в условиях соединения (секции «ПО»).
+    При необходимости переработайте алгоритм (например, разделите на несколько запросов/веток)
+    так, чтобы соединения выполнялись по однозначным условиям.
+  source_reference: Раздел 4.20 «Работа с запросами. Порядок написания запросов. Список
+    правил», правило 11, стр. 216
+  source_excerpt: «Не рекомендуется использовать логическое ИЛИ в условиях соединения...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_010
+  section: Запросы
+  category: queries_performance
+  title: Избегать условий «НЕ РАВНО», особенно при сравнении ссылок
+  norm_text: Используйте условия «НЕ РАВНО» (<>/НЕ РАВНО) осторожно, особенно при
+    сравнении ссылочных полей. При признаках деградации производительности пересмотрите
+    логику отбора (замена на эквивалентные условия, разбиение на запросы и т. п.).
+  source_reference: Раздел 4.20 «Работа с запросами. Порядок написания запросов. Список
+    правил», правило 12, стр. 216
+  source_excerpt: «...с условием Не равно, особенно если ... сравниваются ссылки.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_011
+  section: Запросы
+  category: queries_performance
+  title: Избегать ИЛИ в WHERE — разбивать на несколько запросов
+  norm_text: Не используйте логическое «ИЛИ» в секции WHERE для производительных сценариев.
+    Разбивайте запрос на несколько запросов с простыми условиями и объединяйте результаты
+    на уровне приложения или через пакетный запрос.
+  source_reference: Раздел 4.20 «Работа с запросами. Порядок написания запросов. Список
+    правил», правило 13, стр. 216
+  source_excerpt: «В секции ГДЕ логическое ИЛИ использовать тоже не рекомендуется.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_012
+  section: Запросы
+  category: queries_performance
+  title: Временные таблицы нужно индексировать по полям соединения
+  norm_text: При создании временной таблицы в пакетном запросе обязательно задавайте
+    индексацию по всем полям, используемым в последующих соединениях. Это снижает
+    стоимость соединений и повышает стабильность плана выполнения.
+  source_reference: Раздел 4.20, предупреждение и пример пакетного запроса, стр. 223
+  source_excerpt: «Не забудьте проиндексировать созданную временную таблицу... указать
+    все поля, которые используются в условии соединения.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_014
+  section: Запросы
+  category: queries_performance
+  title: Ограничивать составные типы в запросах с помощью ВЫРАЗИТЬ(), чтобы не раздувать
+    SQL соединениями
+  norm_text: Если в запросе используются поля составных ссылочных типов и требуется
+    получить их реквизиты, ограничивайте тип через ВЫРАЗИТЬ() (или аналогичный прием),
+    чтобы сократить число формируемых SQL-соединений. Это повышает скорость и стабильность
+    выполнения.
+  source_reference: Раздел 4.20, пример с составным типом и ВЫРАЗИТЬ(), стр. 231
+  source_excerpt: «...ускорить работу запроса, ограничив количество соединений при
+    помощи функции ВЫРАЗИТЬ().»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_015
+  section: Запросы
+  category: code_style
+  title: Ссылки сравнивать напрямую; не использовать лишнюю .Ссылка и не писать Ссылка.Ссылка
+  norm_text: Сравнивайте ссылки напрямую (поле ссылочного типа = значение ссылки).
+    Не используйте лишнее обращение к реквизиту «Ссылка» у ссылки и тем более не пишите
+    «Ссылка.Ссылка». Не сравнивайте ссылки по строковым представлениям/наименованиям
+    вместо сравнения по ссылке.
+  source_reference: Раздел 4.20, пояснения к правилу 16, стр. 217
+  source_excerpt: «Сравнивать ссылки следует напрямую... Никогда нельзя использовать
+    Ссылка.Ссылка.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_016
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Не открывать модальные формы и не показывать модальные диалоги внутри транзакции
+  norm_text: 'Не допускайте пользовательского взаимодействия внутри активной транзакции:
+    не открывайте формы модально и не вызывайте модальные окна/диалоги. Это приводит
+    к длительному удержанию блокировок и откату изменений при ошибках или зависаниях.'
+  source_reference: Раздел 4.27 «Про открытие модальных окон в транзакции», стр. 266
+  source_excerpt: «Открытие модальных окон в транзакции – это почти всегда грубая
+    ошибка.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: critical
+  detector_type: manual_review
+- norm_id: EXP_017
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Не использовать Попытка…Исключение внутри транзакции в промышленной эксплуатации
+  norm_text: Не используйте операторные скобки Попытка…Исключение внутри транзакции
+    в продуктивных системах. Обрабатывайте ошибки так, чтобы транзакции завершались
+    корректно (фиксация/отмена) и не оставляли ресурсы заблокированными.
+  source_reference: Раздел 5.5 «Приемы конфигурирования, приводящие к проблемам»,
+    стр. 297
+  source_excerpt: «Пользоваться ... Попытка… Исключение внутри транзакции в системах
+    ... промышленной эксплуатации.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_018
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Не выполнять обращения через COM-соединение к другой базе внутри транзакции
+  norm_text: Не вызывайте внешние интеграции через COM-соединение к другой базе в
+    пределах активной транзакции. Внешний вызов удлиняет транзакцию, увеличивает время
+    удержания блокировок и повышает вероятность взаимоблокировок/таймаутов.
+  source_reference: Раздел 5.5 «Приемы конфигурирования, приводящие к проблемам»,
+    стр. 297
+  source_excerpt: «Вызывать обращение через COM-соединение к другой базе внутри транзакции.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_019
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Не создавать вложенные транзакции при проведении/записи (не инициировать
+    запись/проведение других объектов)
+  norm_text: 'Избегайте вложенных транзакций (явных и неявных) в обработчиках записи/проведения:
+    не запускайте проведение других документов и не записывайте элементы справочников
+    из процедуры проведения. Это повышает длительность транзакции и риск блокировок.'
+  source_reference: Раздел 5.5 «Приемы конфигурирования, приводящие к проблемам»,
+    стр. 297
+  source_excerpt: «...вызывая из процедур проведения документа проведение других документов,
+    запись элементов справочников...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_021
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Избегать запросов к пустым таблицам при автоматическом управлении блокировками
+  norm_text: В режиме автоматического управления блокировками 1С избегайте запросов
+    к заведомо пустым таблицам. Такие запросы могут приводить к лишним блокировкам
+    и задержкам.
+  source_reference: Раздел 4.20 «Работа в конфигураторе. Исправление запросов. Список
+    правил», правило 14, стр. 216
+  source_excerpt: «Избегать запросов к пустым таблицам в режиме автоматического управления
+    блокировками «1С».»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_022
+  section: Запросы
+  category: security_access
+  title: Учитывать влияние RLS на текст и план запроса
+  norm_text: Учитывайте, что при работе механизма RLS (ограничения доступа к данным)
+    текст запроса может быть модифицирован платформой. При разборе проблем производительности
+    и корректности проверяйте итоговый запрос с учетом RLS.
+  source_reference: Раздел 4.20 «Работа в конфигураторе. Исправление запросов. Список
+    правил», правило 15, стр. 216
+  source_excerpt: «Понимать, как запрос может быть изменен при работе механизма RLS.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_023
+  section: Конфигурирование
+  category: data_model_registers
+  title: Не использовать константы для заведомо изменяющихся данных
+  norm_text: Не используйте константы для хранения заведомо изменяющихся данных. Для
+    таких данных должны применяться справочники, регистры или другие подходящие структуры.
+  source_reference: Раздел 5.5 «Приемы конфигурирования, приводящие к проблемам»,
+    стр. 297
+  source_excerpt: «Использовать константы не по назначению (для хранения заведомо
+    изменяющихся данных).»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_024
+  section: Производительность
+  category: performance_runtime
+  title: Не использовать автоперемещение границы последовательностей при проведении
+  norm_text: Не используйте автоматическую регистрацию в последовательностях и перемещение
+    границы последовательности при проведении документов. Это может приводить к лишним
+    блокировкам и замедлению.
+  source_reference: Раздел 5.5 «Приемы конфигурирования, приводящие к проблемам»,
+    стр. 297
+  source_excerpt: «Использовать автоматическую регистрацию в последовательностях и
+    перемещение границы при проведении документов.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_025
+  section: Производительность
+  category: performance_runtime
+  title: Не выполнять неявные запросы в цикле (например, в ПриВыводеСтроки)
+  norm_text: Не допускайте неявных запросов в цикле, например, получение доп. данных
+    в обработчике ПриВыводеСтроки формы списка. Такие операции приводят к N+1 запросам
+    и сильной деградации.
+  source_reference: Раздел 5.5 «Приемы конфигурирования, приводящие к проблемам»,
+    стр. 297
+  source_excerpt: «Неявно использовать запросы в цикле, например... ПриВыводеСтроки
+    получать дополнительные данные из базы.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_029
+  section: Отчеты
+  category: ui_forms_behavior
+  title: Запросы отчетов вызывать из модуля объекта, а не модуля формы
+  norm_text: Запросы, формирующие отчет, следует вызывать из модуля объекта, а не
+    из модуля формы. Это повышает повторное использование и упрощает сопровождение.
+  source_reference: Раздел 5.5 «Приемы конфигурирования, приводящие к проблемам»,
+    стр. 297
+  source_excerpt: «Вызывать запрос, формирующий отчет, из модуля формы, а не из модуля
+    объекта.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_034
+  section: Запросы
+  category: queries_performance
+  title: Не пропускать поле индекса между условиями
+  norm_text: Если условие включает не первое поле индекса и пропускает промежуточное
+    измерение, индекс используется частично и возможны избыточные блокировки. Условие
+    нужно уточнить или изменить структуру индекса.
+  source_reference: Раздел 4.20, пример к правилу 4, стр. 220
+  source_excerpt: «Между измерениями ... находится измерение, которое не задано в
+    условии... запрос не сможет выполняться оптимально.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_035
+  section: Запросы
+  category: queries_performance
+  title: Добавлять индекс на часто фильтруемое измерение
+  norm_text: Если запросы часто фильтруют по измерению, которое не является первым
+    в индексе, следует добавить индекс по этому измерению или изменить порядок измерений.
+  source_reference: Раздел 4.20, варианты оптимизации примера, стр. 220
+  source_excerpt: '«Варианты оптимизации: проиндексировать измерение «Номенклатура».»'
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_036
+  section: Запросы
+  category: queries_performance
+  title: При необходимости менять порядок измерений под запросы
+  norm_text: Если ключевые запросы фильтруют по измерению, которое не является первым,
+    рассмотрите перенос этого измерения в начало списка измерений (с учетом влияния
+    на другие запросы).
+  source_reference: Раздел 4.20, варианты оптимизации примера, стр. 220
+  source_excerpt: «Поставить измерение «Номенклатура» первым в списке измерений...
+    используйте метод внимательно.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_037
+  section: Запросы
+  category: queries_performance
+  title: Не создавать индексы на всякий случай
+  norm_text: Индексы следует создавать осознанно и только для известных запросов.
+    Индексация «на всякий случай» приводит к избыточным затратам на запись.
+  source_reference: Раздел 4.20, пояснение к правилу 4, стр. 218
+  source_excerpt: «Не следует создавать индексы «на всякий случай» или заведомо избыточные
+    индексы.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_038
+  section: Запросы
+  category: queries_performance
+  title: Не создавать избыточные индексы при наличии штатных
+  norm_text: Перед добавлением индексов проверяйте, не покрывают ли условия запроса
+    автоматически создаваемые индексы платформы.
+  source_reference: Раздел 4.20, пояснение к правилу 4, стр. 218
+  source_excerpt: «Основные индексы, создаваемые «1С:Предприятием»...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_039
+  section: Запросы
+  category: queries_performance
+  title: Не индексировать первое измерение регистра
+  norm_text: Нельзя дополнительно индексировать первое измерение регистра — для поиска
+    по нему уже подходит основной индекс таблицы итогов, создаваемый платформой.
+  source_reference: Раздел 4.20, пояснение к правилу 4, стр. 218
+  source_excerpt: «Никогда не следует дополнительно индексировать первое измерение
+    регистра...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_040
+  section: Запросы
+  category: queries_performance
+  title: Учитывать, что индексы ускоряют чтение, но замедляют запись
+  norm_text: Создание индексов ускоряет поиск, но замедляет операции изменения данных.
+    Индексы следует добавлять только там, где выгода превышает стоимость.
+  source_reference: Раздел 4.20, пояснение к правилу 4, стр. 218
+  source_excerpt: «Создание индекса ускоряет процесс поиска... но может несколько
+    замедлить процесс изменения.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_041
+  section: Запросы
+  category: queries_performance
+  title: Добавлять индекс на реквизит, если штатных индексов недостаточно
+  norm_text: Если автоматически создаваемых индексов недостаточно, следует дополнительно
+    индексировать реквизиты объекта метаданных под конкретные запросы.
+  source_reference: Раздел 4.20, пояснение к правилу 4, стр. 218
+  source_excerpt: «...можно дополнительно проиндексировать реквизиты объекта метаданных.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_042
+  section: Запросы
+  category: queries_performance
+  title: Не использовать подзапросы в условиях соединения
+  norm_text: Подзапросы в условиях соединения приводят к замедлению и нестабильности.
+    Следует переписывать такие места через временные таблицы.
+  source_reference: Раздел 4.20, пояснение к правилу 8, стр. 221
+  source_excerpt: «Не следует использовать подзапросы в условии соединения...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_043
+  section: Запросы
+  category: queries_performance
+  title: Не использовать подзапросы в условиях запроса
+  norm_text: Подзапросы в условиях (включая WHERE) могут приводить к полной неработоспособности
+    на отдельных СУБД. Предпочитайте временные таблицы.
+  source_reference: Раздел 4.20, пояснение к правилу 8, стр. 221
+  source_excerpt: «...и вообще в условиях... может привести к значительному замедлению
+    запроса.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_044
+  section: Запросы
+  category: queries_performance
+  title: Для ИЛИ в WHERE использовать объединение результатов
+  norm_text: При наличии ИЛИ в секции ГДЕ следует разбивать запрос на несколько и
+    объединять результаты через ОБЪЕДИНИТЬ ВСЕ.
+  source_reference: Раздел 4.20, пояснение к правилу 13, стр. 227
+  source_excerpt: «Следует разбить один запрос на несколько и объединить результаты.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_045
+  section: Запросы
+  category: queries_performance
+  title: ИЛИ в WHERE ухудшает использование индексов
+  norm_text: ИЛИ в условиях ГДЕ может лишить СУБД возможности использовать индексы
+    и привести к сканированию таблиц. Избегайте ИЛИ в проблемных запросах.
+  source_reference: Раздел 4.20, пояснение к правилу 13, стр. 227
+  source_excerpt: «СУБД не сможет использовать индексы... будет выполнять сканирование.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_046
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Не писать пустые движения в заведомо пустые регистры
+  norm_text: Запись «пустых» движений в пустой регистр может блокировать таблицу целиком
+    в автоматическом режиме. Следует исключать такие записи.
+  source_reference: Раздел 4.20, пояснение к правилу 14, стр. 227-229
+  source_excerpt: «...конфликт произошел на ... пустой таблице, в которую идет запрос
+    на запись «пустых» движений.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_047
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: При конфликтах на пустых таблицах использовать управляемый режим блокировок
+  norm_text: Если конфликты возникают из-за пустых таблиц при автоматическом управлении
+    блокировками, следует перейти на управляемый режим блокировок либо исключить пустые
+    движения.
+  source_reference: Раздел 4.20, пояснение к правилу 14, стр. 228
+  source_excerpt: «Чтобы избавиться от конфликта... установить управляемый режим управления
+    блокировками.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_048
+  section: Запросы
+  category: security_access
+  title: Учитывать влияние RLS на итоговый текст запроса
+  norm_text: При анализе проблемных запросов учитывайте, что механизм RLS дописывает
+    условия в запрос и может существенно ухудшить план выполнения.
+  source_reference: Раздел 4.20, пояснение к правилу 16, стр. 231
+  source_excerpt: «Механизм RLS дописывает свои условия к запросам...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_051
+  section: Безопасность
+  category: security_access
+  title: Сокращать количество условий RLS, если их нельзя устранить
+  norm_text: Если избежать дописывания условий RLS нельзя, следует по крайней мере
+    ограничить их количество, чтобы не ухудшать планы запросов.
+  source_reference: Раздел 4.20, пояснение к правилу 16, стр. 231
+  source_excerpt: «Если от дописывания условий нельзя избавиться совсем, следует по
+    крайней мере ограничить их количество...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_056
+  section: Модель данных
+  category: data_model_registers
+  title: Дублировать нужные данные для ускорения запросов
+  norm_text: Если в запросах часто требуется значение по ссылке, допускается хранить
+    его напрямую в объекте, жертвуя компактностью ради производительности.
+  source_reference: Раздел 4.20, рекомендации по составным типам, стр. 230
+  source_excerpt: «Можно хранить значение непосредственно в объекте... это может существенно
+    повысить производительность.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_059
+  section: Модель данных
+  category: data_model_registers
+  title: Константы использовать только для редко изменяемых данных
+  norm_text: Константы предназначены для условно постоянных данных. Их не следует
+    использовать для значений, которые меняются чаще одного раза в полгода.
+  source_reference: Раздел 3.11 «Узкие места», стр. 70
+  source_excerpt: «...не использовать константы для хранения данных, которые меняются
+    чаще, чем раз в полгода...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_060
+  section: Модель данных
+  category: data_model_registers
+  title: Константы нельзя использовать для быстро меняющихся данных
+  norm_text: Никогда не используйте константы для быстро меняющихся данных, например
+    счетчиков.
+  source_reference: Раздел 3.11 «Узкие места», стр. 70
+  source_excerpt: «...и никогда не использовать их для хранения быстро меняющихся
+    данных (например, счетчиков).»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_061
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Не перемещать границу последовательности при проведении документов
+  norm_text: 'Перемещение границы последовательности при проведении документов неправильно:
+    это узкое место и источник блокировок.'
+  source_reference: Раздел 3.11 «Узкие места», стр. 71
+  source_excerpt: «...неправильно перемещать границу последовательности при проведении
+    документов...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_062
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Перемещать границу последовательности регламентным заданием
+  norm_text: Перемещение границы последовательности должно выполняться регламентным
+    заданием или служебной обработкой, а не в пользовательских транзакциях.
+  source_reference: Раздел 3.11 «Узкие места», стр. 71
+  source_excerpt: «...перемещение должно происходить, например, регламентным заданием
+    или служебной обработкой...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_063
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Перемещать границу последовательности малыми порциями и часто
+  norm_text: Перемещение границы последовательности следует выполнять маленькими порциями,
+    но часто, чтобы избежать длительных блокировок.
+  source_reference: Раздел 3.11 «Узкие места», стр. 71
+  source_excerpt: «...очень маленькими порциями, но очень часто...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_064
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Не путать служебное перемещение границ и восстановление последовательности
+  norm_text: Служебное перемещение границ последовательности и восстановление последовательности
+    — разные операции и не должны смешиваться.
+  source_reference: Раздел 3.11 «Узкие места», стр. 71
+  source_excerpt: «...не следует путать обработку ... перемещению границ с ... восстановлением
+    последовательности.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_065
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Не путать авто перемещение границы и авто регистрацию в последовательности
+  norm_text: Автоматическое перемещение границы при проведении и автоматическая регистрация
+    документов в последовательности — разные механизмы. Их нельзя смешивать.
+  source_reference: Раздел 3.11 «Узкие места», стр. 71
+  source_excerpt: «Не следует путать автоматическое перемещение границы ... и автоматическую
+    регистрацию документов...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_066
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Автоматическая регистрация в последовательности может приводить к блокировкам
+  norm_text: Ошибки блокировок могут возникать из-за автоматической регистрации документов
+    в последовательностях. При признаках проблем пересматривать необходимость автоматической
+    регистрации.
+  source_reference: Раздел 3.11 «Узкие места», стр. 71
+  source_excerpt: «Ошибки блокировок возникают из-за автоматической регистрации документов
+    в последовательностях...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_067
+  section: Транзакции и блокировки
+  category: performance_runtime
+  title: Использовать измерения последовательностей для параллельности
+  norm_text: Для увеличения параллельности перемещения границ последовательности рекомендуется
+    использовать измерения.
+  source_reference: Раздел 3.11 «Узкие места», стр. 70
+  source_excerpt: «...существует возможность параллельного перемещения границы, которая
+    достигается использованием измерений.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_068
+  section: Интеграции и обмен
+  category: performance_runtime
+  title: Выгрузку сообщений обмена выполнять в нерабочее время
+  norm_text: Выгрузка сообщений обмена блокирует таблицу регистрации изменений объекта.
+    Рекомендуется выполнять выгрузку в нерабочее время.
+  source_reference: Раздел 3.11 «Узкие места», стр. 71
+  source_excerpt: «...выгрузку сообщений обмена рекомендуется проводить либо в нерабочее
+    время...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_069
+  section: Интеграции и обмен
+  category: performance_runtime
+  title: Выгрузку сообщений обмена делать часто, чтобы объем был мал
+  norm_text: Выгрузку обмена следует выполнять часто, чтобы за время между выгрузками
+    не накапливался большой объем изменений.
+  source_reference: Раздел 3.11 «Узкие места», стр. 71
+  source_excerpt: «...либо очень часто, так, чтобы ... не успевал накопиться объем
+    измененных данных...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_071
+  section: Интеграции и обмен
+  category: performance_runtime
+  title: Подбирать количество элементов в транзакции опытно
+  norm_text: Количество элементов в транзакции обмена следует подбирать опытно; в
+    практике обычно подходят значения от 1 до 100.
+  source_reference: Раздел 3.11 «Узкие места», стр. 72
+  source_excerpt: «...нормально себя зарекомендовали значения от 1 до 100.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_072
+  section: Интеграции и обмен
+  category: performance_runtime
+  title: Делать паузы между транзакциями обмена при необходимости
+  norm_text: Для обработок обмена, состоящих из множества транзакций, иногда имеет
+    смысл делать программную паузу между транзакциями.
+  source_reference: Раздел 3.11 «Узкие места», стр. 72
+  source_excerpt: «...иногда ... имеет смысл делать некоторую программную паузу между
+    транзакциями.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_073
+  section: UI и формы
+  category: ui_forms_behavior
+  title: Для форм просмотра запрещать запись объектов
+  norm_text: Если форма открывается только для просмотра, возможность записи нужно
+    закрывать, иначе массовое закрытие форм может перезаписывать объекты и вызывать
+    блокировки.
+  source_reference: Раздел 3.8 «Сведения об управляемых и объектных блокировках»,
+    примечание, стр. 55
+  source_excerpt: «...массовое закрытие этих форм кнопкой ОК... это ошибка... возможность
+    записи надо закрывать.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_075
+  section: Блокировки
+  category: performance_runtime
+  title: Не путать объектные и управляемые блокировки
+  norm_text: Методы <Объект>.Заблокировать() и <БлокировкаДанных>.Заблокировать()
+    относятся к разным механизмам блокировок. Их нельзя подменять друг другом.
+  source_reference: Раздел 3.8 «Сведения об управляемых и объектных блокировках»,
+    примечание, стр. 55
+  source_excerpt: '«Важно: не следует путать методы <Объект>.Заблокировать() и <БлокировкаДанных>.Заблокировать().»'
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_076
+  section: Блокировки
+  category: performance_runtime
+  title: Не рассчитывать на объектные блокировки в пределах транзакции
+  norm_text: Объектные блокировки снимаются при выгрузке объекта из памяти и не связаны
+    с транзакциями. Их нельзя использовать как транзакционные.
+  source_reference: Раздел 3.8 «Сведения об управляемых и объектных блокировках»,
+    стр. 55
+  source_excerpt: «Объектные блокировки снимаются при выгрузке объекта... Со стартом
+    и окончанием транзакций это не связано.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
+- norm_id: EXP_077
+  section: Запросы
+  category: queries_performance
+  title: Не читать через объектную модель документы с ХранилищемЗначения без необходимости
+  norm_text: Если у объекта есть реквизит типа ХранилищеЗначения большого размера,
+    чтение через объектную модель может подтягивать все реквизиты и сильно замедлять
+    запрос. Используйте запросы на языкe запросов для выборки нужных полей.
+  source_reference: Раздел 4.20, правило 2, стр. 215
+  source_excerpt: «...при получении ... запрашивались все реквизиты... один имел тип
+    ХранилищеЗначения...»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: major
+  detector_type: manual_review
+- norm_id: EXP_078
+  section: Запросы
+  category: queries_performance
+  title: При проблемах производительности переходить с объектной модели на язык запросов
+  norm_text: При возникновении проблем производительности запросы следует писать на
+    языке запросов, а не использовать объектную модель.
+  source_reference: Раздел 4.20, правило 2, стр. 216
+  source_excerpt: «...при возникновении проблем ... надо писать запросы на языке запросов,
+    а не пользоваться объектной моделью.»
+  tags:
+  - expert-book
+  scope: разработка
+  code_applicability: true
+  automation_hint: manual
+  check_type: manual
+  default_severity: minor
+  detector_type: manual_review
