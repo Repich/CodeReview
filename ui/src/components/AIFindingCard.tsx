@@ -4,6 +4,7 @@ interface Props {
   finding: AIFinding;
   onChangeStatus?: (status: AIFindingStatus, reviewerComment?: string) => void;
   isUpdating?: boolean;
+  sequence?: number;
 }
 
 const statusLabels: Record<AIFindingStatus, string> = {
@@ -20,7 +21,7 @@ const statusClassName: Record<AIFindingStatus, string> = {
   rejected: 'status-pill failed',
 };
 
-function AIFindingCard({ finding, onChangeStatus, isUpdating }: Props) {
+function AIFindingCard({ finding, onChangeStatus, isUpdating, sequence }: Props) {
   const handleStatusChange = (status: AIFindingStatus) => {
     if (isUpdating) return;
     if (status === 'confirmed' || status === 'rejected') {
@@ -42,7 +43,10 @@ function AIFindingCard({ finding, onChangeStatus, isUpdating }: Props) {
     <article className="card finding-card">
       <div className="card-header" style={{ marginBottom: '0.5rem' }}>
         <div>
-          <strong>{finding.norm_id || 'Новая норма'}</strong>
+          <strong>
+            {sequence ? `#${sequence} · ` : ''}
+            {finding.norm_id || 'Новая норма'}
+          </strong>
           <p className="muted" style={{ margin: 0 }}>
             {finding.section || 'Без раздела'}
             {finding.category ? ` · ${finding.category}` : null}

@@ -2,14 +2,18 @@ import { Finding } from '../services/api';
 
 interface Props {
   finding: Finding;
+  sequence?: number;
 }
 
-function FindingCard({ finding }: Props) {
+function FindingCard({ finding, sequence }: Props) {
   return (
     <article className="card finding-card">
       <div className="card-header" style={{ marginBottom: '0.5rem' }}>
         <div>
-          <strong>{finding.norm_id}</strong>
+          <strong>
+            {sequence ? `#${sequence} · ` : ''}
+            {finding.norm_id}
+          </strong>
           {finding.norm_title && (
             <p className="muted" style={{ margin: 0 }}>
               {finding.norm_title}

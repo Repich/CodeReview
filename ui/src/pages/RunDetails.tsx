@@ -162,9 +162,51 @@ function RunDetailsPage() {
     },
   });
 
+  const orderedFindings = useMemo(() => {
+    const items = [...(findingsQuery.data?.items ?? [])];
+    const textCompare = (a: string, b: string) => a.localeCompare(b, 'ru');
+    items.sort((a, b) => {
+      const aFile = a.file_path || '';
+      const bFile = b.file_path || '';
+      const aFileMissing = aFile ? 0 : 1;
+      const bFileMissing = bFile ? 0 : 1;
+      if (aFileMissing !== bFileMissing) {
+        return aFileMissing - bFileMissing;
+      }
+      if (aFile !== bFile) {
+        return textCompare(aFile, bFile);
+      }
+      const aLine = a.line_start ?? Number.MAX_SAFE_INTEGER;
+      const bLine = b.line_start ?? Number.MAX_SAFE_INTEGER;
+      if (aLine !== bLine) {
+        return aLine - bLine;
+      }
+      const aLineEnd = a.line_end ?? Number.MAX_SAFE_INTEGER;
+      const bLineEnd = b.line_end ?? Number.MAX_SAFE_INTEGER;
+      if (aLineEnd !== bLineEnd) {
+        return aLineEnd - bLineEnd;
+      }
+      if (a.norm_id !== b.norm_id) {
+        return textCompare(a.norm_id, b.norm_id);
+      }
+      if (a.detector_id !== b.detector_id) {
+        return textCompare(a.detector_id, b.detector_id);
+      }
+      return a.id.localeCompare(b.id);
+    });
+    return items;
+  }, [findingsQuery.data]);
+
+  const findingOrderMap = useMemo(() => {
+    const map = new Map<string, number>();
+    orderedFindings.forEach((finding, index) => {
+      map.set(finding.id, index + 1);
+    });
+    return map;
+  }, [orderedFindings]);
+
   const filteredFindings: Finding[] = useMemo(() => {
-    const items = findingsQuery.data?.items ?? [];
-    return items.filter((item) => {
+    return orderedFindings.filter((item) => {
       if (severity && item.severity !== severity) {
         return false;
       }
@@ -173,7 +215,7 @@ function RunDetailsPage() {
       }
       return true;
     });
-  }, [findingsQuery.data, severity, query]);
+  }, [orderedFindings, severity, query]);
 
   useEffect(() => {
     if (!isActiveRun) return undefined;
@@ -208,6 +250,51 @@ function RunDetailsPage() {
 
   const run = runQuery.data;
   const aiFindings: AIFinding[] = aiFindingsQuery.data?.items ?? [];
+  const orderedAiFindings = useMemo(() => {
+    const items = [...aiFindings];
+    const textCompare = (a: string, b: string) => a.localeCompare(b, 'ru');
+    const parseLineStart = (value?: string | null) => {
+      if (!value) return Number.MAX_SAFE_INTEGER;
+      const match = value.match(/(\d+)/);
+      return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+    };
+    const extractEvidenceKey = (finding: AIFinding) => {
+      const ev = (finding.evidence || []).find((item) => item.file || item.lines) || null;
+      const file = ev?.file ?? '';
+      const line = parseLineStart(ev?.lines ?? null);
+      return { file, line };
+    };
+    items.sort((a, b) => {
+      const aKey = extractEvidenceKey(a);
+      const bKey = extractEvidenceKey(b);
+      const aFileMissing = aKey.file ? 0 : 1;
+      const bFileMissing = bKey.file ? 0 : 1;
+      if (aFileMissing !== bFileMissing) {
+        return aFileMissing - bFileMissing;
+      }
+      if (aKey.file !== bKey.file) {
+        return textCompare(aKey.file, bKey.file);
+      }
+      if (aKey.line !== bKey.line) {
+        return aKey.line - bKey.line;
+      }
+      const aNorm = a.norm_id || '';
+      const bNorm = b.norm_id || '';
+      if (aNorm !== bNorm) {
+        return textCompare(aNorm, bNorm);
+      }
+      return a.id.localeCompare(b.id);
+    });
+    return items;
+  }, [aiFindings]);
+
+  const aiOrderMap = useMemo(() => {
+    const map = new Map<string, number>();
+    orderedAiFindings.forEach((finding, index) => {
+      map.set(finding.id, index + 1);
+    });
+    return map;
+  }, [orderedAiFindings]);
   const totalFindings = findingsQuery.data?.total ?? 0;
   const severityCounts = useMemo(() => {
     const counts: Record<string, number> = {
@@ -497,7 +584,11 @@ function RunDetailsPage() {
             <FindingFilters severity={severity} setSeverity={setSeverity} query={query} setQuery={setQuery} />
             <div className="card-list">
               {filteredFindings.map((finding) => (
-                <FindingCard key={finding.id} finding={finding} />
+                <FindingCard
+                  key={finding.id}
+                  finding={finding}
+                  sequence={findingOrderMap.get(finding.id)}
+                />
               ))}
               {!filteredFindings.length && (
                 <div className="empty-state">Нет нарушений под текущий фильтр.</div>
@@ -545,13 +636,14 @@ function RunDetailsPage() {
             <p className="alert alert-error">Не удалось загрузить предложения LLM.</p>
           )}
           <div className="card-list">
-            {aiFindings.map((finding) => (
+            {orderedAiFindings.map((finding) => (
               <AIFindingCard
                 key={finding.id}
                 finding={finding}
-              onChangeStatus={(status, reviewerComment) =>
-                handleAiStatusChange(finding.id, status, reviewerComment)
-              }
+                sequence={aiOrderMap.get(finding.id)}
+                onChangeStatus={(status, reviewerComment) =>
+                  handleAiStatusChange(finding.id, status, reviewerComment)
+                }
                 isUpdating={
                   updateAiFinding.isPending && updateAiFinding.variables?.findingId === finding.id
                 }
