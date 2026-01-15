@@ -83,6 +83,11 @@ function AdminPage() {
   const [llmResponse, setLlmResponse] = useState<LLMPlaygroundResponse | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
   const [isSubmittingLlm, setSubmittingLlm] = useState(false);
+  const [llmRequestCount, setLlmRequestCount] = useState(0);
+  const [llmSuccessCount, setLlmSuccessCount] = useState(0);
+  const [llmLastDurationMs, setLlmLastDurationMs] = useState<number | null>(null);
+  const [llmLastResponseChars, setLlmLastResponseChars] = useState<number | null>(null);
+  const [llmLastResponseAt, setLlmLastResponseAt] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'users' | 'llm' | 'runs' | 'access' | 'caddy'>(
     'users',
   );
@@ -254,6 +259,8 @@ function AdminPage() {
       setSubmittingLlm(false);
       return;
     }
+    const startedAt = Date.now();
+    setLlmRequestCount((prev) => prev + 1);
     try {
       const response = await runLLMPlayground({
         system_prompt: llmSystemPrompt,
@@ -263,9 +270,14 @@ function AdminPage() {
         model: llmModelOverride.trim() || undefined,
       });
       setLlmResponse(response);
+      setLlmSuccessCount((prev) => prev + 1);
+      setLlmLastDurationMs(Date.now() - startedAt);
+      setLlmLastResponseChars(response.response.length);
+      setLlmLastResponseAt(new Date().toLocaleString());
     } catch (err) {
       console.error(err);
       setLlmError('Не удалось вызвать LLM.');
+      setLlmLastDurationMs(Date.now() - startedAt);
     } finally {
       setSubmittingLlm(false);
     }
@@ -615,6 +627,19 @@ function AdminPage() {
             <h2 className="card-title">LLM эксперименты</h2>
             <p className="muted">Отладочный вызов LLM без влияния на основной пайплайн.</p>
           </div>
+        </div>
+        <div className="pill-row" style={{ marginBottom: '1rem' }}>
+          <span className="chip">Запросов: {llmRequestCount}</span>
+          <span className="chip">Успешных: {llmSuccessCount}</span>
+          <span className="chip">System: {llmSystemPrompt.length} симв.</span>
+          <span className="chip">User: {llmUserPrompt.length} симв.</span>
+          {llmLastDurationMs !== null && (
+            <span className="chip">Последний ответ: {llmLastDurationMs} мс</span>
+          )}
+          {llmLastResponseChars !== null && (
+            <span className="chip">Длина ответа: {llmLastResponseChars} симв.</span>
+          )}
+          {llmLastResponseAt && <span className="chip">Время: {llmLastResponseAt}</span>}
         </div>
         <form onSubmit={handleLlmSubmit} className="form-grid" style={{ gap: '1rem' }}>
           <div className="field" style={{ gridColumn: '1 / -1' }}>
