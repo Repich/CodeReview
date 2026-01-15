@@ -240,6 +240,15 @@ class QueryExplicitAliasesDetector(BaseDetector):
     )
 
     def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        def _strip_inline_comment(value: str) -> str:
+            if "//" in value:
+                return value.split("//", 1)[0].rstrip()
+            return value
+
+        def _line_ends_select_item(value: str) -> bool:
+            trimmed = _strip_inline_comment(value).rstrip()
+            return trimmed.endswith(",")
+
         findings: list[DetectorFinding] = []
         in_select = False
         alias_required = True
@@ -249,6 +258,28 @@ class QueryExplicitAliasesDetector(BaseDetector):
         case_has_dot = False
         case_start_line: int | None = None
         case_start_expr: str | None = None
+        pending_expr: list[str] = []
+        pending_line: int | None = None
+        pending_has_dot = False
+        pending_has_alias = False
+
+        def flush_pending() -> None:
+            nonlocal pending_expr, pending_line, pending_has_dot, pending_has_alias
+            if pending_expr and pending_has_dot and not pending_has_alias:
+                findings.append(
+                    self.create_finding(
+                        ctx,
+                        message="Поле запроса без псевдонима",
+                        recommendation="Добавьте оператор КАК/AS, чтобы явно задать псевдоним для поля.",
+                        line=pending_line or 1,
+                        extra={"expression": " ".join(pending_expr).strip()},
+                    )
+                )
+            pending_expr = []
+            pending_line = None
+            pending_has_dot = False
+            pending_has_alias = False
+
         for line_no, line in self.iter_lines(ctx.source.content):
             stripped = line.strip()
             if not stripped.startswith("|"):
@@ -260,6 +291,7 @@ class QueryExplicitAliasesDetector(BaseDetector):
             expr_upper = normalized_expr.upper()
 
             if expr_upper.startswith(";"):
+                flush_pending()
                 in_select = False
                 alias_required = True
                 skip_alias_for_next_select = False
@@ -271,6 +303,7 @@ class QueryExplicitAliasesDetector(BaseDetector):
                 continue
 
             if expr_upper.startswith(self.union_prefix):
+                flush_pending()
                 skip_alias_for_next_select = True
                 if in_select:
                     in_select = False
@@ -283,6 +316,7 @@ class QueryExplicitAliasesDetector(BaseDetector):
 
             expr_to_check: str | None = None
             if expr_upper.startswith("ВЫБРАТЬ"):
+                flush_pending()
                 in_select = True
                 alias_required = not skip_alias_for_next_select
                 skip_alias_for_next_select = False
@@ -291,6 +325,7 @@ class QueryExplicitAliasesDetector(BaseDetector):
                     expr_to_check = remainder
             elif expr_upper.startswith(self.header_prefixes):
                 if in_select:
+                    flush_pending()
                     in_select = False
                     alias_required = True
                 case_depth = 0
@@ -305,6 +340,7 @@ class QueryExplicitAliasesDetector(BaseDetector):
                 expr_to_check = normalized_expr
 
             if not alias_required:
+                flush_pending()
                 continue
 
             if expr_to_check:
@@ -338,16 +374,17 @@ class QueryExplicitAliasesDetector(BaseDetector):
                             case_start_expr = None
                     continue
 
-            if expr_to_check and "." in expr_to_check and not self.alias_pattern.search(expr_to_check):
-                findings.append(
-                    self.create_finding(
-                        ctx,
-                        message="Поле запроса без псевдонима",
-                        recommendation="Добавьте оператор КАК/AS, чтобы явно задать псевдоним для поля.",
-                        line=line_no,
-                        extra={"expression": expr},
-                    )
-                )
+            if expr_to_check:
+                if not pending_expr:
+                    pending_line = line_no
+                pending_expr.append(expr)
+                if "." in expr_to_check:
+                    pending_has_dot = True
+                if self.alias_pattern.search(expr_to_check):
+                    pending_has_alias = True
+                if _line_ends_select_item(expr):
+                    flush_pending()
+        flush_pending()
         return findings
 
 
