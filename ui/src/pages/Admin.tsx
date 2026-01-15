@@ -83,6 +83,9 @@ function AdminPage() {
   const [llmResponse, setLlmResponse] = useState<LLMPlaygroundResponse | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
   const [isSubmittingLlm, setSubmittingLlm] = useState(false);
+  const [activeTab, setActiveTab] = useState<'users' | 'llm' | 'runs' | 'access' | 'caddy'>(
+    'users',
+  );
 
   const usersQuery = useQuery({
     queryKey: ['admin-users', userEmailFilter, userStatusFilter, usersLimit],
@@ -410,7 +413,29 @@ function AdminPage() {
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
+      <div className="tabs">
+        {[
+          { id: 'users', label: 'Пользователи' },
+          { id: 'llm', label: 'LLM эксперименты' },
+          { id: 'runs', label: 'Запуски' },
+          { id: 'access', label: 'Логи доступа' },
+          { id: 'caddy', label: 'Логи Caddy' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
+            onClick={() =>
+              setActiveTab(tab.id as 'users' | 'llm' | 'runs' | 'access' | 'caddy')
+            }
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'users' && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div className="card-header">
           <div>
             <h2 className="card-title">Пользователи</h2>
@@ -523,9 +548,11 @@ function AdminPage() {
             </tbody>
           </table>
         </div>
-      </div>
+        </div>
+      )}
 
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
+      {activeTab === 'users' && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div className="card-header">
           <div>
             <h2 className="card-title">Компании</h2>
@@ -578,9 +605,11 @@ function AdminPage() {
             </tbody>
           </table>
         </div>
-      </div>
+        </div>
+      )}
 
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
+      {activeTab === 'llm' && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div className="card-header">
           <div>
             <h2 className="card-title">LLM эксперименты</h2>
@@ -649,9 +678,11 @@ function AdminPage() {
             </pre>
           </div>
         )}
-      </div>
+        </div>
+      )}
 
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
+      {activeTab === 'runs' && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div className="card-header">
           <div>
             <h2 className="card-title">Запуски</h2>
@@ -781,9 +812,11 @@ function AdminPage() {
             </tbody>
           </table>
         </div>
-      </div>
+        </div>
+      )}
 
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
+      {activeTab === 'users' && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div className="card-header">
           <div>
             <h2 className="card-title">Пополнение баланса</h2>
@@ -830,9 +863,11 @@ function AdminPage() {
             </div>
           )}
         </form>
-      </div>
+        </div>
+      )}
 
-      <div className="card">
+      {activeTab === 'access' && (
+        <div className="card">
         <div className="card-header">
           <div>
             <h2 className="card-title">Логи доступа</h2>
@@ -910,9 +945,11 @@ function AdminPage() {
             </tbody>
           </table>
         </div>
-      </div>
+        </div>
+      )}
 
-      <div className="card" style={{ marginTop: '1.5rem' }}>
+      {activeTab === 'caddy' && (
+        <div className="card" style={{ marginTop: '1.5rem' }}>
         <div className="card-header">
           <div>
             <h2 className="card-title">Логи Caddy</h2>
@@ -1000,7 +1037,8 @@ function AdminPage() {
             </tbody>
           </table>
         </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
