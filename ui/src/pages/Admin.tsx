@@ -13,11 +13,37 @@ import {
   fetchRuns,
   fetchUsers,
   forceFailReviewRun,
+  LLMPlaygroundResponse,
   requeueReviewRun,
+  runLLMPlayground,
   updateUserStatus,
   updateUserCompany,
   UserProfile,
 } from '../services/api';
+
+const DEFAULT_LLM_SYSTEM_PROMPT = `Ты — строгий эксперт по код-ревью 1С.
+Твоя цель — находить только критические (critical) и серьезные (major) проблемы.
+Фокус: корректность, потеря данных, безопасность, транзакции, конкурентность,
+неправильная логика запросов, ошибки типов/дат, серьезные performance-риски.
+Не упоминай стиль, нейминг, форматирование и мелкие улучшения.
+Если проблем нет — верни пустой массив [].
+Ответ строго JSON-массив без пояснений.
+Схема:
+[
+  {
+    "severity": "critical|major",
+    "title": "...",
+    "reason": "...",
+    "evidence": "строки/цитата",
+    "suggestion": "как исправить"
+  }
+]`;
+
+const DEFAULT_LLM_USER_PROMPT = `Проанализируй код 1С ниже и найди только критические/серьезные проблемы.
+Код:
+\`\`\`bsl
+// вставьте код сюда
+\`\`\``;
 
 function AdminPage() {
   const userQuery = useQuery({ queryKey: ['admin-me'], queryFn: fetchCurrentUser });
@@ -49,6 +75,14 @@ function AdminPage() {
   const [runsLimit, setRunsLimit] = useState('100');
   const [runsStatusFilter, setRunsStatusFilter] = useState('');
   const [runsUserFilter, setRunsUserFilter] = useState('');
+  const [llmSystemPrompt, setLlmSystemPrompt] = useState(DEFAULT_LLM_SYSTEM_PROMPT);
+  const [llmUserPrompt, setLlmUserPrompt] = useState(DEFAULT_LLM_USER_PROMPT);
+  const [llmTemperature, setLlmTemperature] = useState('0.2');
+  const [llmUseReasoning, setLlmUseReasoning] = useState(false);
+  const [llmModelOverride, setLlmModelOverride] = useState('');
+  const [llmResponse, setLlmResponse] = useState<LLMPlaygroundResponse | null>(null);
+  const [llmError, setLlmError] = useState<string | null>(null);
+  const [isSubmittingLlm, setSubmittingLlm] = useState(false);
 
   const usersQuery = useQuery({
     queryKey: ['admin-users', userEmailFilter, userStatusFilter, usersLimit],
@@ -203,6 +237,34 @@ function AdminPage() {
       setCompanyState('error');
     } finally {
       setSubmittingCompany(false);
+    }
+  };
+
+  const handleLlmSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmittingLlm(true);
+    setLlmError(null);
+    setLlmResponse(null);
+    const temperature = Number(llmTemperature);
+    if (Number.isNaN(temperature) || temperature < 0 || temperature > 2) {
+      setLlmError('Температура должна быть числом от 0 до 2.');
+      setSubmittingLlm(false);
+      return;
+    }
+    try {
+      const response = await runLLMPlayground({
+        system_prompt: llmSystemPrompt,
+        user_prompt: llmUserPrompt,
+        temperature,
+        use_reasoning: llmUseReasoning,
+        model: llmModelOverride.trim() || undefined,
+      });
+      setLlmResponse(response);
+    } catch (err) {
+      console.error(err);
+      setLlmError('Не удалось вызвать LLM.');
+    } finally {
+      setSubmittingLlm(false);
     }
   };
 
@@ -516,6 +578,77 @@ function AdminPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card-header">
+          <div>
+            <h2 className="card-title">LLM эксперименты</h2>
+            <p className="muted">Отладочный вызов LLM без влияния на основной пайплайн.</p>
+          </div>
+        </div>
+        <form onSubmit={handleLlmSubmit} className="form-grid" style={{ gap: '1rem' }}>
+          <div className="field" style={{ gridColumn: '1 / -1' }}>
+            <label htmlFor="llm-system-prompt">System prompt</label>
+            <textarea
+              id="llm-system-prompt"
+              rows={8}
+              value={llmSystemPrompt}
+              onChange={(event) => setLlmSystemPrompt(event.target.value)}
+            />
+          </div>
+          <div className="field" style={{ gridColumn: '1 / -1' }}>
+            <label htmlFor="llm-user-prompt">User prompt</label>
+            <textarea
+              id="llm-user-prompt"
+              rows={10}
+              value={llmUserPrompt}
+              onChange={(event) => setLlmUserPrompt(event.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="llm-temperature">Температура</label>
+            <input
+              id="llm-temperature"
+              type="number"
+              step="0.1"
+              min={0}
+              max={2}
+              value={llmTemperature}
+              onChange={(event) => setLlmTemperature(event.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="llm-model-override">Модель (опционально)</label>
+            <input
+              id="llm-model-override"
+              type="text"
+              value={llmModelOverride}
+              onChange={(event) => setLlmModelOverride(event.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="llm-use-reasoning">Рассуждающая модель</label>
+            <input
+              id="llm-use-reasoning"
+              type="checkbox"
+              checked={llmUseReasoning}
+              onChange={(event) => setLlmUseReasoning(event.target.checked)}
+            />
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={isSubmittingLlm}>
+            Отправить
+          </button>
+        </form>
+        {llmError && <p className="alert alert-error">{llmError}</p>}
+        {llmResponse && (
+          <div style={{ marginTop: '1rem' }}>
+            <p className="muted">Модель: {llmResponse.model}</p>
+            <pre className="diff-snippet" style={{ whiteSpace: 'pre-wrap' }}>
+              {llmResponse.response}
+            </pre>
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ marginBottom: '1.5rem' }}>

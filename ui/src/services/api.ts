@@ -146,6 +146,19 @@ export interface LLMLogEntry {
   };
 }
 
+export interface LLMPlaygroundRequest {
+  system_prompt: string;
+  user_prompt: string;
+  temperature: number;
+  use_reasoning: boolean;
+  model?: string;
+}
+
+export interface LLMPlaygroundResponse {
+  model: string;
+  response: string;
+}
+
 export interface AuditLog {
   id: string;
   review_run_id?: string | null;
@@ -456,6 +469,11 @@ export async function fetchCaddyLogs(params?: {
   path?: string;
 }) {
   const { data } = await client.get<CaddyAccessLogEntry[]>('/admin/caddy-logs', { params });
+  return data;
+}
+
+export async function runLLMPlayground(payload: LLMPlaygroundRequest) {
+  const { data } = await client.post<LLMPlaygroundResponse>('/admin/llm/playground', payload);
   return data;
 }
 

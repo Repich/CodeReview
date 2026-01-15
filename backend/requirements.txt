@@ -8,3 +8,4 @@ alembic
 python-dotenv
 PyJWT>=2.9
 geoip2
+httpx

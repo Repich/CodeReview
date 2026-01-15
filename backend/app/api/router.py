@@ -12,6 +12,7 @@ import backend.app.api.routes.companies as companies
 import backend.app.api.routes.feedback as feedback
 import backend.app.api.routes.findings as findings
 import backend.app.api.routes.health as health
+import backend.app.api.routes.llm_playground as llm_playground
 import backend.app.api.routes.norms as norms
 import backend.app.api.routes.review_runs as review_runs
 import backend.app.api.routes.users as users
@@ -32,3 +33,4 @@ api_router.include_router(wallets.router)
 api_router.include_router(access_logs.router)
 api_router.include_router(caddy_logs.router)
 api_router.include_router(admin_review_runs.router)
+api_router.include_router(llm_playground.router)

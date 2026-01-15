@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     blocked_cidrs: list[str] = []
     blocked_countries: list[str] = []
     geoip_db_path: str | None = None
+    llm_api_base: str = "https://api.deepseek.com"
+    llm_model: str = "deepseek-chat"
+    llm_reasoning_model: str = "deepseek-reasoner"
+    llm_timeout_seconds: int = 60
     model_config = SettingsConfigDict(env_file=".env", env_prefix="CODEREVIEW_", extra="ignore")
 
 
