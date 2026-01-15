@@ -103,10 +103,12 @@ def create_review_run(
         context = merged_ctx
 
     artifact_payload: tuple[str, str, int] | None = None
+    raw_artifact_payload: tuple[str, str, int] | None = None
     sources_payload: list[dict] = []
     if processed_sources:
         sources_payload = [source.model_dump() for source in processed_sources]
         artifact_payload = artifact_service.save_sources(str(run_id), sources_payload)
+        raw_artifact_payload = artifact_service.save_sources_raw(str(run_id), sources_payload)
         ctx = dict(context)
         ctx["source_artifact"] = artifact_payload[0]
         context = ctx
@@ -137,6 +139,18 @@ def create_review_run(
                 size_bytes=size,
             )
         )
+        if raw_artifact_payload:
+            raw_rel_path, raw_checksum, raw_size = raw_artifact_payload
+            db.add(
+                IOLog(
+                    review_run_id=review_run.id,
+                    direction=IODirection.IN,
+                    artifact_type="sources_raw.zip",
+                    storage_path=raw_rel_path,
+                    checksum=raw_checksum,
+                    size_bytes=raw_size,
+                )
+            )
         db.add(
             AuditLog(
                 review_run_id=review_run.id,

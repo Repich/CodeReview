@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
+import zipfile
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from backend.app.core.config import get_settings
@@ -25,6 +26,45 @@ def save_sources(run_id: str, sources: list[dict[str, Any]]) -> tuple[str, str, 
     checksum = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     rel_path = file_name
     return rel_path, checksum, len(payload.encode("utf-8"))
+
+
+def _sanitize_source_path(value: str) -> str:
+    normalized = value.replace("\\", "/")
+    parts = [part for part in PurePosixPath(normalized).parts if part not in ("", ".", "..")]
+    if not parts:
+        return "source"
+    return "/".join(parts)
+
+
+def _dedupe_source_path(value: str, index: int, used: set[str]) -> str:
+    if value not in used:
+        used.add(value)
+        return value
+    if "." in value:
+        base, ext = value.rsplit(".", 1)
+        candidate = f"{base}_{index}.{ext}"
+    else:
+        candidate = f"{value}_{index}"
+    used.add(candidate)
+    return candidate
+
+
+def save_sources_raw(run_id: str, sources: list[dict[str, Any]]) -> tuple[str, str, int]:
+    """Persist raw source contents as a zip archive. Returns (relative_path, checksum, size)."""
+    target_dir = _ensure_dir()
+    file_name = f"{run_id}_sources_raw.zip"
+    file_path = target_dir / file_name
+    used_names: set[str] = set()
+    with zipfile.ZipFile(file_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for index, source in enumerate(sources, start=1):
+            raw_name = source.get("path") or source.get("name") or f"source_{index}"
+            safe_name = _sanitize_source_path(str(raw_name))
+            safe_name = _dedupe_source_path(safe_name, index, used_names)
+            content = source.get("content") or ""
+            archive.writestr(safe_name, content)
+    data = file_path.read_bytes()
+    checksum = hashlib.sha256(data).hexdigest()
+    return file_name, checksum, len(data)
 
 
 def load_sources(relative_path: str) -> list[dict[str, Any]]:
