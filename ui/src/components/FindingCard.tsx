@@ -35,21 +35,17 @@ function FindingCard({ finding, sequence }: Props) {
         <pre>{finding.code_snippet}</pre>
       )}
       {(finding.norm_text || finding.norm_section) && (
-        <div className="muted" style={{ marginBottom: '0.75rem' }}>
-          <strong style={{ display: 'block', marginBottom: '0.25rem' }}>
-            Описание нормы
-          </strong>
+        <details>
+          <summary>Описание нормы</summary>
           {finding.norm_section && (
-            <p style={{ margin: '0.25rem 0' }}>
+            <p className="muted" style={{ margin: '0.25rem 0' }}>
               Раздел: {finding.norm_section}
             </p>
           )}
           {finding.norm_text && (
-            <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-              {finding.norm_text}
-            </p>
+            <p style={{ whiteSpace: 'pre-wrap' }}>{finding.norm_text}</p>
           )}
-        </div>
+        </details>
       )}
       {(finding.norm_source_reference || finding.norm_source_excerpt) && (
         <details>
