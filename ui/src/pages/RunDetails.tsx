@@ -65,6 +65,7 @@ function RunDetailsPage() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [nowTs, setNowTs] = useState(() => Date.now());
   const [activeTab, setActiveTab] = useState('findings');
+  const [showDiff, setShowDiff] = useState(false);
 
   const runQuery = useQuery({
     queryKey: ['run', id],
@@ -131,7 +132,7 @@ function RunDetailsPage() {
   const runSourcesQuery = useQuery({
     queryKey: ['run-sources', id],
     queryFn: () => fetchRunSources(id!),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && showDiff,
   });
 
   const updateAiFinding = useMutation<
@@ -346,6 +347,9 @@ function RunDetailsPage() {
     () => (runSourcesQuery.data ?? []).filter((src) => (src.change_ranges?.length ?? 0) > 0),
     [runSourcesQuery.data],
   );
+  const changeRangeMap = run?.context?.change_ranges as Record<string, unknown> | undefined;
+  const changeRangeCount = changeRangeMap ? Object.keys(changeRangeMap).length : 0;
+  const hasChangeRanges = changeRangeCount > 0;
   const tabs = useMemo(() => {
     const items = [
       { id: 'findings', label: 'Найденные нарушения', count: totalFindings },
@@ -613,19 +617,24 @@ function RunDetailsPage() {
             </div>
           </section>
 
-          {diffSources.length > 0 && (
+          {hasChangeRanges && (
             <section className="card" style={{ marginBottom: '1.5rem' }}>
               <div className="card-header">
                 <div>
                   <h2 className="card-title">Изменения в коде</h2>
-                  <p className="muted">{diffSources.length} файлов</p>
+                  <p className="muted">{changeRangeCount} файлов</p>
                 </div>
-                {runSourcesQuery.isLoading && <span className="muted">Загружаем…</span>}
+                {showDiff && runSourcesQuery.isLoading && <span className="muted">Загружаем…</span>}
               </div>
-              {runSourcesQuery.error && (
+              {!showDiff && (
+                <button className="btn btn-secondary" type="button" onClick={() => setShowDiff(true)}>
+                  Показать изменения
+                </button>
+              )}
+              {showDiff && runSourcesQuery.error && (
                 <p className="alert alert-error">Не удалось загрузить информацию об изменениях.</p>
               )}
-              {!runSourcesQuery.error && <RunDiffView sources={diffSources} />}
+              {showDiff && !runSourcesQuery.error && <RunDiffView sources={diffSources} />}
             </section>
           )}
 

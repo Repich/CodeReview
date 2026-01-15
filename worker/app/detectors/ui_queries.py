@@ -6,6 +6,7 @@ from typing import Iterable
 from worker.app.detectors.base import BaseDetector, DetectorContext
 from worker.app.detectors.registry import register
 from worker.app.models import DetectorFinding
+from worker.app.services.query_units import extract_query_units
 
 
 @register
@@ -422,7 +423,12 @@ class LineLengthDetector(BaseDetector):
 
     def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
         findings: list[DetectorFinding] = []
+        query_lines: set[int] = set()
+        for unit in extract_query_units(ctx.source):
+            query_lines.update(line_no for line_no, _ in unit.line_map)
         for line_no, line in self.iter_lines(ctx.source.content):
+            if line_no in query_lines:
+                continue
             if len(line.rstrip("\n")) > self.max_length:
                 findings.append(
                     self.create_finding(
