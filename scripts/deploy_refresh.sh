@@ -19,8 +19,16 @@ mkdir -p backend/app/static
 cp -r ui/dist/* backend/app/static/
 
 if [[ "${RUN_MIGRATIONS:-}" == "1" ]]; then
+  echo "==> build backend + worker images"
+  docker-compose build backend worker
+
   echo "==> run migrations"
-  docker-compose exec backend bash -c "cd /app/backend && PYTHONPATH=/app alembic upgrade head"
+  docker-compose run --rm backend bash -c "cd /app/backend && PYTHONPATH=/app alembic upgrade head"
+
+  echo "==> start backend + worker containers"
+  docker-compose up -d backend worker
+  echo "==> done"
+  exit 0
 fi
 
 echo "==> rebuild backend + worker containers"

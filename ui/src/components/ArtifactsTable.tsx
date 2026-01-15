@@ -1,3 +1,4 @@
+import { getStoredAuthToken } from '../services/api';
 import type { IOLogEntry } from '../services/api';
 
 interface Props {
@@ -19,7 +20,12 @@ function ArtifactsTable({ artifacts, artifactBaseUrl }: Props) {
 
   const buildUrl = (artifact: IOLogEntry) => {
     const base = artifactBaseUrl || (import.meta.env.VITE_API_BASE || 'http://localhost:8000/api');
-    return `${base}/audit/io/${artifact.id}/download`;
+    const url = new URL(`${base}/audit/io/${artifact.id}/download`);
+    const token = getStoredAuthToken();
+    if (token) {
+      url.searchParams.set('token', token);
+    }
+    return url.toString();
   };
 
   return (
