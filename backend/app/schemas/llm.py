@@ -27,3 +27,11 @@ class LLMPlaygroundRequest(BaseModel):
 class LLMPlaygroundResponse(BaseModel):
     model: str
     response: str
+    api_base: str
+    endpoint: str
+    timeout_seconds: int
+    temperature: float
+    use_reasoning: bool
+    model_override: str | None = None
+    request_headers: dict[str, str]
+    request_payload: dict[str, Any]

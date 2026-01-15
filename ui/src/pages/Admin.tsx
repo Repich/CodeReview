@@ -1,4 +1,5 @@
 import { FormEvent, useMemo, useState } from 'react';
+import axios from 'axios';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   AccessLogEntry,
@@ -88,6 +89,7 @@ function AdminPage() {
   const [llmLastDurationMs, setLlmLastDurationMs] = useState<number | null>(null);
   const [llmLastResponseChars, setLlmLastResponseChars] = useState<number | null>(null);
   const [llmLastResponseAt, setLlmLastResponseAt] = useState<string | null>(null);
+  const [llmCopyMessage, setLlmCopyMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'users' | 'llm' | 'runs' | 'access' | 'caddy'>(
     'users',
   );
@@ -253,6 +255,7 @@ function AdminPage() {
     setSubmittingLlm(true);
     setLlmError(null);
     setLlmResponse(null);
+    setLlmCopyMessage(null);
     const temperature = Number(llmTemperature);
     if (Number.isNaN(temperature) || temperature < 0 || temperature > 2) {
       setLlmError('Температура должна быть числом от 0 до 2.');
@@ -276,10 +279,26 @@ function AdminPage() {
       setLlmLastResponseAt(new Date().toLocaleString());
     } catch (err) {
       console.error(err);
-      setLlmError('Не удалось вызвать LLM.');
+      if (axios.isAxiosError(err)) {
+        const detail = (err.response?.data as { detail?: string } | undefined)?.detail;
+        setLlmError(detail || 'Не удалось вызвать LLM.');
+      } else {
+        setLlmError('Не удалось вызвать LLM.');
+      }
       setLlmLastDurationMs(Date.now() - startedAt);
     } finally {
       setSubmittingLlm(false);
+    }
+  };
+
+  const handleCopyLlmRequest = async () => {
+    if (!llmRequestDump) return;
+    try {
+      await navigator.clipboard.writeText(llmRequestDump);
+      setLlmCopyMessage('Скопировано.');
+    } catch (err) {
+      console.error(err);
+      setLlmCopyMessage('Не удалось скопировать.');
     }
   };
 
@@ -303,6 +322,25 @@ function AdminPage() {
       return matchesStatus && matchesUser;
     });
   }, [runsQuery.data, runsStatusFilter, runsUserFilter]);
+
+  const llmRequestDump = useMemo(() => {
+    if (!llmResponse) return null;
+    return JSON.stringify(
+      {
+        endpoint: llmResponse.endpoint,
+        api_base: llmResponse.api_base,
+        timeout_seconds: llmResponse.timeout_seconds,
+        model: llmResponse.model,
+        temperature: llmResponse.temperature,
+        use_reasoning: llmResponse.use_reasoning,
+        model_override: llmResponse.model_override ?? null,
+        headers: llmResponse.request_headers,
+        payload: llmResponse.request_payload,
+      },
+      null,
+      2,
+    );
+  }, [llmResponse]);
 
   if (userQuery.isLoading) {
     return <p>Загружаем админ-панель...</p>;
@@ -700,6 +738,30 @@ function AdminPage() {
             <p className="muted">Модель: {llmResponse.model}</p>
             <pre className="diff-snippet" style={{ whiteSpace: 'pre-wrap' }}>
               {llmResponse.response}
+            </pre>
+          </div>
+        )}
+        {llmRequestDump && (
+          <div style={{ marginTop: '1rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                flexWrap: 'wrap',
+                marginBottom: '0.5rem',
+              }}
+            >
+              <p className="muted" style={{ margin: 0 }}>
+                Параметры вызова
+              </p>
+              <button type="button" className="btn btn-secondary" onClick={handleCopyLlmRequest}>
+                Скопировать
+              </button>
+              {llmCopyMessage && <span className="muted">{llmCopyMessage}</span>}
+            </div>
+            <pre className="diff-snippet" style={{ whiteSpace: 'pre-wrap' }}>
+              {llmRequestDump}
             </pre>
           </div>
         )}

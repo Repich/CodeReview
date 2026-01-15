@@ -157,6 +157,14 @@ export interface LLMPlaygroundRequest {
 export interface LLMPlaygroundResponse {
   model: string;
   response: string;
+  api_base: string;
+  endpoint: string;
+  timeout_seconds: number;
+  temperature: number;
+  use_reasoning: boolean;
+  model_override?: string | null;
+  request_headers: Record<string, string>;
+  request_payload: Record<string, unknown>;
 }
 
 export interface AuditLog {
