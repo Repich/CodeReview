@@ -118,6 +118,9 @@ function RunDetailsPage() {
     queryFn: fetchCurrentUser,
   });
   const isAdmin = userQuery.data?.role === 'admin';
+  const currentUserId = userQuery.data?.id;
+  const canEditRun =
+    Boolean(isAdmin) || (currentUserId && runQuery.data?.user_id === currentUserId);
 
   const llmLogsQuery = useQuery({
     queryKey: ['llm-logs', id],
@@ -407,12 +410,18 @@ function RunDetailsPage() {
     status: AIFindingStatus,
     reviewerComment?: string,
   ) => {
+    if (!canEditRun) {
+      return;
+    }
     updateAiFinding.mutate({ findingId, status, reviewerComment });
   };
 
   const handleDeleteRun = () => {
     if (!id || !run) return;
     if (run.status === 'running') {
+      return;
+    }
+    if (!canEditRun) {
       return;
     }
     if (
@@ -427,6 +436,9 @@ function RunDetailsPage() {
   const handleRerun = () => {
     if (!id || !run) return;
     if (run.status === 'running' || run.status === 'queued') {
+      return;
+    }
+    if (!canEditRun) {
       return;
     }
     if (
@@ -452,7 +464,12 @@ function RunDetailsPage() {
           {progressText && <span className="muted">{progressText}</span>}
           <button
             className="btn btn-secondary"
-            disabled={run?.status === 'running' || run?.status === 'queued' || rerunMutation.isPending}
+            disabled={
+              run?.status === 'running' ||
+              run?.status === 'queued' ||
+              rerunMutation.isPending ||
+              !canEditRun
+            }
             onClick={handleRerun}
           >
             {rerunMutation.isPending ? 'Перезапускаем…' : 'Перезапустить'}
@@ -464,7 +481,7 @@ function RunDetailsPage() {
           )}
           <button
             className="btn btn-secondary"
-            disabled={run?.status === 'running' || deleteRunMutation.isPending}
+            disabled={run?.status === 'running' || deleteRunMutation.isPending || !canEditRun}
             onClick={handleDeleteRun}
           >
             {deleteRunMutation.isPending ? 'Удаляем…' : 'Удалить запуск'}
@@ -641,12 +658,16 @@ function RunDetailsPage() {
                 key={finding.id}
                 finding={finding}
                 sequence={aiOrderMap.get(finding.id)}
-                onChangeStatus={(status, reviewerComment) =>
-                  handleAiStatusChange(finding.id, status, reviewerComment)
+                onChangeStatus={
+                  canEditRun
+                    ? (status, reviewerComment) =>
+                        handleAiStatusChange(finding.id, status, reviewerComment)
+                    : undefined
                 }
                 isUpdating={
                   updateAiFinding.isPending && updateAiFinding.variables?.findingId === finding.id
                 }
+                readOnly={!canEditRun}
               />
             ))}
             {!aiFindings.length && !aiFindingsQuery.isLoading && (

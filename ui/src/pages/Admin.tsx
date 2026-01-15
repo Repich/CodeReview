@@ -5,14 +5,17 @@ import {
   CaddyAccessLogEntry,
   ReviewRun,
   adjustWalletBalance,
+  createCompany,
   fetchAccessLogs,
   fetchCaddyLogs,
+  fetchCompanies,
   fetchCurrentUser,
   fetchRuns,
   fetchUsers,
   forceFailReviewRun,
   requeueReviewRun,
   updateUserStatus,
+  updateUserCompany,
   UserProfile,
 } from '../services/api';
 
@@ -22,6 +25,10 @@ function AdminPage() {
   const [userEmailFilter, setUserEmailFilter] = useState('');
   const [userStatusFilter, setUserStatusFilter] = useState('');
   const [usersLimit, setUsersLimit] = useState('100');
+  const [companyName, setCompanyName] = useState('');
+  const [companyMessage, setCompanyMessage] = useState<string | null>(null);
+  const [companyState, setCompanyState] = useState<'idle' | 'success' | 'error'>('idle');
+  const [isSubmittingCompany, setSubmittingCompany] = useState(false);
 
   const [logIpFilter, setLogIpFilter] = useState('');
   const [logPathFilter, setLogPathFilter] = useState('');
@@ -51,6 +58,12 @@ function AdminPage() {
         status: userStatusFilter || undefined,
         limit: Number(usersLimit) || 100,
       }),
+    enabled: isAdmin,
+  });
+
+  const companiesQuery = useQuery({
+    queryKey: ['admin-companies'],
+    queryFn: () => fetchCompanies({ limit: 500 }),
     enabled: isAdmin,
   });
 
@@ -106,6 +119,21 @@ function AdminPage() {
     },
   });
 
+  const companyCreateMutation = useMutation({
+    mutationFn: (name: string) => createCompany({ name }),
+    onSuccess: () => {
+      companiesQuery.refetch();
+    },
+  });
+
+  const companyAssignMutation = useMutation({
+    mutationFn: ({ userId, companyId }: { userId: string; companyId: string | null }) =>
+      updateUserCompany(userId, companyId),
+    onSuccess: () => {
+      usersQuery.refetch();
+    },
+  });
+
   const handleUserFilterSubmit = (event: FormEvent) => {
     event.preventDefault();
     usersQuery.refetch();
@@ -152,12 +180,40 @@ function AdminPage() {
     }
   };
 
+  const handleCompanySubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmittingCompany(true);
+    setCompanyMessage(null);
+    setCompanyState('idle');
+    const trimmed = companyName.trim();
+    if (!trimmed) {
+      setCompanyMessage('Укажите название компании.');
+      setCompanyState('error');
+      setSubmittingCompany(false);
+      return;
+    }
+    try {
+      await companyCreateMutation.mutateAsync(trimmed);
+      setCompanyMessage('Компания создана.');
+      setCompanyState('success');
+      setCompanyName('');
+    } catch (err) {
+      console.error(err);
+      setCompanyMessage('Не удалось создать компанию.');
+      setCompanyState('error');
+    } finally {
+      setSubmittingCompany(false);
+    }
+  };
+
   const usersSummary = useMemo(() => {
     const users = usersQuery.data || [];
     const active = users.filter((user) => user.status === 'active').length;
     const disabled = users.filter((user) => user.status === 'disabled').length;
     return { active, disabled, total: users.length };
   }, [usersQuery.data]);
+
+  const companyOptions = useMemo(() => companiesQuery.data || [], [companiesQuery.data]);
 
   const filteredRuns = useMemo(() => {
     const runs = runsQuery.data || [];
@@ -345,6 +401,7 @@ function AdminPage() {
                 <th>Email</th>
                 <th>Имя</th>
                 <th>Роль</th>
+                <th>Компания</th>
                 <th>Баланс</th>
                 <th>Статус</th>
                 <th>Создан</th>
@@ -357,6 +414,30 @@ function AdminPage() {
                   <td>{user.email}</td>
                   <td>{user.name || '—'}</td>
                   <td>{user.role}</td>
+                  <td>
+                    <select
+                      value={user.company_id ?? ''}
+                      disabled={
+                        companyAssignMutation.isPending ||
+                        companiesQuery.isLoading ||
+                        Boolean(companiesQuery.error)
+                      }
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        companyAssignMutation.mutate({
+                          userId: user.id,
+                          companyId: value ? value : null,
+                        });
+                      }}
+                    >
+                      <option value="">—</option>
+                      {companyOptions.map((company) => (
+                        <option key={company.id} value={company.id}>
+                          {company.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
                   <td>
                     {user.wallet_balance ?? '—'}
                     {user.wallet_currency ? ` ${user.wallet_currency}` : ''}
@@ -372,8 +453,63 @@ function AdminPage() {
               ))}
               {!usersQuery.isLoading && !usersQuery.data?.length && (
                 <tr>
-                  <td colSpan={7} className="muted">
+                  <td colSpan={8} className="muted">
                     Пользователи не найдены.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card-header">
+          <div>
+            <h2 className="card-title">Компании</h2>
+            <p className="muted">Создание и список компаний для группировки запусков.</p>
+          </div>
+        </div>
+        <form onSubmit={handleCompanySubmit} className="form-grid" style={{ gap: '1rem' }}>
+          <div className="field">
+            <label htmlFor="company-name">Название</label>
+            <input
+              id="company-name"
+              type="text"
+              value={companyName}
+              onChange={(event) => setCompanyName(event.target.value)}
+            />
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={isSubmittingCompany}>
+            Создать
+          </button>
+        </form>
+        {companyMessage && (
+          <p className={`alert ${companyState === 'error' ? 'alert-error' : 'alert-success'}`}>
+            {companyMessage}
+          </p>
+        )}
+        {companiesQuery.isLoading && <p className="muted">Загружаем компании...</p>}
+        {companiesQuery.error && <p className="alert alert-error">Не удалось получить список компаний.</p>}
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Название</th>
+                <th>Создана</th>
+              </tr>
+            </thead>
+            <tbody>
+              {companyOptions.map((company) => (
+                <tr key={company.id}>
+                  <td>{company.name}</td>
+                  <td>{company.created_at ? new Date(company.created_at).toLocaleString() : '—'}</td>
+                </tr>
+              ))}
+              {!companiesQuery.isLoading && !companyOptions.length && (
+                <tr>
+                  <td colSpan={2} className="muted">
+                    Компании не найдены.
                   </td>
                 </tr>
               )}

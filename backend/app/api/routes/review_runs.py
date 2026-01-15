@@ -55,7 +55,10 @@ def list_review_runs(
         .order_by(ReviewRun.queued_at.desc())
     )
     if current_user.role != UserRole.ADMIN:
-        query = query.filter(ReviewRun.user_id == current_user.id)
+        if current_user.company_id:
+            query = query.filter(UserAccount.company_id == current_user.company_id)
+        else:
+            query = query.filter(ReviewRun.user_id == current_user.id)
     elif user_id:
         query = query.filter(ReviewRun.user_id == user_id)
     rows = query.offset(skip).limit(limit).all()
@@ -350,7 +353,7 @@ def update_review_run(
     db: Session = Depends(get_db),
     current_user: UserAccount = Depends(get_current_user),
 ) -> ReviewRun:
-    review_run = ensure_run_access(db, review_run_id, current_user)
+    review_run = ensure_run_access(db, review_run_id, current_user, require_owner=True)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(review_run, field, value)
     db.add(review_run)
@@ -365,7 +368,7 @@ def rerun_review_run(
     db: Session = Depends(get_db),
     current_user: UserAccount = Depends(get_current_user),
 ) -> ReviewRun:
-    review_run = ensure_run_access(db, review_run_id, current_user)
+    review_run = ensure_run_access(db, review_run_id, current_user, require_owner=True)
     if review_run.status in (ReviewStatus.RUNNING, ReviewStatus.QUEUED):
         raise HTTPException(status_code=409, detail="Запуск уже выполняется или ожидает")
 
@@ -421,7 +424,7 @@ def delete_review_run(
     db: Session = Depends(get_db),
     current_user: UserAccount = Depends(get_current_user),
 ):
-    review_run = ensure_run_access(db, review_run_id, current_user)
+    review_run = ensure_run_access(db, review_run_id, current_user, require_owner=True)
     if review_run.status == ReviewStatus.RUNNING:
         raise HTTPException(status_code=409, detail="Нельзя удалить запуск, который выполняется")
 

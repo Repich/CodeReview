@@ -20,6 +20,9 @@ class UserAccount(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     name: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(50), default="active")
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("companies.id", ondelete="SET NULL")
+    )
     password_hash: Mapped[str | None] = mapped_column(String(255))
     auth_provider: Mapped[str | None] = mapped_column(String(100))
     auth_sub: Mapped[str | None] = mapped_column(String(255))
@@ -34,7 +37,12 @@ class UserAccount(Base):
         DateTime(timezone=True), server_default=func.now(), server_onupdate=func.now()
     )
 
+    company = relationship("Company", back_populates="users")
     wallet = relationship("Wallet", back_populates="user", uselist=False)
+
+    @property
+    def company_name(self) -> str | None:
+        return self.company.name if self.company else None
 
 
 class Wallet(Base):

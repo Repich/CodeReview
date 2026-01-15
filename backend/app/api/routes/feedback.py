@@ -29,7 +29,12 @@ def list_feedback(
     if review_run_id:
         query = query.filter(Feedback.review_run_id == review_run_id)
     if current_user.role != UserRole.ADMIN:
-        query = query.filter(ReviewRun.user_id == current_user.id)
+        if current_user.company_id:
+            query = query.join(UserAccount, UserAccount.id == ReviewRun.user_id).filter(
+                UserAccount.company_id == current_user.company_id
+            )
+        else:
+            query = query.filter(ReviewRun.user_id == current_user.id)
     items = query.order_by(Feedback.created_at.desc()).all()
     return FeedbackList(total=len(items), items=items)
 
@@ -40,7 +45,7 @@ def create_feedback(
     db: Session = Depends(get_db),
     current_user: UserAccount = Depends(get_current_user),
 ) -> Feedback:
-    ensure_run_access(db, payload.review_run_id, current_user)
+    ensure_run_access(db, payload.review_run_id, current_user, require_owner=True)
     feedback = Feedback(**payload.model_dump())
     db.add(feedback)
     db.commit()

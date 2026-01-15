@@ -5,6 +5,7 @@ interface Props {
   onChangeStatus?: (status: AIFindingStatus, reviewerComment?: string) => void;
   isUpdating?: boolean;
   sequence?: number;
+  readOnly?: boolean;
 }
 
 const statusLabels: Record<AIFindingStatus, string> = {
@@ -21,9 +22,9 @@ const statusClassName: Record<AIFindingStatus, string> = {
   rejected: 'status-pill failed',
 };
 
-function AIFindingCard({ finding, onChangeStatus, isUpdating, sequence }: Props) {
+function AIFindingCard({ finding, onChangeStatus, isUpdating, sequence, readOnly }: Props) {
   const handleStatusChange = (status: AIFindingStatus) => {
-    if (isUpdating) return;
+    if (isUpdating || readOnly) return;
     if (status === 'confirmed' || status === 'rejected') {
       const promptLabel =
         status === 'confirmed'
@@ -101,7 +102,7 @@ function AIFindingCard({ finding, onChangeStatus, isUpdating, sequence }: Props)
           type="button"
           className="btn btn-primary"
           onClick={() => handleStatusChange('confirmed')}
-          disabled={isUpdating || finding.status === 'confirmed'}
+          disabled={isUpdating || readOnly || finding.status === 'confirmed'}
         >
           Подтвердить
         </button>
@@ -109,7 +110,7 @@ function AIFindingCard({ finding, onChangeStatus, isUpdating, sequence }: Props)
           type="button"
           className="btn btn-secondary"
           onClick={() => handleStatusChange('pending')}
-          disabled={isUpdating || finding.status === 'pending'}
+          disabled={isUpdating || readOnly || finding.status === 'pending'}
         >
           В ожидание
         </button>
@@ -117,7 +118,7 @@ function AIFindingCard({ finding, onChangeStatus, isUpdating, sequence }: Props)
           type="button"
           className="btn btn-ghost"
           onClick={() => handleStatusChange('rejected')}
-          disabled={isUpdating || finding.status === 'rejected'}
+          disabled={isUpdating || readOnly || finding.status === 'rejected'}
         >
           Отклонить
         </button>

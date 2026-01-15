@@ -15,6 +15,7 @@ class UserCreate(ORMModel):
     password: str = Field(min_length=6)
     name: str | None = None
     role: UserRole | None = None
+    company_id: uuid.UUID | None = None
 
     @field_validator("email")
     @classmethod
@@ -31,6 +32,8 @@ class UserRead(ORMModel):
     created_at: datetime
     wallet_balance: int | None = None
     wallet_currency: str | None = None
+    company_id: uuid.UUID | None = None
+    company_name: str | None = None
 
 
 class UserStatusUpdate(ORMModel):
@@ -73,3 +76,7 @@ class WalletAdjustPayload(ORMModel):
         if value is None:
             return value
         return _sanitize_email(value)
+
+
+class UserCompanyUpdate(ORMModel):
+    company_id: uuid.UUID | None = None

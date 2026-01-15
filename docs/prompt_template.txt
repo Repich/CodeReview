@@ -1,15 +1,135 @@
-Ты — Codex (расширение ChatGPT) для проекта "CodeReview 1C". Текущая архитектура и план — в docs/architecture_overview.md и docs/next_steps.md. Основные обязанности:
-- поддерживать backend (FastAPI + Postgres + Alembic), worker (детекторы), UI (React) и инфраструктуру (Docker).
-- реализовывать личный кабинет/биллинг (таблицы user_accounts, wallets, wallet_transactions). Запуски review списывают по 10 баллов.
-- держать документацию в актуальном состоянии (docs/...).
+Ты — Codex (расширение ChatGPT) для проекта «CodeReview 1C». Цель — быстро восстановить контекст и продолжить работу без паузы.
 
-Правила работы:
-1. Всегда сначала перечитывай docs/architecture_overview.md и docs/next_steps.md, чтобы освежить контекст.
-2. Любые изменения описывай и фиксируй в README/docs при необходимости.
-3. Для миграций используй Alembic (`PYTHONPATH=.. DATABASE_URL=... alembic upgrade head`).
-4. Для тестов worker — `python -m pytest worker/tests`. UI билд — `cd ui && npm run build`.
-5. При разработке помни про JWT-авторизацию (Bearer токен, дефолтный админ admin@localhost / admin123), кошельки и списание баллов.
-6. Не забывай об инструкциях в agents.md (flow запуска сервисов).
-7. Следи за тем, чтобы JSONL выгрузки содержали norm_title/section/text и snippets.
+## Что сделать сразу после запуска
 
-Текущий TODO см. в docs/next_steps.md. Начинай работу с проверки миграций и `/api` (curl) чтобы убедиться, что база актуальна.
+1) Убедись, что ты в рабочей директории:
+   - `/Users/olegrepnikov/PycharmProjects/CodeReview`
+2) Прочитай ключевые документы (в этом порядке):
+   - `README.md`
+   - `docs/architecture_overview.md`
+   - `docs/analysis_pipeline.md`
+   - `docs/deployment_security.md`
+   - `docs/next_steps.md`
+   - `agents.md`
+3) Проверь состояние git:
+   - `git status -sb`
+4) Оцени состояние контейнеров (если работаешь на сервере):
+   - `docker-compose ps`
+
+## Архитектура и ключевые компоненты
+
+- Backend: FastAPI + Postgres, выдаёт API и статический UI (`backend/app/static`).
+- Worker: очереди задач + детекторы + LLM.
+- UI: React/Vite (страница запусков, карточка запуска, админка).
+- Инфраструктура: docker-compose, Caddy как reverse proxy.
+
+### База и миграции
+- Миграции только через Alembic:
+  ```bash
+  docker-compose exec backend bash -c "cd /app/backend && PYTHONPATH=/app alembic upgrade head"
+  ```
+
+### Локальный запуск
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r backend/requirements.txt -r worker/requirements.txt pytest
+
+# миграции
+cd backend
+DATABASE_URL=postgresql+psycopg://codereview:codereview@localhost:5432/codereview \
+PYTHONPATH=.. alembic upgrade head
+cd ..
+
+# backend
+CODEREVIEW_DATABASE_URL=postgresql+psycopg://codereview:codereview@localhost:5432/codereview \
+uvicorn backend.app.main:app --reload --env-file .env
+
+# worker
+export CODEREVIEW_WORKER_BACKEND_API_URL=http://127.0.0.1:8000/api
+python -m worker.app.main --once
+
+# UI dev
+cd ui && npm install && npm run dev
+```
+
+## Продакшн (актуальная схема)
+
+- Caddy на Raspberry Pi проксирует `codereview.1cretail.ru` → `192.168.1.76:8200`.
+- Postgres общий (вне docker-compose).
+- Backend/Worker/Redis — в контейнерах.
+
+Пример `.env`:
+```dotenv
+CODEREVIEW_DATABASE_URL=postgresql+psycopg://codereview_user:***@host.docker.internal:5432/codereview
+CODEREVIEW_WORKER_BACKEND_API_URL=http://backend:8000/api
+CODEREVIEW_WORKER_REDIS_URL=redis://redis:6379/0
+DEEPSEEK_API_KEY=...
+CODEREVIEW_AUTH_JWT_SECRET=...
+CODEREVIEW_TURNSTILE_SECRET_KEY=...
+CODEREVIEW_CADDY_LOG_INGEST_TOKEN=...
+CODEREVIEW_TRUSTED_PROXY_DEPTH=1
+```
+
+Запуск:
+```bash
+docker-compose up -d --build backend worker redis
+```
+
+## Администрирование
+
+- Админ может входить только из локальных адресов (CIDR)
+  - `CODEREVIEW_ADMIN_LOCAL_ONLY`
+  - `CODEREVIEW_ADMIN_ALLOWED_CIDRS`
+- Создание/обновление администратора:
+  ```bash
+  docker-compose exec backend python /app/scripts/create_admin.py \
+    --email admin@company.ru --password 'Secret123' --name 'Admin'
+  ```
+
+## Регистрация и Turnstile
+
+- При наличии `CODEREVIEW_TURNSTILE_SECRET_KEY` включается капча.
+- UI использует `VITE_TURNSTILE_SITE_KEY`.
+- Лимиты регистрации:
+  - `CODEREVIEW_REGISTRATION_RATE_LIMIT`
+  - `CODEREVIEW_REGISTRATION_RATE_WINDOW_MINUTES`
+- Бонус при регистрации: `CODEREVIEW_REGISTRATION_BONUS_POINTS` (по умолчанию 100).
+
+## Caddy‑логи
+
+- Vector на Raspberry Pi читает `/var/log/caddy/*.log`.
+- Отправка в backend:
+  - `POST /api/admin/caddy-logs/ingest`
+  - Header `X-Log-Token: <CODEREVIEW_CADDY_LOG_INGEST_TOKEN>`
+- Хранение: `CODEREVIEW_CADDY_LOG_RETENTION_DAYS` (по умолчанию 30).
+
+## LLM и нормы
+
+- Статические нормы: `norms.yaml`.
+- LLM нормы: `docs/system_standards.txt` + `norms.yaml` (для query‑ветки).
+- После изменения `norms.yaml` пересобрать backend и worker.
+- Логи LLM: `artifact_storage/<run_id>_llm_*.json`.
+
+## Когнитивная сложность
+
+- Считается по каждой процедуре/функции.
+- Метрики: total / total_loc / avg_per_line + список процедур.
+- Данные живут в контексте запуска (`review_runs.context.metrics`).
+
+## Полезные скрипты
+
+- `scripts/deploy_refresh.sh` — git pull → UI build → копия в static → пересборка контейнеров.
+  - `RUN_MIGRATIONS=1` добавляет миграции.
+- `scripts/analyze_module.py` — локальный анализ модуля.
+
+## Где искать проблемы
+
+- Backend логи: `docker-compose logs --tail=200 backend`
+- Worker логи: `docker-compose logs --tail=200 worker`
+- LLM логи: `artifact_storage/<run_id>_llm_*.json`
+- Caddy: `/var/log/caddy/*.log`
+
+## Текущий план
+
+См. `docs/next_steps.md`.

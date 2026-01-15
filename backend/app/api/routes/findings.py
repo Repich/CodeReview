@@ -38,7 +38,12 @@ def list_findings(
     if review_run_id:
         query = query.filter(Finding.review_run_id == review_run_id)
     if current_user.role != UserRole.ADMIN:
-        query = query.filter(ReviewRun.user_id == current_user.id)
+        if current_user.company_id:
+            query = query.join(UserAccount, UserAccount.id == ReviewRun.user_id).filter(
+                UserAccount.company_id == current_user.company_id
+            )
+        else:
+            query = query.filter(ReviewRun.user_id == current_user.id)
     total = query.count()
     db_items = (
         query.order_by(Finding.created_at.desc()).offset(skip).limit(limit).all()

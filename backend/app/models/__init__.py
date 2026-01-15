@@ -2,6 +2,7 @@ from backend.app.models.ai_finding import AIFinding
 from backend.app.models.access_log import AccessLog
 from backend.app.models.audit import AuditLog, IOLog
 from backend.app.models.caddy_access_log import CaddyAccessLog
+from backend.app.models.company import Company
 from backend.app.models.feedback import Feedback
 from backend.app.models.finding import Finding
 from backend.app.models.llm import LLMPromptVersion
@@ -13,6 +14,7 @@ __all__ = [
     "AuditLog",
     "AccessLog",
     "CaddyAccessLog",
+    "Company",
     "AIFinding",
     "IOLog",
     "Feedback",

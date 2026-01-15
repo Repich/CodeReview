@@ -36,7 +36,12 @@ def list_ai_findings(
     if status:
         query = query.filter(AIFinding.status == status)
     if current_user.role != UserRole.ADMIN:
-        query = query.filter(ReviewRun.user_id == current_user.id)
+        if current_user.company_id:
+            query = query.join(UserAccount, UserAccount.id == ReviewRun.user_id).filter(
+                UserAccount.company_id == current_user.company_id
+            )
+        else:
+            query = query.filter(ReviewRun.user_id == current_user.id)
     total = query.count()
     rows = query.order_by(AIFinding.created_at.asc()).offset(skip).limit(limit).all()
     norm_lookup = build_norm_lookup(db, {row.norm_id for row in rows if row.norm_id})
@@ -65,7 +70,7 @@ def update_ai_finding(
     finding = db.get(AIFinding, finding_id)
     if not finding:
         raise HTTPException(status_code=404, detail="AI finding not found")
-    ensure_run_access(db, finding.review_run_id, current_user)
+    ensure_run_access(db, finding.review_run_id, current_user, require_owner=True)
     if payload.status is not None:
         finding.status = payload.status
     else:

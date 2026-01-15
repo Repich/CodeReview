@@ -135,6 +135,8 @@ function RunListPage() {
   const balance = walletQuery.data?.balance ?? '—';
   const currency = walletQuery.data?.currency ?? 'points';
   const isAdmin = (currentUserQuery.data?.role || '').toLowerCase() === 'admin';
+  const showOwner = isAdmin || Boolean(currentUserQuery.data?.company_id);
+  const currentUserId = currentUserQuery.data?.id;
 
   return (
     <div>
@@ -167,7 +169,7 @@ function RunListPage() {
             <thead>
               <tr>
                 <th>Run</th>
-                {isAdmin && <th>Пользователь</th>}
+                {showOwner && <th>Пользователь</th>}
                 <th>Статус</th>
                 <th>Прогресс</th>
                 <th>Создан</th>
@@ -177,12 +179,15 @@ function RunListPage() {
               </tr>
             </thead>
             <tbody>
-              {latestRuns.map((run) => (
+              {latestRuns.map((run) => {
+                const canManageRun =
+                  isAdmin || (currentUserId && run.user_id && run.user_id === currentUserId);
+                return (
                 <tr key={run.id}>
                   <td>
                     <Link to={`/runs/${run.id}`}>{run.id.slice(0, 8)}…</Link>
                   </td>
-                  {isAdmin && (
+                  {showOwner && (
                     <td>{run.user_name || run.user_email || '—'}</td>
                   )}
                   <td>
@@ -199,10 +204,14 @@ function RunListPage() {
                       className="btn btn-secondary"
                       disabled={
                         run.status === 'running' ||
+                        !canManageRun ||
                         (deleteRunMutation.isPending && pendingDeleteId === run.id)
                       }
                       onClick={() => {
                         if (run.status === 'running') {
+                          return;
+                        }
+                        if (!canManageRun) {
                           return;
                         }
                         if (
@@ -218,10 +227,11 @@ function RunListPage() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {!latestRuns.length && (
                 <tr>
-                  <td colSpan={isAdmin ? 8 : 7} className="muted">
+                  <td colSpan={showOwner ? 8 : 7} className="muted">
                     Запусков пока нет.
                   </td>
                 </tr>

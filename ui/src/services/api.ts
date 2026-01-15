@@ -40,6 +40,7 @@ export interface ReviewRun {
   finished_at?: string | null;
   cost_points?: number | null;
   llm_prompt_version?: string | null;
+  user_id?: string | null;
   user_email?: string | null;
   user_name?: string | null;
   context?: ReviewRunContext | null;
@@ -178,6 +179,15 @@ export interface UserProfile {
   created_at: string;
   wallet_balance?: number | null;
   wallet_currency?: string | null;
+  company_id?: string | null;
+  company_name?: string | null;
+}
+
+export interface Company {
+  id: string;
+  name: string;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface AccessLogEntry {
@@ -358,6 +368,23 @@ export async function fetchUsers(params?: {
 
 export async function updateUserStatus(userId: string, status: string) {
   const { data } = await client.patch<UserProfile>(`/users/${userId}/status`, { status });
+  return data;
+}
+
+export async function updateUserCompany(userId: string, companyId: string | null) {
+  const { data } = await client.patch<UserProfile>(`/users/${userId}/company`, {
+    company_id: companyId,
+  });
+  return data;
+}
+
+export async function fetchCompanies(params?: { limit?: number; offset?: number; name?: string }) {
+  const { data } = await client.get<Company[]>('/companies', { params });
+  return data;
+}
+
+export async function createCompany(payload: { name: string }) {
+  const { data } = await client.post<Company>('/companies', payload);
   return data;
 }
 

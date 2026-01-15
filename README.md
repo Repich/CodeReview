@@ -1,61 +1,87 @@
 # CodeReview 1C
 
-Платформа для автоматизированного code-review 1С:Предприятие. Состоит из backend (FastAPI + Postgres), worker с детекторами, UI на React и инфраструктуры для развёртывания через Docker.
+Платформа для автоматизированного code-review 1С:Предприятие. Состоит из backend (FastAPI + Postgres), worker с детекторами и LLM, UI на React и инфраструктуры для развёртывания через Docker.
 
 ## Структура
 
 - `backend/` — FastAPI API, модели, миграции.
-- `worker/` — очередь задач, детекторы, тесты.
-- `ui/` — React/Vite интерфейс (список запусков, карточка запуска, личный кабинет с AI-блоком).
+- `worker/` — очередь задач, детекторы, сервисы LLM.
+- `ui/` — React/Vite интерфейс (список запусков, карточка запуска, админка).
 - `docs/` — описание сущностей, норм, пайплайна и требований к инфраструктуре.
-- `docs/deployment_security.md` — сводка по прод-окружению, блок-листам и аудитам.
-- `infrastructure/docker/` — Dockerfile'ы и конфигурация nginx.
-- `scripts/` — `bootstrap_structure.py`, `analyze_module.py`, утилиты для генерации структуры и ручного прогона воркера.
+- `infrastructure/docker/` — Dockerfile'ы и инфраструктурные конфиги.
+- `scripts/` — вспомогательные скрипты (create_admin, deploy_refresh, анализ модулей).
 
 ## Быстрый старт (локально)
 
 ```bash
-make bootstrap        # убедиться, что структура создана
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r backend/requirements.txt -r worker/requirements.txt pytest
-alembic -c backend/alembic.ini upgrade head
-uvicorn backend.app.main:app
-python -m worker.app.main
+
+# если нужен локальный pg
+# docker compose up -d postgres
+
+# миграции
+cd backend
+DATABASE_URL=postgresql+psycopg://codereview:codereview@localhost:5432/codereview \
+PYTHONPATH=.. alembic upgrade head
+cd ..
+
+# backend
+CODEREVIEW_DATABASE_URL=postgresql+psycopg://codereview:codereview@localhost:5432/codereview \
+uvicorn backend.app.main:app --reload --env-file .env
+
+# worker
+export CODEREVIEW_WORKER_BACKEND_API_URL=http://127.0.0.1:8000/api
+python -m worker.app.main --once
+
+# UI dev
+cd ui && npm install && npm run dev
 ```
 
-> Авторизация использует JWT (`Authorization: Bearer ...`). Для разработки достаточно значения по умолчанию, но в проде задайте `CODEREVIEW_AUTH_JWT_SECRET`, `CODEREVIEW_AUTH_ACCESS_TOKEN_EXPIRE_MINUTES` и осмысленный `DEEPSEEK_API_KEY` (если задействуете LLM).
+### Полезные env
 
-**Создание запуска с исходниками:**
+Backend (префикс `CODEREVIEW_`):
+- `CODEREVIEW_DATABASE_URL` — строка подключения к Postgres.
+- `CODEREVIEW_AUTH_JWT_SECRET` — секрет подписи JWT.
+- `CODEREVIEW_DEFAULT_RUN_COST_POINTS` — стоимость запуска (по умолчанию 10).
+- `CODEREVIEW_ADMIN_LOCAL_ONLY` — ограничить админку локальной сетью (bool).
+- `CODEREVIEW_ADMIN_ALLOWED_CIDRS` — список CIDR для админов (JSON-массив строк).
+- `CODEREVIEW_TURNSTILE_SECRET_KEY` — секрет Turnstile (если включаете капчу).
+- `CODEREVIEW_CADDY_LOG_INGEST_TOKEN` — токен приёма логов Caddy.
+- `CODEREVIEW_TRUSTED_PROXY_DEPTH` — число доверенных прокси в цепочке.
+- `CODEREVIEW_BLOCKED_IPS`, `CODEREVIEW_BLOCKED_CIDRS`, `CODEREVIEW_BLOCKED_COUNTRIES` — блок-листы.
+- `CODEREVIEW_GEOIP_DB_PATH` — путь к базе GeoIP (если используете геоблокировку).
 
-```bash
-curl -X POST http://localhost:8000/api/review-runs \
-  -H "Content-Type: application/json" \
-  -d '{
-        "project_id": "demo",
-        "sources": [
-          {
-            "path": "CommonModules/DangerousModule.bsl",
-            "name": "DangerousModule",
-            "module_type": "CommonModule",
-            "content": "Процедура Опасность()\n    Выполнить(\"Сообщить(1)\");\nКонецПроцедуры"
-          }
-        ]
-      }'
-```
-
-После создания воркер (`python -m worker.app.main --once`) запросит задачу через `/api/review-runs/next-task`, выполнит анализ и отправит `POST /api/review-runs/{id}/results`.
+Worker (префикс `CODEREVIEW_WORKER_`):
+- `CODEREVIEW_WORKER_BACKEND_API_URL` — URL backend API.
+- `CODEREVIEW_WORKER_REDIS_URL` — Redis URL.
+- `CODEREVIEW_WORKER_LLM_API_BASE`, `CODEREVIEW_WORKER_LLM_MODEL` — параметры LLM.
+- `CODEREVIEW_WORKER_LLM_CONTEXT_GLOB` — glob для доп. контекста LLM.
 
 UI:
+- `VITE_TURNSTILE_SITE_KEY` — site key Turnstile (если капча включена).
+
+## Администратор
+
+Админ может входить только с локальных адресов (см. `CODEREVIEW_ADMIN_LOCAL_ONLY` и `CODEREVIEW_ADMIN_ALLOWED_CIDRS`).
+Создание/обновление админа:
 
 ```bash
-cd ui
-npm install
-npm run dev
+docker-compose exec backend python /app/scripts/create_admin.py \
+  --email admin@company.ru --password 'Secret123' --name 'Admin'
 ```
+
+## Регистрация и капча
+
+- `POST /api/auth/register` — регистрация.
+- Если задан `CODEREVIEW_TURNSTILE_SECRET_KEY`, регистрация требует капчу.
+- UI показывает Turnstile, если установлен `VITE_TURNSTILE_SITE_KEY`.
+- После регистрации начисляется `CODEREVIEW_REGISTRATION_BONUS_POINTS` (по умолчанию 100).
+- Есть rate limit: `CODEREVIEW_REGISTRATION_RATE_LIMIT` и `CODEREVIEW_REGISTRATION_RATE_WINDOW_MINUTES`.
 
 ## Сборка UI и раздача статики
 
-В продакшне фронтенд обслуживается самим backend. После изменений UI выполните:
+В проде фронтенд отдаёт backend. После изменений UI выполните:
 
 ```bash
 cd ui
@@ -68,129 +94,80 @@ mkdir -p backend/app/static
 cp -r ui/dist/* backend/app/static/
 ```
 
-Проверяем, что `GET /` и `HEAD /` возвращают 200: `curl -I http://127.0.0.1:8000/`.
+Проверка: `curl -I http://127.0.0.1:8000/` → `200`.
 
 ## Продакшн (домашний сервер)
 
-1. Подготовьте Postgres (отдельный контейнер/кластер):
-   ```sql
-   CREATE DATABASE codereview;
-   CREATE USER codereview_user WITH PASSWORD '***';
-   GRANT ALL PRIVILEGES ON DATABASE codereview TO codereview_user;
-   ```
-2. `.env`:
-   ```
-   DATABASE_URL=postgresql+psycopg://codereview_user:***@host.docker.internal:5432/codereview
-   CODEREVIEW_DATABASE_URL=postgresql+psycopg://codereview_user:***@host.docker.internal:5432/codereview
-   CODEREVIEW_WORKER_BACKEND_API_URL=http://backend:8000/api
-   DEEPSEEK_API_KEY=...
-   ```
-3. `docker-compose up -d --build backend worker` (redis поднимется автоматически).
-4. Выполните миграции: `docker-compose exec backend bash -c "cd /app/backend && PYTHONPATH=/app alembic upgrade head"`.
-5. Caddy на Raspberry Pi проксирует `codereview.1cretail.ru` → `192.168.1.76:8200` и заверщает TLS. В backend нет отдельного nginx — он отвечает и за API, и за статику.
-
-Детали — в `docs/deployment_security.md`.
-
-### Автоматический анализ отдельных модулей
-
-Для локального ревью конкретного модуля 1С используйте CLI-скрипт:
-
-```bash
-python scripts/analyze_module.py path/to/Module.bsl \
-  --llm-context docs/llm_long_operation_prompt.md
+1) Подготовить Postgres (отдельный контейнер/кластер):
+```sql
+CREATE DATABASE codereview;
+CREATE USER codereview_user WITH PASSWORD '***';
+GRANT ALL PRIVILEGES ON DATABASE codereview TO codereview_user;
 ```
 
-Скрипт выполняет текущий набор статических детекторов (см. `worker/app`) и затем отправляет код в LLM (по умолчанию DeepSeek) вместе с выдержками из стандартов.  
-Промпт формируется покусочно: модуль делится на процедурные фрагменты, для каждого подбираются релевантные нормы из `docs/system_standards.txt` и только после этого выполняется вызов модели. Это позволяет укладываться в ограничение контекста и получать более точные рекомендации.
-Требуется переменная `DEEPSEEK_API_KEY` (можно задать в `.env`). Дополнительные подробности о пайплайне — в `docs/analysis_pipeline.md`.
+2) `.env` на сервере:
+```dotenv
+CODEREVIEW_DATABASE_URL=postgresql+psycopg://codereview_user:***@host.docker.internal:5432/codereview
+CODEREVIEW_WORKER_BACKEND_API_URL=http://backend:8000/api
+CODEREVIEW_WORKER_REDIS_URL=redis://redis:6379/0
+CODEREVIEW_AUTH_JWT_SECRET=...
+DEEPSEEK_API_KEY=...
+CODEREVIEW_TURNSTILE_SECRET_KEY=...
+CODEREVIEW_CADDY_LOG_INGEST_TOKEN=...
+CODEREVIEW_TRUSTED_PROXY_DEPTH=1
+```
 
-### Интеграция LLM в основном пайплайне
+3) Сборка и запуск:
+```bash
+docker-compose up -d --build backend worker redis
+```
 
-- Воркер автоматически вызывает DeepSeek для модулей, которые обладают признаками длительных операций/импорта файлов.  
-- Контекст для модели берётся из кратких справок (`docs/llm_*.md`); версия подсказки фиксируется в `review_runs.llm_prompt_version`.
-- Результат сохраняется в таблицу `ai_findings` со статусом `suggested`. Пользователь может подтвердить или отклонить предложение в UI на странице запуска.
-- Каждый запрос/ответ LLM пишется в JSON-лог (`artifact_storage/<run_id>_llm_*.json`) и доступен только администраторам через карточку запуска (одна запись на каждый проанализированный фрагмент).
-- Для работы необходим ключ `DEEPSEEK_API_KEY` (env или `.env`). Дополнительно доступны переменные `CODEREVIEW_WORKER_LLM_API_BASE`, `CODEREVIEW_WORKER_LLM_MODEL`, `CODEREVIEW_WORKER_LLM_CONTEXT_GLOB`.
+4) Миграции:
+```bash
+docker-compose exec backend bash -c "cd /app/backend && PYTHONPATH=/app alembic upgrade head"
+```
 
-### Авторизация и баллы
+5) Reverse proxy:
+Caddy на Raspberry Pi проксирует `codereview.1cretail.ru` → `192.168.1.76:8200`.
 
-- `POST /api/auth/register` — регистрация пользователя (ответ: JWT).
-- `POST /api/auth/login` — вход по email/паролю (ответ: JWT). Используйте `Authorization: Bearer <token>` для всех защищённых запросов.
-- `POST /api/users` — создание пользователя администратором (можно выдать роль admin/user).
-- `GET /api/users/me` — текущий профиль (роль, статус, email).
-- `GET /api/wallets/me` — баланс пользователя в баллах.
-- `GET /api/wallets/transactions` — история списаний/пополнений.
-- `POST /api/wallets/adjust` — админское начисление/списание баллов (можно передать `user_email` и причину).
+6) Проверки:
+- `curl -I http://127.0.0.1:8200/` → `200`.
+- `curl http://127.0.0.1:8200/api/health` → `{"status":"ok"}`.
 
-После миграций автоматически создаётся администратор `admin@localhost` с паролем `admin123`. Каждый запуск code-review списывает 10 баллов с кошелька владельца запуска; при недостатке средств `POST /api/review-runs` вернёт `402`.
+## Логи Caddy
 
-### Артефакты и выгрузки
+Логи Caddy пишутся в JSON. Рекомендуемый путь — `/var/log/caddy/*.log`.
+Vector на Raspberry Pi читает эти логи и шлёт в backend:
+- URL: `POST /api/admin/caddy-logs/ingest`
+- Header: `X-Log-Token: <CODEREVIEW_CADDY_LOG_INGEST_TOKEN>`
+- Хранение в Postgres: `CODEREVIEW_CADDY_LOG_RETENTION_DAYS` (по умолчанию 30)
 
-- `GET /api/audit/io/{io_log_id}/download` — отдать файл из `artifact_storage`, привязанный к записи IOLog.
-- `GET /api/findings/export/{review_run_id}.jsonl` — выгрузить находки запуска в JSONL (по запросу создаётся артефакт `findings.jsonl`).
-- `GET /api/ai-findings?review_run_id=<id>` — вернуть предложения LLM (доступно владельцу запуска).
-- `PATCH /api/ai-findings/{id}` — изменить статус AI-замечания (`suggested` → `pending`/`confirmed`/`rejected`).
-- `GET /api/review-runs/{id}/llm/logs` — список диагностических логов LLM (только администраторы). Каждый лог можно скачать через `/api/audit/io/{io_log_id}/download`.
+## Артефакты и выгрузки
 
-## Production deployment (сейчас поднято на codereview.1cretail.ru)
+- `artifact_storage/<run_id>_*` — артефакты (LLM JSON, выгрузки).
+- `GET /api/findings/export/{review_run_id}.jsonl` — JSONL по находкам.
+- `GET /api/review-runs/{id}/llm/logs` — LLM‑логи (только админ).
 
-1. **UI build**  
-   ```bash
-   cd ui
-   npm ci
-   npm run build
-   rm -rf ../backend/app/static && mkdir -p ../backend/app/static
-   cp -r dist/* ../backend/app/static/
-   ```
-   FastAPI отдаёт `backend/app/static/index.html` и все ассеты самостоятельно, поэтому
-   отдельный контейнер UI не нужен.
+## Когнитивная сложность
 
-2. **Подготовить `.env` на сервере**
+Worker рассчитывает когнитивную сложность по каждой процедуре/функции и сохраняет:
+- total / total_loc / avg_per_line
+- список процедур с complexity и avg_per_line
+Отображается в UI на странице запуска.
 
-   ```dotenv
-   CODEREVIEW_DATABASE_URL=postgresql+psycopg://codereview_user:***@host.docker.internal:5432/codereview
-   CODEREVIEW_WORKER_BACKEND_API_URL=http://backend:8000/api
-   CODEREVIEW_WORKER_REDIS_URL=redis://redis:6379/0
-   DEEPSEEK_API_KEY=...
-   CODEREVIEW_DEFAULT_RUN_COST_POINTS=10
-   CODEREVIEW_AUTH_JWT_SECRET=change-me
-   ```
+## Скрипт обновления на сервере
 
-   > Мы используем уже существующий postgres вне docker-compose, поэтому `host.docker.internal`
-   > пробрасывается через `extra_hosts` (см. `docker-compose.yml`).
+`scripts/deploy_refresh.sh`:
+- `git pull`
+- сборка UI и копия в `backend/app/static`
+- пересборка backend/worker
+- при `RUN_MIGRATIONS=1` выполняет миграции
 
-3. **Собрать/обновить контейнеры**
+Пример:
+```bash
+RUN_MIGRATIONS=1 ./scripts/deploy_refresh.sh
+```
 
-   ```bash
-   docker-compose up -d --build backend worker redis
-   docker-compose exec backend bash -c "cd /app/backend && PYTHONPATH=/app alembic upgrade head"
-   ```
+## Документация
 
-4. **Reverse proxy**  
-   Caddy на Raspberry Pi проксирует `codereview.1cretail.ru` к `192.168.1.76:8200`.  
-   TLS завершается на Caddy, backend видит реальный IP через `X-Forwarded-For`.
-
-5. **Готовность**  
-   - `curl -I http://127.0.0.1:8200/` → `200 OK` (root выдаёт index.html).  
-   - `curl http://127.0.0.1:8200/api/health` → `{"status":"ok","version":...}`.  
-   - В Caddy-логах нет `connection refused`.
-
-## Security & monitoring
-
-- `SecurityMiddleware` читает реальный IP (`CODEREVIEW_TRUSTED_PROXY_DEPTH`), ведёт таблицу `access_logs`,
-  блокирует IP/CIDR/страны (`CODEREVIEW_BLOCKED_IPS`, `CODEREVIEW_BLOCKED_CIDRS`, `CODEREVIEW_BLOCKED_COUNTRIES`)
-  и логирует причину (`block_reason`).
-- Геолокация включается, если смонтировать `CODEREVIEW_GEOIP_DB_PATH` (например, MaxMind GeoLite2).
-- Логи доступов для админов: `GET /api/admin/access-logs?limit=200`.
-- Все вызовы LLM (worker) сохраняются в `ai_findings` + JSON в `artifact_storage`.
-
-## CI
-
-`.github/workflows/ci.yml` запускает pytest для детекторов и собирает UI.
-
-## Дальнейшие шаги
-
-1. Дополнить репозитории, схемы и миграции бизнес-логикой.
-2. Подключить очередь (Redis/BullMQ) и горизонтальное масштабирование воркеров.
-3. Реализовать LLM-этап, заменив заглушку `LLM disabled`.
-4. Расширять список норм/детекторов и autotests.
+См. `docs/README.md` и `agents.md`.

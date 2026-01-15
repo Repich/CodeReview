@@ -8,6 +8,7 @@ import backend.app.api.routes.auth as auth
 import backend.app.api.routes.audit as audit
 import backend.app.api.routes.access_logs as access_logs
 import backend.app.api.routes.caddy_logs as caddy_logs
+import backend.app.api.routes.companies as companies
 import backend.app.api.routes.feedback as feedback
 import backend.app.api.routes.findings as findings
 import backend.app.api.routes.health as health
@@ -26,6 +27,7 @@ api_router.include_router(findings.router)
 api_router.include_router(feedback.router)
 api_router.include_router(audit.router)
 api_router.include_router(users.router)
+api_router.include_router(companies.router)
 api_router.include_router(wallets.router)
 api_router.include_router(access_logs.router)
 api_router.include_router(caddy_logs.router)

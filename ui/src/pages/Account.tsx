@@ -57,6 +57,10 @@ function AccountPage() {
               <dt className="muted">Роль</dt>
               <dd>{userQuery.data?.role}</dd>
             </div>
+            <div>
+              <dt className="muted">Компания</dt>
+              <dd>{userQuery.data?.company_name || '—'}</dd>
+            </div>
           </dl>
         </div>
 
