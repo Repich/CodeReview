@@ -32,7 +32,20 @@ def run_llm_playground(
             model=model_name,
         )
     except LLMPlaygroundError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        detail: dict[str, object] = {"message": str(exc)}
+        if exc.request_info:
+            detail["request"] = {
+                "api_base": exc.request_info.api_base,
+                "endpoint": exc.request_info.endpoint,
+                "timeout_seconds": exc.request_info.timeout_seconds,
+                "model": exc.request_info.model,
+                "temperature": exc.request_info.temperature,
+                "use_reasoning": payload.use_reasoning,
+                "model_override": payload.model,
+                "request_headers": exc.request_info.request_headers,
+                "request_payload": exc.request_info.request_payload,
+            }
+        raise HTTPException(status_code=400, detail=detail) from exc
 
     return LLMPlaygroundResponse(
         model=result.model,

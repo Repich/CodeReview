@@ -22,6 +22,8 @@ import {
   UserProfile,
 } from '../services/api';
 
+type LLMRequestInfo = Omit<LLMPlaygroundResponse, 'response'>;
+
 const DEFAULT_LLM_SYSTEM_PROMPT = `Ты — строгий эксперт по код-ревью 1С.
 Твоя цель — находить только критические (critical) и серьезные (major) проблемы.
 Фокус: корректность, потеря данных, безопасность, транзакции, конкурентность,
@@ -90,6 +92,7 @@ function AdminPage() {
   const [llmLastResponseChars, setLlmLastResponseChars] = useState<number | null>(null);
   const [llmLastResponseAt, setLlmLastResponseAt] = useState<string | null>(null);
   const [llmCopyMessage, setLlmCopyMessage] = useState<string | null>(null);
+  const [llmLastRequestInfo, setLlmLastRequestInfo] = useState<LLMRequestInfo | null>(null);
   const [activeTab, setActiveTab] = useState<'users' | 'llm' | 'runs' | 'access' | 'caddy'>(
     'users',
   );
@@ -256,6 +259,7 @@ function AdminPage() {
     setLlmError(null);
     setLlmResponse(null);
     setLlmCopyMessage(null);
+    setLlmLastRequestInfo(null);
     const temperature = Number(llmTemperature);
     if (Number.isNaN(temperature) || temperature < 0 || temperature > 2) {
       setLlmError('Температура должна быть числом от 0 до 2.');
@@ -273,6 +277,17 @@ function AdminPage() {
         model: llmModelOverride.trim() || undefined,
       });
       setLlmResponse(response);
+      setLlmLastRequestInfo({
+        api_base: response.api_base,
+        endpoint: response.endpoint,
+        timeout_seconds: response.timeout_seconds,
+        model: response.model,
+        temperature: response.temperature,
+        use_reasoning: response.use_reasoning,
+        model_override: response.model_override ?? null,
+        request_headers: response.request_headers,
+        request_payload: response.request_payload,
+      });
       setLlmSuccessCount((prev) => prev + 1);
       setLlmLastDurationMs(Date.now() - startedAt);
       setLlmLastResponseChars(response.response.length);
@@ -280,8 +295,19 @@ function AdminPage() {
     } catch (err) {
       console.error(err);
       if (axios.isAxiosError(err)) {
-        const detail = (err.response?.data as { detail?: string } | undefined)?.detail;
-        setLlmError(detail || 'Не удалось вызвать LLM.');
+        const detail = (err.response?.data as { detail?: unknown } | undefined)?.detail;
+        if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+          const message = (detail as { message?: string }).message;
+          const request = (detail as { request?: LLMRequestInfo }).request;
+          setLlmError(message || 'Не удалось вызвать LLM.');
+          if (request) {
+            setLlmLastRequestInfo(request);
+          }
+        } else if (typeof detail === 'string') {
+          setLlmError(detail || 'Не удалось вызвать LLM.');
+        } else {
+          setLlmError('Не удалось вызвать LLM.');
+        }
       } else {
         setLlmError('Не удалось вызвать LLM.');
       }
@@ -324,23 +350,23 @@ function AdminPage() {
   }, [runsQuery.data, runsStatusFilter, runsUserFilter]);
 
   const llmRequestDump = useMemo(() => {
-    if (!llmResponse) return null;
+    if (!llmLastRequestInfo) return null;
     return JSON.stringify(
       {
-        endpoint: llmResponse.endpoint,
-        api_base: llmResponse.api_base,
-        timeout_seconds: llmResponse.timeout_seconds,
-        model: llmResponse.model,
-        temperature: llmResponse.temperature,
-        use_reasoning: llmResponse.use_reasoning,
-        model_override: llmResponse.model_override ?? null,
-        headers: llmResponse.request_headers,
-        payload: llmResponse.request_payload,
+        endpoint: llmLastRequestInfo.endpoint,
+        api_base: llmLastRequestInfo.api_base,
+        timeout_seconds: llmLastRequestInfo.timeout_seconds,
+        model: llmLastRequestInfo.model,
+        temperature: llmLastRequestInfo.temperature,
+        use_reasoning: llmLastRequestInfo.use_reasoning,
+        model_override: llmLastRequestInfo.model_override ?? null,
+        headers: llmLastRequestInfo.request_headers,
+        payload: llmLastRequestInfo.request_payload,
       },
       null,
       2,
     );
-  }, [llmResponse]);
+  }, [llmLastRequestInfo]);
 
   if (userQuery.isLoading) {
     return <p>Загружаем админ-панель...</p>;
