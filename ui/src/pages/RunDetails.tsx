@@ -30,6 +30,7 @@ import AuditLogList from '../components/AuditLogList';
 import FeedbackList from '../components/FeedbackList';
 import ArtifactsTable from '../components/ArtifactsTable';
 import AIFindingCard from '../components/AIFindingCard';
+import FindingGroupCard from '../components/FindingGroupCard';
 
 const statusLabels: Record<string, string> = {
   queued: 'В очереди',
@@ -56,6 +57,46 @@ const formatDecimal = (value?: number | null) => {
   return value.toFixed(3);
 };
 
+type FindingGroup = {
+  base: Finding;
+  items: Finding[];
+};
+
+type FindingDisplayItem =
+  | { kind: 'single'; finding: Finding }
+  | { kind: 'group'; group: FindingGroup };
+
+const shouldGroupFinding = (finding: Finding) =>
+  finding.severity === 'minor' || finding.severity === 'info';
+
+const groupFindings = (items: Finding[]): FindingDisplayItem[] => {
+  const groups = new Map<string, FindingGroup>();
+  const output: FindingDisplayItem[] = [];
+
+  items.forEach((finding) => {
+    if (!shouldGroupFinding(finding)) {
+      output.push({ kind: 'single', finding });
+      return;
+    }
+    const key = [
+      finding.norm_id,
+      finding.detector_id,
+      finding.message,
+      finding.file_path ?? '',
+    ].join('::');
+    const existing = groups.get(key);
+    if (existing) {
+      existing.items.push(finding);
+      return;
+    }
+    const group = { base: finding, items: [finding] };
+    groups.set(key, group);
+    output.push({ kind: 'group', group });
+  });
+
+  return output;
+};
+
 function RunDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -66,6 +107,7 @@ function RunDetailsPage() {
   const [nowTs, setNowTs] = useState(() => Date.now());
   const [activeTab, setActiveTab] = useState('findings');
   const [showDiff, setShowDiff] = useState(false);
+  const [showAIContext, setShowAIContext] = useState(false);
 
   const runQuery = useQuery({
     queryKey: ['run', id],
@@ -132,7 +174,7 @@ function RunDetailsPage() {
   const runSourcesQuery = useQuery({
     queryKey: ['run-sources', id],
     queryFn: () => fetchRunSources(id!),
-    enabled: Boolean(id) && showDiff,
+    enabled: Boolean(id) && (showDiff || showAIContext),
   });
 
   const updateAiFinding = useMutation<
@@ -220,6 +262,11 @@ function RunDetailsPage() {
       return true;
     });
   }, [orderedFindings, severity, query]);
+
+  const displayFindings = useMemo(
+    () => groupFindings(filteredFindings),
+    [filteredFindings],
+  );
 
   useEffect(() => {
     if (!isActiveRun) return undefined;
@@ -347,6 +394,14 @@ function RunDetailsPage() {
     () => (runSourcesQuery.data ?? []).filter((src) => (src.change_ranges?.length ?? 0) > 0),
     [runSourcesQuery.data],
   );
+  const sourceLookup = useMemo(() => {
+    if (!runSourcesQuery.data) return null;
+    const map = new Map<string, string[]>();
+    runSourcesQuery.data.forEach((source) => {
+      map.set(source.path, source.content.split('\n'));
+    });
+    return map;
+  }, [runSourcesQuery.data]);
   const changeRangeMap = run?.context?.change_ranges as Record<string, unknown> | undefined;
   const changeRangeCount = changeRangeMap ? Object.keys(changeRangeMap).length : 0;
   const hasChangeRanges = changeRangeCount > 0;
@@ -598,20 +653,32 @@ function RunDetailsPage() {
               <div>
                 <h2 className="card-title">Найденные нарушения</h2>
                 <p className="muted">
-                  {filteredFindings.length}/{totalFindings}
+                  {displayFindings.length} карточек · {filteredFindings.length} нарушений
                 </p>
               </div>
             </div>
             <FindingFilters severity={severity} setSeverity={setSeverity} query={query} setQuery={setQuery} />
             <div className="card-list">
-              {filteredFindings.map((finding) => (
-                <FindingCard
-                  key={finding.id}
-                  finding={finding}
-                  sequence={findingOrderMap.get(finding.id)}
-                />
-              ))}
-              {!filteredFindings.length && (
+              {displayFindings.map((item) => {
+                if (item.kind === 'single') {
+                  return (
+                    <FindingCard
+                      key={item.finding.id}
+                      finding={item.finding}
+                      sequence={findingOrderMap.get(item.finding.id)}
+                    />
+                  );
+                }
+                return (
+                  <FindingGroupCard
+                    key={`group-${item.group.base.id}`}
+                    base={item.group.base}
+                    items={item.group.items}
+                    sequence={findingOrderMap.get(item.group.base.id)}
+                  />
+                );
+              })}
+              {!displayFindings.length && (
                 <div className="empty-state">Нет нарушений под текущий фильтр.</div>
               )}
             </div>
@@ -656,7 +723,19 @@ function RunDetailsPage() {
                 {aiFindings.length}/{aiFindingsQuery.data?.total ?? 0}
               </p>
             </div>
-            {aiFindingsQuery.isLoading && <span className="muted">Обновляем…</span>}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              {showAIContext && runSourcesQuery.isLoading && (
+                <span className="muted">Загружаем контекст…</span>
+              )}
+              {aiFindingsQuery.isLoading && <span className="muted">Обновляем…</span>}
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => setShowAIContext((prev) => !prev)}
+              >
+                {showAIContext ? 'Скрыть контекст' : 'Показать контекст'}
+              </button>
+            </div>
           </div>
           {aiFindingsQuery.error && (
             <p className="alert alert-error">Не удалось загрузить предложения LLM.</p>
@@ -677,6 +756,7 @@ function RunDetailsPage() {
                   updateAiFinding.isPending && updateAiFinding.variables?.findingId === finding.id
                 }
                 readOnly={!canEditRun}
+                sourceLookup={showAIContext ? sourceLookup : null}
               />
             ))}
             {!aiFindings.length && !aiFindingsQuery.isLoading && (
