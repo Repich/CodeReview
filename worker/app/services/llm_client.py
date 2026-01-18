@@ -16,7 +16,8 @@ import httpx
 from worker.app.config import get_settings
 from worker.app.models import AISuggestion, AnalysisTask, DetectorFinding, LLMDiagnostic
 from worker.app.services.code_units import CodeUnit, split_source_into_units
-from worker.app.services.norms_repo import NormCard, get_norm_repository
+from worker.app.services.critical_norms import get_critical_norm_repository
+from worker.app.services.norms_repo import NormCard
 from worker.app.services.query_norms import get_query_norm_repository
 from worker.app.services.query_units import QueryUnit, extract_query_units
 
@@ -49,7 +50,7 @@ QUERY_SYSTEM_PROMPT = (
 )
 
 MAX_UNIT_CODE_CHARS = 6_000
-MAX_NORM_TEXT_CHARS = 8_000
+MAX_NORM_TEXT_CHARS = 40_000
 MAX_UNITS_PER_RUN = 40
 MAX_QUERY_TEXT_CHARS = 32_000
 MAX_QUERY_NORM_TEXT_CHARS = 40_000
@@ -72,7 +73,7 @@ def generate_ai_suggestions(
         logger.debug("DEEPSEEK_API_KEY is not configured; skipping LLM stage")
         return None
 
-    norm_repo = get_norm_repository()
+    norm_repo = get_critical_norm_repository()
     units: list[CodeUnit] = []
     for source in task.sources:
         units.extend(split_source_into_units(source))
@@ -104,18 +105,17 @@ def generate_ai_suggestions(
             logger.warning("Norm repository is empty; skipping LLM stage for code units")
         else:
             prompt_versions.append(norm_repo.version)
+            allowed_norm_ids = {card.norm_id for card in norm_repo.cards}
             for unit in units:
                 unit_findings = _filter_findings_for_unit(findings_list, unit)
-                keywords = _derive_keywords(unit, unit_findings)
-                norm_cards = norm_repo.search(keywords, limit=8)
+                norm_cards = norm_repo.cards
                 logger.info(
-                    "LLM unit %s (%s lines %s-%s): keywords=%s norms=%s findings=%s",
+                    "LLM unit %s (%s lines %s-%s): norms=%s findings=%s",
                     unit.unit_name,
                     unit.unit_type,
                     unit.start_line,
                     unit.end_line,
-                    len(keywords),
-                    [card.norm_id for card in norm_cards],
+                    len(norm_cards),
                     len(unit_findings),
                 )
                 prompt = _build_unit_prompt(unit, unit_findings, norm_cards)
@@ -123,12 +123,12 @@ def generate_ai_suggestions(
                 if not response_text:
                     logger.warning("LLM unit %s: no response", unit.unit_name)
                     continue
-                allowed_norm_ids = {card.norm_id for card in norm_cards}
                 unit_suggestions = _parse_response(
                     response_text,
                     unit_findings,
                     unit,
                     allowed_norm_ids,
+                    norm_lookup=norm_repo.entries,
                 )
                 if unit_suggestions:
                     logger.info(

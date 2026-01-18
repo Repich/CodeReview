@@ -13,35 +13,40 @@ from worker.app.services.norms_repo import NormCard
 ROOT_DIR = Path(__file__).resolve().parents[3]
 NORMS_PATH = ROOT_DIR / "critical_norms.yaml"
 
-QUERY_NORM_IDS = [
-    "CRIT_NEW_10",
-    "CRIT_NEW_23",
-    "CRIT_NEW_28",
-    "CRIT_NEW_29",
-    "CRIT_NEW_30",
-    "CRIT_QRY_01",
-    "CRIT_QRY_02",
-    "CRIT_QRY_03",
-    "CRIT_QRY_04",
-    "CRIT_QRY_05",
-    "CRIT_QRY_06",
-    "CRIT_QRY_07",
-    "CRIT_QRY_08",
-    "CRIT_QRY_09",
-    "CRIT_QRY_10",
-    "CRIT_QRY_11",
-    "CRIT_QRY_12",
-    "CRIT_QRY_13",
-    "CRIT_QRY_14",
-    "CRIT_QRY_15",
-    "CRIT_QRY_16",
-    "CRIT_QRY_17",
-    "CRIT_QRY_18",
+CODE_NORM_IDS = [
+    "CRIT_NEW_01",
+    "CRIT_NEW_02",
+    "CRIT_NEW_03",
+    "CRIT_NEW_04",
+    "CRIT_NEW_05",
+    "CRIT_NEW_06",
+    "CRIT_NEW_07",
+    "CRIT_NEW_08",
+    "CRIT_NEW_09",
+    "CRIT_NEW_11",
+    "CRIT_NEW_12",
+    "CRIT_NEW_13",
+    "CRIT_NEW_14",
+    "CRIT_NEW_15",
+    "CRIT_NEW_16",
+    "CRIT_NEW_17",
+    "CRIT_NEW_18",
+    "CRIT_NEW_19",
+    "CRIT_NEW_20",
+    "CRIT_NEW_21",
+    "CRIT_NEW_22",
+    "CRIT_NEW_24",
+    "CRIT_NEW_25",
+    "CRIT_NEW_26",
+    "CRIT_NEW_27",
+    "SECURITY_COM_AUTOMATION_DISABLE_MACROS",
+    "SECURITY_PASSWORD_STORAGE_NO_PLAINTEXT",
+    "SECURITY_TLS_VERIFY_SERVER_AUTH",
 ]
 
 
 @dataclass
-class QueryNormRepository:
+class CriticalNormRepository:
     path: Path = NORMS_PATH
     norm_ids: list[str] | None = None
     cards: list[NormCard] | None = None
@@ -50,7 +55,7 @@ class QueryNormRepository:
 
     def __post_init__(self) -> None:
         if self.norm_ids is None:
-            self.norm_ids = list(QUERY_NORM_IDS)
+            self.norm_ids = list(CODE_NORM_IDS)
         if self.cards is None:
             self.cards = []
         if self.entries is None:
@@ -113,5 +118,5 @@ def _tokenize(text: str) -> list[str]:
 
 
 @lru_cache(maxsize=1)
-def get_query_norm_repository() -> QueryNormRepository:
-    return QueryNormRepository()
+def get_critical_norm_repository() -> CriticalNormRepository:
+    return CriticalNormRepository()
