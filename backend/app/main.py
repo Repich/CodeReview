@@ -52,7 +52,7 @@ async def serve_index_head() -> Response:
 
 
 @app.get("/help/teacher", include_in_schema=False)
-async def serve_teacher_guide() -> FileResponse | Response:
+async def serve_teacher_guide() -> Response:
     if TEACHER_GUIDE_FILE.is_file():
         return FileResponse(TEACHER_GUIDE_FILE)
     return Response(status_code=404)
