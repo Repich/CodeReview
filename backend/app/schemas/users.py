@@ -48,6 +48,10 @@ class UserStatusUpdate(ORMModel):
         return normalized
 
 
+class UserRoleUpdate(ORMModel):
+    role: UserRole
+
+
 class WalletRead(ORMModel):
     id: uuid.UUID
     balance: int

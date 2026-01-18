@@ -10,7 +10,13 @@ from backend.app.core.security import hash_password
 from backend.app.models.company import Company
 from backend.app.models.enums import UserRole
 from backend.app.models.user import UserAccount, Wallet
-from backend.app.schemas.users import UserCompanyUpdate, UserCreate, UserRead, UserStatusUpdate
+from backend.app.schemas.users import (
+    UserCompanyUpdate,
+    UserCreate,
+    UserRead,
+    UserRoleUpdate,
+    UserStatusUpdate,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -102,6 +108,24 @@ def update_user_status(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.status = payload.status
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.patch("/{user_id}/role", response_model=UserRead)
+def update_user_role(
+    user_id: uuid.UUID,
+    payload: UserRoleUpdate,
+    db: Session = Depends(get_db),
+    current_admin: UserAccount = Depends(get_current_admin),
+) -> UserAccount:
+    if current_admin.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot change your own role")
+    user = db.get(UserAccount, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.role = payload.role
     db.commit()
     db.refresh(user)
     return user

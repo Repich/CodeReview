@@ -204,6 +204,46 @@ export interface UserProfile {
   company_name?: string | null;
 }
 
+export interface NormCatalogEntry {
+  norm_id: string;
+  title?: string | null;
+  section?: string | null;
+  category?: string | null;
+  norm_text?: string | null;
+  scope?: string | null;
+  detector_type?: string | null;
+  check_type?: string | null;
+  default_severity?: string | null;
+  source_reference?: string | null;
+  source_excerpt?: string | null;
+  code_applicability?: boolean | null;
+  is_active?: boolean | null;
+  version?: number | null;
+  priority?: number | null;
+  rationale?: string | null;
+  detection_hint?: string | null;
+  exceptions?: string | null;
+}
+
+export interface NormRecord {
+  id: string;
+  norm_id: string;
+  title: string;
+  section: string;
+  scope: string;
+  detector_type: string;
+  check_type: string;
+  default_severity: string;
+  norm_text: string;
+  code_applicability: boolean;
+  is_active: boolean;
+  version: number;
+  source_reference?: string | null;
+  source_excerpt?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -392,6 +432,11 @@ export async function updateUserStatus(userId: string, status: string) {
   return data;
 }
 
+export async function updateUserRole(userId: string, role: string) {
+  const { data } = await client.patch<UserProfile>(`/users/${userId}/role`, { role });
+  return data;
+}
+
 export async function updateUserCompany(userId: string, companyId: string | null) {
   const { data } = await client.patch<UserProfile>(`/users/${userId}/company`, {
     company_id: companyId,
@@ -416,6 +461,25 @@ export async function fetchWallet() {
 
 export async function fetchWalletTransactions() {
   const { data } = await client.get<WalletTransaction[]>('/wallets/transactions');
+  return data;
+}
+
+export async function fetchNormCatalog(params: {
+  source: 'static' | 'llm';
+  query?: string;
+  limit?: number;
+}) {
+  const { data } = await client.get<NormCatalogEntry[]>('/norms/catalog', { params });
+  return data;
+}
+
+export async function fetchNorms(params?: { skip?: number; limit?: number }) {
+  const { data } = await client.get<NormRecord[]>('/norms', { params });
+  return data;
+}
+
+export async function createNorm(payload: Omit<NormRecord, 'id' | 'created_at' | 'updated_at'>) {
+  const { data } = await client.post<NormRecord>('/norms', payload);
   return data;
 }
 

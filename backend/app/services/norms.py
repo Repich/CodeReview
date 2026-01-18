@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import yaml
 from sqlalchemy.orm import Session
@@ -18,6 +18,33 @@ def _load_norm_catalog() -> dict[str, dict[str, Any]]:
             entries = data.get("norms", [])
             return {entry.get("norm_id"): entry for entry in entries if entry.get("norm_id")}
     return {}
+
+
+def load_norm_catalog_entries(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    entries = data.get("norms", [])
+    return [entry for entry in entries if entry.get("norm_id")]
+
+
+def filter_norm_catalog_entries(
+    entries: Iterable[dict[str, Any]],
+    query: str | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    items = list(entries)
+    if query:
+        lowered = query.lower()
+        items = [
+            entry
+            for entry in items
+            if lowered in str(entry.get("norm_id", "")).lower()
+            or lowered in str(entry.get("title", "")).lower()
+            or lowered in str(entry.get("section", "")).lower()
+        ]
+    items.sort(key=lambda entry: str(entry.get("norm_id", "")))
+    return items[:limit]
 
 
 def build_norm_lookup(db: Session, norm_ids: set[str]) -> dict[str, dict[str, str | None]]:

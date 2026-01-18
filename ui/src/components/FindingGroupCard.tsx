@@ -4,6 +4,8 @@ interface Props {
   base: Finding;
   items: Finding[];
   sequence?: number;
+  showContext?: boolean;
+  sourceLookup?: Map<string, string[]> | null;
 }
 
 const formatLineList = (lines: number[]) => {
@@ -14,7 +16,16 @@ const formatLineList = (lines: number[]) => {
   return `${preview.join(', ')}${suffix}`;
 };
 
-function FindingGroupCard({ base, items, sequence }: Props) {
+const buildLineSnippets = (sourceLines: string[], lineNumbers: number[]) => {
+  const unique = Array.from(new Set(lineNumbers)).filter((value) => Number.isFinite(value));
+  unique.sort((a, b) => a - b);
+  return unique
+    .map((lineNo) => `${lineNo}: ${sourceLines[lineNo - 1] ?? ''}`)
+    .join('\n')
+    .trimEnd();
+};
+
+function FindingGroupCard({ base, items, sequence, showContext, sourceLookup }: Props) {
   const files = new Map<string, number[]>();
   items.forEach((item) => {
     if (!item.file_path) return;
@@ -24,6 +35,18 @@ function FindingGroupCard({ base, items, sequence }: Props) {
     }
     files.set(item.file_path, lines);
   });
+
+  const contextBlocks = showContext && sourceLookup
+    ? [...files.entries()]
+        .map(([path, lines]) => {
+          const sourceLines = sourceLookup.get(path);
+          if (!sourceLines) return null;
+          const snippet = buildLineSnippets(sourceLines, lines);
+          if (!snippet) return null;
+          return { path, snippet };
+        })
+        .filter((entry): entry is { path: string; snippet: string } => Boolean(entry))
+    : [];
 
   return (
     <article className="card finding-card">
@@ -57,6 +80,19 @@ function FindingGroupCard({ base, items, sequence }: Props) {
             <p key={path} className="muted" style={{ margin: '0.25rem 0' }}>
               {path}: {formatLineList(lines)}
             </p>
+          ))}
+        </details>
+      )}
+      {contextBlocks.length > 0 && (
+        <details open>
+          <summary>Контекст</summary>
+          {contextBlocks.map((block) => (
+            <div key={block.path} style={{ marginTop: '0.5rem' }}>
+              <p className="muted" style={{ margin: '0.25rem 0' }}>
+                {block.path}
+              </p>
+              <pre data-source-path={block.path}>{block.snippet}</pre>
+            </div>
           ))}
         </details>
       )}

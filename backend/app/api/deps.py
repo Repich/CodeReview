@@ -65,3 +65,9 @@ def get_current_admin(current_user: UserAccount = Depends(get_current_user)) -> 
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin privileges required")
     return current_user
+
+
+def get_current_teacher(current_user: UserAccount = Depends(get_current_user)) -> UserAccount:
+    if current_user.role not in {UserRole.ADMIN, UserRole.TEACHER}:
+        raise HTTPException(status_code=403, detail="Teacher privileges required")
+    return current_user

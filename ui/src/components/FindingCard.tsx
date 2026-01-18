@@ -3,9 +3,31 @@ import { Finding } from '../services/api';
 interface Props {
   finding: Finding;
   sequence?: number;
+  showContext?: boolean;
+  sourceLookup?: Map<string, string[]> | null;
 }
 
-function FindingCard({ finding, sequence }: Props) {
+const buildSnippet = (sourceLines: string[], start: number, end: number) => {
+  const safeStart = Math.max(1, start);
+  const safeEnd = Math.min(end, sourceLines.length);
+  const slice = sourceLines.slice(safeStart - 1, safeEnd);
+  return slice
+    .map((line, index) => `${safeStart + index}: ${line}`)
+    .join('\n')
+    .trimEnd();
+};
+
+function FindingCard({ finding, sequence, showContext, sourceLookup }: Props) {
+  const contextSnippet = (() => {
+    if (!showContext || !sourceLookup || !finding.file_path || !finding.line_start) {
+      return null;
+    }
+    const sourceLines = sourceLookup.get(finding.file_path);
+    if (!sourceLines) return null;
+    const endLine = finding.line_end ?? finding.line_start;
+    return buildSnippet(sourceLines, finding.line_start, endLine);
+  })();
+
   return (
     <article className="card finding-card">
       <div className="card-header" style={{ marginBottom: '0.5rem' }}>
@@ -33,6 +55,12 @@ function FindingCard({ finding, sequence }: Props) {
       )}
       {finding.code_snippet && (
         <pre>{finding.code_snippet}</pre>
+      )}
+      {contextSnippet && (
+        <details open>
+          <summary>Контекст</summary>
+          <pre data-source-path={finding.file_path || undefined}>{contextSnippet}</pre>
+        </details>
       )}
       {(finding.norm_text || finding.norm_section) && (
         <details>

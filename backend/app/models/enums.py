@@ -44,6 +44,7 @@ class WalletTransactionType(str, enum.Enum):
 
 class UserRole(str, enum.Enum):
     USER = "user"
+    TEACHER = "teacher"
     ADMIN = "admin"
 
 
