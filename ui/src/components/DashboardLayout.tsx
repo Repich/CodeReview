@@ -22,6 +22,7 @@ function DashboardLayout({ children }: Props) {
   const isAdmin = role === 'admin';
   const isTeacher = role === 'teacher';
   const canManage = isAdmin || isTeacher;
+  const showTeacherDocs = canManage;
 
   return (
     <div className="app-shell">
@@ -38,6 +39,11 @@ function DashboardLayout({ children }: Props) {
             <NavLink to="/admin" className={({ isActive }) => (isActive ? 'active-link' : undefined)}>
               {isAdmin ? 'Админка' : 'Обучение'}
             </NavLink>
+          )}
+          {showTeacherDocs && (
+            <a href="/help/teacher" target="_blank" rel="noreferrer">
+              Документация учителя
+            </a>
           )}
         </nav>
         <div className="app-user">

@@ -29,6 +29,8 @@ def create_app() -> FastAPI:
 app = create_app()
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
 INDEX_FILE = STATIC_ROOT / "index.html"
+DOCS_ROOT = Path(__file__).resolve().parents[2] / "docs"
+TEACHER_GUIDE_FILE = DOCS_ROOT / "teacher_guide.md"
 
 
 def _is_within_static(target: Path) -> bool:
@@ -47,6 +49,13 @@ async def serve_root() -> FileResponse:
 @app.head("/", include_in_schema=False)
 async def serve_index_head() -> Response:
     return Response(status_code=200)
+
+
+@app.get("/help/teacher", include_in_schema=False)
+async def serve_teacher_guide() -> FileResponse | Response:
+    if TEACHER_GUIDE_FILE.is_file():
+        return FileResponse(TEACHER_GUIDE_FILE)
+    return Response(status_code=404)
 
 
 @app.get("/{full_path:path}", include_in_schema=False)
