@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, FormEvent } from 'react';
+import { useState, useMemo, useEffect, useRef, FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
@@ -122,6 +122,7 @@ function RunDetailsPage() {
     lineStart: number | null;
     lineEnd: number | null;
   } | null>(null);
+  const [showSelectionModal, setShowSelectionModal] = useState(false);
   const [showNormForm, setShowNormForm] = useState(false);
   const [normId, setNormId] = useState('');
   const [normTitle, setNormTitle] = useState('');
@@ -138,6 +139,7 @@ function RunDetailsPage() {
   const [normVersion, setNormVersion] = useState('1');
   const [normMessage, setNormMessage] = useState<string | null>(null);
   const [normState, setNormState] = useState<'idle' | 'success' | 'error'>('idle');
+  const selectionTimerRef = useRef<number | null>(null);
 
   const runQuery = useQuery({
     queryKey: ['run', id],
@@ -330,17 +332,28 @@ function RunDetailsPage() {
     if (!canTeach || activeTab !== 'norms') {
       setSelectionDraft(null);
       setShowNormForm(false);
+      setShowSelectionModal(false);
       return undefined;
     }
     const handler = () => {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) {
+        if (selectionTimerRef.current) {
+          window.clearTimeout(selectionTimerRef.current);
+          selectionTimerRef.current = null;
+        }
         setSelectionDraft(null);
+        setShowSelectionModal(false);
         return;
       }
       const rawText = selection.toString().trim();
       if (!rawText) {
+        if (selectionTimerRef.current) {
+          window.clearTimeout(selectionTimerRef.current);
+          selectionTimerRef.current = null;
+        }
         setSelectionDraft(null);
+        setShowSelectionModal(false);
         return;
       }
       const anchorElement =
@@ -356,7 +369,12 @@ function RunDetailsPage() {
         focusElement?.closest?.('[data-source-path]') ||
         null;
       if (!container) {
+        if (selectionTimerRef.current) {
+          window.clearTimeout(selectionTimerRef.current);
+          selectionTimerRef.current = null;
+        }
         setSelectionDraft(null);
+        setShowSelectionModal(false);
         return;
       }
       const file = container.getAttribute('data-source-path');
@@ -380,10 +398,22 @@ function RunDetailsPage() {
         ? Number(lineEndAttr)
         : null;
       const text = rawText.length > 4000 ? `${rawText.slice(0, 4000)}…` : rawText;
-      setSelectionDraft({ text, file, lineStart, lineEnd });
+      if (selectionTimerRef.current) {
+        window.clearTimeout(selectionTimerRef.current);
+      }
+      selectionTimerRef.current = window.setTimeout(() => {
+        setSelectionDraft({ text, file, lineStart, lineEnd });
+        setShowSelectionModal(true);
+      }, 200);
     };
     document.addEventListener('selectionchange', handler);
-    return () => document.removeEventListener('selectionchange', handler);
+    return () => {
+      document.removeEventListener('selectionchange', handler);
+      if (selectionTimerRef.current) {
+        window.clearTimeout(selectionTimerRef.current);
+        selectionTimerRef.current = null;
+      }
+    };
   }, [canTeach, activeTab]);
 
   const progressText = useMemo(() => {
@@ -609,6 +639,7 @@ function RunDetailsPage() {
       setNormSourceExcerpt(selectionDraft.text);
     }
     setShowNormForm(true);
+    setShowSelectionModal(false);
   };
 
   const handleNormSubmit = async (event: FormEvent) => {
@@ -854,26 +885,6 @@ function RunDetailsPage() {
               Создать норму
             </button>
           </div>
-          {selectionDraft && (
-            <section className="card" style={{ marginBottom: '1.5rem' }}>
-              <div className="card-header">
-                <div>
-                  <h3 className="card-title">Выделение</h3>
-                  <p className="muted">
-                    {selectionDraft.file || 'Без файла'}
-                    {selectionDraft.lineStart
-                      ? `:${selectionDraft.lineStart}${
-                          selectionDraft.lineEnd && selectionDraft.lineEnd !== selectionDraft.lineStart
-                            ? `-${selectionDraft.lineEnd}`
-                            : ''
-                        }`
-                      : ''}
-                  </p>
-                </div>
-              </div>
-              <pre>{selectionDraft.text}</pre>
-            </section>
-          )}
           {showNormForm && (
             <section className="card" style={{ marginBottom: '1.5rem' }}>
               <div className="card-header">
@@ -1044,6 +1055,40 @@ function RunDetailsPage() {
                 </p>
               )}
             </section>
+          )}
+          {showSelectionModal && selectionDraft && (
+            <div className="modal-backdrop" role="dialog" aria-modal="true">
+              <div className="modal">
+                <div className="modal-header">
+                  <div>
+                    <h3 className="card-title">Выделение для новой нормы</h3>
+                    <p className="muted">
+                      {selectionDraft.file || 'Без файла'}
+                      {selectionDraft.lineStart
+                        ? `:${selectionDraft.lineStart}${
+                            selectionDraft.lineEnd && selectionDraft.lineEnd !== selectionDraft.lineStart
+                              ? `-${selectionDraft.lineEnd}`
+                              : ''
+                          }`
+                        : ''}
+                    </p>
+                  </div>
+                </div>
+                <pre>{selectionDraft.text}</pre>
+                <div className="modal-actions">
+                  <button className="btn btn-primary" type="button" onClick={handleOpenNormForm}>
+                    Заполнить норму
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setShowSelectionModal(false)}
+                  >
+                    Закрыть
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
           <section className="card" style={{ marginBottom: '1.5rem' }}>
             <div className="card-header">

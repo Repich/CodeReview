@@ -406,8 +406,8 @@ textarea {
 
 .sticky-tabs {
   position: sticky;
-  top: 0;
-  z-index: 15;
+  top: 4.5rem;
+  z-index: 12;
   background: var(--surface);
   padding: 0.75rem 0;
 }
@@ -428,8 +428,8 @@ textarea {
 
 .sticky-norm-toolbar {
   position: sticky;
-  top: 3.4rem;
-  z-index: 14;
+  top: 8.2rem;
+  z-index: 11;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -440,6 +440,43 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  padding: 2rem;
+}
+
+.modal {
+  width: min(720px, 100%);
+  max-height: 80vh;
+  overflow: auto;
+  background: var(--surface);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+  border: 1px solid var(--border);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
 }
 
 .tab-button:hover {
@@ -548,5 +585,13 @@ textarea {
 
   .app-main {
     padding: 1.5rem 1rem 2.5rem;
+  }
+
+  .sticky-tabs {
+    top: 6.2rem;
+  }
+
+  .sticky-norm-toolbar {
+    top: 10.2rem;
   }
 }
