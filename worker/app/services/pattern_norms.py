@@ -5,19 +5,21 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+import logging
 
 import yaml
 
 from worker.app.services.norms_repo import NormCard
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
-# Используем обновленный файл с паттернами
-NORMS_PATH = ROOT_DIR / "pattern_1С.yaml"
+# Используем обновленный файл с паттернами; если недоступен, пробуем запасной
+PREFERRED_FILES = ["pattern_1С.yaml", "pattern_1c.yaml", "pattern.yaml"]
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class PatternNormRepository:
-    path: Path = NORMS_PATH
+    path: Path | None = None
     norm_ids: list[str] | None = None
     cards: list[NormCard] | None = None
     entries: dict[str, dict] | None = None
@@ -33,9 +35,18 @@ class PatternNormRepository:
         self._load()
 
     def _load(self) -> None:
-        if not self.path.exists():
+        path = self.path
+        if path is None:
+            for candidate in PREFERRED_FILES:
+                candidate_path = ROOT_DIR / candidate
+                if candidate_path.exists():
+                    path = candidate_path
+                    break
+        if path is None or not path.exists():
+            logger.warning("Pattern norms file not found (tried: %s)", PREFERRED_FILES)
             return
-        raw_text = self.path.read_text(encoding="utf-8")
+        self.path = path
+        raw_text = path.read_text(encoding="utf-8")
         data = yaml.safe_load(raw_text) or {}
         entries = data if isinstance(data, list) else data.get("norms", [])
         norm_map = {
@@ -58,6 +69,12 @@ class PatternNormRepository:
             self.cards.append(
                 NormCard(norm_id=norm_id, body=body, tokens=tokens, checksum=checksum)
             )
+        logger.info(
+            "Pattern norms loaded: %s norms from %s (version %s)",
+            len(self.cards),
+            self.path,
+            self.version,
+        )
 
 
 def _format_norm_body(entry: dict) -> str:
