@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY worker /app/worker
 COPY norms.yaml /app/norms.yaml
 COPY critical_norms.yaml /app/critical_norms.yaml
+COPY pattern.yaml /app/pattern.yaml
 COPY docs/system_standards.txt /app/docs/system_standards.txt
 
 CMD ["python", "-m", "worker.app.main"]

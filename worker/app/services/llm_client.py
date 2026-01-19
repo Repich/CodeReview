@@ -17,6 +17,7 @@ from worker.app.config import get_settings
 from worker.app.models import AISuggestion, AnalysisTask, DetectorFinding, LLMDiagnostic
 from worker.app.services.code_units import CodeUnit, split_source_into_units
 from worker.app.services.critical_norms import get_critical_norm_repository
+from worker.app.services.pattern_norms import get_pattern_norm_repository
 from worker.app.services.norms_repo import NormCard
 from worker.app.services.query_norms import get_query_norm_repository
 from worker.app.services.query_units import QueryUnit, extract_query_units
@@ -55,7 +56,15 @@ MAX_UNITS_PER_RUN = 40
 MAX_QUERY_TEXT_CHARS = 32_000
 MAX_QUERY_NORM_TEXT_CHARS = 40_000
 MAX_QUERY_UNITS_PER_RUN = 40
+MAX_PATTERN_NORM_TEXT_CHARS = 40_000
 QUERY_TEMPERATURE = 0.2
+
+PATTERN_SYSTEM_PROMPT = (
+    "Ты — ведущий архитектор 1С. Ищи только нарушения архитектурных паттернов: SRP, SoC, CQRS, "
+    "Repository, Unit of Work, устойчивость интеграций (идемпотентность, Circuit Breaker, "
+    "retry/backoff, Bulkhead, Adapter) и другие из списка. Не дублируй статические находки. "
+    "Возвращай только предполагаемые нарушения паттернов."
+)
 
 
 @dataclass
@@ -152,6 +161,53 @@ def generate_ai_suggestions(
                         unit_name=unit.unit_name,
                     )
                 )
+
+    # Паттерны (отдельный проход)
+    pattern_repo = get_pattern_norm_repository()
+    if units and pattern_repo.cards:
+        pattern_norm_ids = set(pattern_repo.norm_ids)
+        prompt_versions.append(f"pattern:{pattern_repo.version}")
+        for unit in units:
+            unit_findings = _filter_findings_for_unit(findings_list, unit)
+            prompt = _build_pattern_prompt(unit, unit_findings, pattern_repo.cards)
+            response_text = _call_deepseek(
+                prompt,
+                api_key,
+                system_prompt=PATTERN_SYSTEM_PROMPT,
+                temperature=0,
+            )
+            if not response_text:
+                logger.warning("LLM patterns %s: no response", unit.unit_name)
+                continue
+            unit_suggestions = _parse_response(
+                response_text,
+                unit_findings,
+                unit,
+                pattern_norm_ids,
+                norm_lookup=pattern_repo.entries,
+            )
+            if unit_suggestions:
+                logger.info(
+                    "LLM patterns %s: received %s suggestions",
+                    unit.unit_name,
+                    len(unit_suggestions),
+                )
+                all_suggestions.extend(unit_suggestions)
+            else:
+                logger.info("LLM patterns %s: no additional suggestions", unit.unit_name)
+            diagnostics.append(
+                LLMDiagnostic(
+                    prompt=prompt,
+                    response=response_text,
+                    context_files=[f"pattern:{card.norm_id}" for card in pattern_repo.cards],
+                    source_paths=[unit.source_path],
+                    static_findings=json.loads(_serialize_findings(unit_findings)),
+                    created_at=datetime.utcnow().isoformat(),
+                    prompt_version=f"pattern:{pattern_repo.version}",
+                    unit_id=unit.unit_id,
+                    unit_name=unit.unit_name,
+                )
+            )
 
     query_units: list[QueryUnit] = []
     for source in task.sources:
@@ -385,6 +441,54 @@ def _build_query_prompt(
         - В текстовых полях избегай двойных кавычек, используй «» или одинарные кавычки.
         - lines указывай относительно исходного файла (например "CommonModules/Module.bsl:210-235").
         - Если нарушений нет, верни пустой массив [].
+
+        Ответ: строго JSON-массив без пояснений.
+        """
+    ).strip()
+
+
+def _build_pattern_prompt(
+    unit: CodeUnit,
+    findings: list[DetectorFinding],
+    norm_cards: list[NormCard],
+) -> str:
+    code_block = _extract_relevant_code(unit)
+    serialized_findings = _serialize_findings(findings)
+    norm_text = _truncate_text(
+        _format_norm_cards(norm_cards), MAX_PATTERN_NORM_TEXT_CHARS, "паттерны"
+    )
+    tags = ", ".join(sorted(unit.tags)) if unit.tags else "нет"
+    changed_desc = (
+        ", ".join(f"{start}-{end}" for start, end in unit.review_ranges)
+        if unit.review_ranges
+        else f"{unit.start_line}-{unit.end_line}"
+    )
+    return textwrap.dedent(
+        f"""
+        Модуль: {unit.source_path}
+        Единица анализа: {unit.unit_name} ({unit.unit_type}), строки {unit.start_line}–{unit.end_line}
+        Изменённые строки: {changed_desc}
+        Характерные признаки: {tags}
+
+        Код:
+        ```
+        {code_block}
+        ```
+
+        Статические нарушения (JSON, может быть пустым):
+        {serialized_findings}
+
+        Паттерны (карточки):
+        {norm_text}
+
+        Инструкция:
+        - Ищи только нарушения паттернов из списка (SRP/SoC/CQRS/Repository/Unit of Work и паттерны устойчивости/интеграций).
+        - Не повторяй статические нарушения.
+        - При низкой уверенности указывай в reason: «предполагаемое нарушение паттерна <название>».
+        - Для каждого нарушения верни norm_id, section, category, norm_text, source_reference, severity (optional),
+          evidence (массив объектов с file, lines, reason).
+        - lines указывай относительно исходного файла (например \"CommonModules/Module.bsl:210-235\").
+        - Если нарушений нет, верни [].
 
         Ответ: строго JSON-массив без пояснений.
         """
