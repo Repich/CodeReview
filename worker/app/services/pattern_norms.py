@@ -11,7 +11,8 @@ import yaml
 from worker.app.services.norms_repo import NormCard
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
-NORMS_PATH = ROOT_DIR / "pattern.yaml"
+# Используем обновленный файл с паттернами
+NORMS_PATH = ROOT_DIR / "pattern_1С.yaml"
 
 
 @dataclass
