@@ -5,6 +5,7 @@ import json
 import sys
 import uuid
 import time
+import logging
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -141,6 +142,10 @@ def process_backend_tasks(once: bool) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
     parser = argparse.ArgumentParser(description="CodeReview worker")
     parser.add_argument("--input", type=Path, help="Path to JSON task", required=False)
     parser.add_argument("--sample", action="store_true", help="Run built-in sample task")

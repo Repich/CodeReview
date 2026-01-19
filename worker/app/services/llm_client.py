@@ -118,15 +118,15 @@ def generate_ai_suggestions(
             for unit in units:
                 unit_findings = _filter_findings_for_unit(findings_list, unit)
                 norm_cards = norm_repo.cards
-                logger.info(
-                    "LLM unit %s (%s lines %s-%s): norms=%s findings=%s",
-                    unit.unit_name,
-                    unit.unit_type,
-                    unit.start_line,
-                    unit.end_line,
-                    len(norm_cards),
-                    len(unit_findings),
-                )
+                # debug: logger.info(
+                #     "LLM unit %s (%s lines %s-%s): norms=%s findings=%s",
+                #     unit.unit_name,
+                #     unit.unit_type,
+                #     unit.start_line,
+                #     unit_end_line,
+                #     len(norm_cards),
+                #     len(unit_findings),
+                # )
                 prompt = _build_unit_prompt(unit, unit_findings, norm_cards)
                 response_text = _call_deepseek(prompt, api_key)
                 if not response_text:
@@ -193,8 +193,6 @@ def generate_ai_suggestions(
                     len(unit_suggestions),
                 )
                 all_suggestions.extend(unit_suggestions)
-            else:
-                logger.info("LLM patterns %s: no additional suggestions", unit.unit_name)
             diagnostics.append(
                 LLMDiagnostic(
                     prompt=prompt,
