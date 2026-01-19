@@ -43,9 +43,14 @@ function FindingGroupCard({ base, items, sequence, showContext, sourceLookup }: 
           if (!sourceLines) return null;
           const snippet = buildLineSnippets(sourceLines, lines);
           if (!snippet) return null;
-          return { path, snippet };
+          const lineStart = lines.length ? Math.min(...lines) : null;
+          const lineEnd = lines.length ? Math.max(...lines) : null;
+          return { path, snippet, lineStart, lineEnd };
         })
-        .filter((entry): entry is { path: string; snippet: string } => Boolean(entry))
+        .filter(
+          (entry): entry is { path: string; snippet: string; lineStart: number | null; lineEnd: number | null } =>
+            Boolean(entry),
+        )
     : [];
 
   return (
@@ -91,7 +96,13 @@ function FindingGroupCard({ base, items, sequence, showContext, sourceLookup }: 
               <p className="muted" style={{ margin: '0.25rem 0' }}>
                 {block.path}
               </p>
-              <pre data-source-path={block.path}>{block.snippet}</pre>
+              <pre
+                data-source-path={block.path}
+                data-line-start={block.lineStart ? String(block.lineStart) : undefined}
+                data-line-end={block.lineEnd ? String(block.lineEnd) : undefined}
+              >
+                {block.snippet}
+              </pre>
             </div>
           ))}
         </details>

@@ -54,12 +54,24 @@ function FindingCard({ finding, sequence, showContext, sourceLookup }: Props) {
         </p>
       )}
       {finding.code_snippet && (
-        <pre>{finding.code_snippet}</pre>
+        <pre
+          data-source-path={finding.file_path || undefined}
+          data-line-start={finding.line_start ? String(finding.line_start) : undefined}
+          data-line-end={finding.line_end ? String(finding.line_end) : undefined}
+        >
+          {finding.code_snippet}
+        </pre>
       )}
       {contextSnippet && (
         <details open>
           <summary>Контекст</summary>
-          <pre data-source-path={finding.file_path || undefined}>{contextSnippet}</pre>
+          <pre
+            data-source-path={finding.file_path || undefined}
+            data-line-start={finding.line_start ? String(finding.line_start) : undefined}
+            data-line-end={finding.line_end ? String(finding.line_end) : undefined}
+          >
+            {contextSnippet}
+          </pre>
         </details>
       )}
       {(finding.norm_text || finding.norm_section) && (

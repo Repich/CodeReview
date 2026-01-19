@@ -140,7 +140,13 @@ function AIFindingCard({
                   {snippet && (
                     <details style={{ marginTop: '0.35rem' }}>
                       <summary>Фрагмент кода</summary>
-                      <pre data-source-path={file || undefined}>{snippet}</pre>
+                      <pre
+                        data-source-path={file || undefined}
+                        data-line-start={range?.start ? String(range.start) : undefined}
+                        data-line-end={range?.end ? String(range.end) : undefined}
+                      >
+                        {snippet}
+                      </pre>
                     </details>
                   )}
                 </li>

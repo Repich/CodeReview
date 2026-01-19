@@ -58,6 +58,12 @@ const formatDecimal = (value?: number | null) => {
   return value.toFixed(3);
 };
 
+const formatSourceWithLineNumbers = (lines: string[]) =>
+  lines
+    .map((line, index) => `${String(index + 1).padStart(4, ' ')}: ${line}`)
+    .join('\n')
+    .trimEnd();
+
 type FindingGroup = {
   base: Finding;
   items: Finding[];
@@ -201,7 +207,8 @@ function RunDetailsPage() {
   const runSourcesQuery = useQuery({
     queryKey: ['run-sources', id],
     queryFn: () => fetchRunSources(id!),
-    enabled: Boolean(id) && (showDiff || showAIContext || showFindingsContext),
+    enabled:
+      Boolean(id) && (showDiff || showAIContext || showFindingsContext || activeTab === 'norms'),
   });
 
   const updateAiFinding = useMutation<
@@ -320,7 +327,11 @@ function RunDetailsPage() {
   }, [isActiveRun]);
 
   useEffect(() => {
-    if (!canTeach) return undefined;
+    if (!canTeach || activeTab !== 'norms') {
+      setSelectionDraft(null);
+      setShowNormForm(false);
+      return undefined;
+    }
     const handler = () => {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) {
@@ -349,6 +360,8 @@ function RunDetailsPage() {
         return;
       }
       const file = container.getAttribute('data-source-path');
+      const lineStartAttr = container.getAttribute('data-line-start');
+      const lineEndAttr = container.getAttribute('data-line-end');
       const lines = rawText
         .split('\n')
         .map((line) => {
@@ -356,14 +369,22 @@ function RunDetailsPage() {
           return match ? Number(match[1]) : null;
         })
         .filter((value): value is number => value !== null);
-      const lineStart = lines.length ? Math.min(...lines) : null;
-      const lineEnd = lines.length ? Math.max(...lines) : null;
+      const lineStart = lines.length
+        ? Math.min(...lines)
+        : lineStartAttr
+        ? Number(lineStartAttr)
+        : null;
+      const lineEnd = lines.length
+        ? Math.max(...lines)
+        : lineEndAttr
+        ? Number(lineEndAttr)
+        : null;
       const text = rawText.length > 4000 ? `${rawText.slice(0, 4000)}…` : rawText;
       setSelectionDraft({ text, file, lineStart, lineEnd });
     };
     document.addEventListener('selectionchange', handler);
     return () => document.removeEventListener('selectionchange', handler);
-  }, [canTeach]);
+  }, [canTeach, activeTab]);
 
   const progressText = useMemo(() => {
     const runData = runQuery.data;
@@ -493,16 +514,30 @@ function RunDetailsPage() {
     });
     return map;
   }, [runSourcesQuery.data]);
+  const normSources = useMemo(() => {
+    if (!runSourcesQuery.data) return [];
+    return runSourcesQuery.data.map((source) => {
+      const lines = source.content.split('\n');
+      return {
+        path: source.path,
+        content: formatSourceWithLineNumbers(lines),
+        lineCount: lines.length,
+      };
+    });
+  }, [runSourcesQuery.data]);
   const changeRangeMap = run?.context?.change_ranges as Record<string, unknown> | undefined;
   const changeRangeCount = changeRangeMap ? Object.keys(changeRangeMap).length : 0;
   const hasChangeRanges = changeRangeCount > 0;
   const tabs = useMemo(() => {
-    const items = [
-      { id: 'findings', label: 'Найденные нарушения', count: totalFindings },
-      { id: 'ai', label: 'Предложения LLM', count: aiFindings.length },
-      {
-        id: 'complexity',
-        label: 'Когнитивная сложность',
+      const items = [
+        ...(canTeach
+          ? [{ id: 'norms', label: 'Новые нормы', count: runSourcesQuery.data?.length ?? 0 }]
+          : []),
+        { id: 'findings', label: 'Найденные нарушения', count: totalFindings },
+        { id: 'ai', label: 'Предложения LLM', count: aiFindings.length },
+        {
+          id: 'complexity',
+          label: 'Когнитивная сложность',
         count: complexityMetrics?.procedures?.length ?? 0,
       },
       {
@@ -516,6 +551,7 @@ function RunDetailsPage() {
     ];
     return items.filter((item) => (item.adminOnly ? isAdmin : true));
   }, [
+    canTeach,
     totalFindings,
     aiFindings.length,
     complexityMetrics,
@@ -523,6 +559,7 @@ function RunDetailsPage() {
     auditQuery.data,
     artifactsQuery.data,
     isAdmin,
+    runSourcesQuery.data,
   ]);
 
   if (runQuery.isLoading || findingsQuery.isLoading) {
@@ -775,190 +812,241 @@ function RunDetailsPage() {
         </div>
       </section>
 
-      {canTeach && selectionDraft && (
-        <section className="card" style={{ marginBottom: '1.5rem' }}>
-          <div className="card-header">
-            <div>
-              <h2 className="card-title">Выделение для новой нормы</h2>
-              <p className="muted">
-                {selectionDraft.file || 'Без файла'}
-                {selectionDraft.lineStart
-                  ? `:${selectionDraft.lineStart}${
-                      selectionDraft.lineEnd && selectionDraft.lineEnd !== selectionDraft.lineStart
-                        ? `-${selectionDraft.lineEnd}`
-                        : ''
-                    }`
-                  : ''}
-              </p>
+      {activeTab === 'norms' && canTeach && (
+        <>
+          <section className="card" style={{ marginBottom: '1.5rem' }}>
+            <div className="card-header">
+              <div>
+                <h2 className="card-title">Создание нормы</h2>
+                <p className="muted">Выделите фрагмент кода ниже и заполните форму.</p>
+              </div>
             </div>
-            <button className="btn btn-primary" type="button" onClick={handleOpenNormForm}>
-              Создать норму
-            </button>
-          </div>
-          <pre>{selectionDraft.text}</pre>
-        </section>
-      )}
-
-      {showNormForm && canTeach && (
-        <section className="card" style={{ marginBottom: '1.5rem' }}>
-          <div className="card-header">
-            <div>
-              <h2 className="card-title">Новая норма</h2>
-              <p className="muted">Заполните обязательные поля и сохраните норму.</p>
+            {selectionDraft && (
+              <div className="card" style={{ marginBottom: '1rem' }}>
+                <div className="card-header">
+                  <div>
+                    <h3 className="card-title">Выделение</h3>
+                    <p className="muted">
+                      {selectionDraft.file || 'Без файла'}
+                      {selectionDraft.lineStart
+                        ? `:${selectionDraft.lineStart}${
+                            selectionDraft.lineEnd && selectionDraft.lineEnd !== selectionDraft.lineStart
+                              ? `-${selectionDraft.lineEnd}`
+                              : ''
+                          }`
+                        : ''}
+                    </p>
+                  </div>
+                  <button className="btn btn-primary" type="button" onClick={handleOpenNormForm}>
+                    Создать норму
+                  </button>
+                </div>
+                <pre>{selectionDraft.text}</pre>
+              </div>
+            )}
+            {showNormForm && (
+              <div className="card" style={{ marginBottom: '1rem' }}>
+                <div className="card-header">
+                  <div>
+                    <h3 className="card-title">Новая норма</h3>
+                    <p className="muted">Заполните обязательные поля и сохраните норму.</p>
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setShowNormForm(false)}
+                  >
+                    Скрыть
+                  </button>
+                </div>
+                {selectionDraft && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <p className="muted" style={{ marginBottom: '0.35rem' }}>
+                      Пример/контекст:
+                    </p>
+                    <pre>{selectionDraft.text}</pre>
+                  </div>
+                )}
+                <form onSubmit={handleNormSubmit} className="form-grid" style={{ gap: '1rem' }}>
+                  <div className="field">
+                    <label htmlFor="norm-id-inline">norm_id</label>
+                    <input
+                      id="norm-id-inline"
+                      type="text"
+                      value={normId}
+                      onChange={(event) => setNormId(event.target.value)}
+                      placeholder="CUSTOM_001"
+                    />
+                    <small className="muted">
+                      Уникальный идентификатор, латиница и подчёркивания.
+                    </small>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="norm-title-inline">Название</label>
+                    <input
+                      id="norm-title-inline"
+                      type="text"
+                      value={normTitle}
+                      onChange={(event) => setNormTitle(event.target.value)}
+                      placeholder="Краткая формулировка"
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="norm-section-inline">Раздел</label>
+                    <input
+                      id="norm-section-inline"
+                      type="text"
+                      value={normSection}
+                      onChange={(event) => setNormSection(event.target.value)}
+                      placeholder="Запросы / Транзакции / Безопасность"
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="norm-scope-inline">Область</label>
+                    <input
+                      id="norm-scope-inline"
+                      type="text"
+                      value={normScope}
+                      onChange={(event) => setNormScope(event.target.value)}
+                      placeholder="сервер / клиент / любой модуль"
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="norm-detector-inline">Тип детектора</label>
+                    <input
+                      id="norm-detector-inline"
+                      type="text"
+                      value={normDetectorType}
+                      onChange={(event) => setNormDetectorType(event.target.value)}
+                      placeholder="custom/manual"
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="norm-check-inline">Тип проверки</label>
+                    <input
+                      id="norm-check-inline"
+                      type="text"
+                      value={normCheckType}
+                      onChange={(event) => setNormCheckType(event.target.value)}
+                      placeholder="manual/llm/static"
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="norm-severity-inline">Серьёзность</label>
+                    <select
+                      id="norm-severity-inline"
+                      value={normSeverity}
+                      onChange={(event) => setNormSeverity(event.target.value)}
+                    >
+                      <option value="critical">critical</option>
+                      <option value="major">major</option>
+                      <option value="minor">minor</option>
+                      <option value="info">info</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="norm-version-inline">Версия</label>
+                    <input
+                      id="norm-version-inline"
+                      type="number"
+                      min={1}
+                      value={normVersion}
+                      onChange={(event) => setNormVersion(event.target.value)}
+                    />
+                  </div>
+                  <div className="field" style={{ gridColumn: '1 / -1' }}>
+                    <label htmlFor="norm-text-inline">Текст нормы</label>
+                    <textarea
+                      id="norm-text-inline"
+                      rows={6}
+                      value={normText}
+                      onChange={(event) => setNormText(event.target.value)}
+                    />
+                    <small className="muted">Полное правило с формулировкой нарушения.</small>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="norm-source-ref-inline">Источник (опционально)</label>
+                    <input
+                      id="norm-source-ref-inline"
+                      type="text"
+                      value={normSourceRef}
+                      onChange={(event) => setNormSourceRef(event.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="norm-source-excerpt-inline">Пример/выдержка (опционально)</label>
+                    <input
+                      id="norm-source-excerpt-inline"
+                      type="text"
+                      value={normSourceExcerpt}
+                      onChange={(event) => setNormSourceExcerpt(event.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="norm-code-inline">Применимо к коду</label>
+                    <input
+                      id="norm-code-inline"
+                      type="checkbox"
+                      checked={normCodeApplicable}
+                      onChange={(event) => setNormCodeApplicable(event.target.checked)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="norm-active-inline">Активна</label>
+                    <input
+                      id="norm-active-inline"
+                      type="checkbox"
+                      checked={normIsActive}
+                      onChange={(event) => setNormIsActive(event.target.checked)}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={createNormMutation.isPending}
+                  >
+                    {createNormMutation.isPending ? 'Сохраняем…' : 'Создать норму'}
+                  </button>
+                </form>
+                {normMessage && (
+                  <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>
+                    {normMessage}
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+          <section className="card" style={{ marginBottom: '1.5rem' }}>
+            <div className="card-header">
+              <div>
+                <h2 className="card-title">Исходный код запуска</h2>
+                <p className="muted">{normSources.length} файлов</p>
+              </div>
+              {runSourcesQuery.isLoading && <span className="muted">Загружаем…</span>}
             </div>
-            <button className="btn btn-secondary" type="button" onClick={() => setShowNormForm(false)}>
-              Скрыть
-            </button>
-          </div>
-          {selectionDraft && (
-            <div style={{ marginBottom: '1rem' }}>
-              <p className="muted" style={{ marginBottom: '0.35rem' }}>
-                Пример/контекст:
-              </p>
-              <pre>{selectionDraft.text}</pre>
-            </div>
-          )}
-          <form onSubmit={handleNormSubmit} className="form-grid" style={{ gap: '1rem' }}>
-            <div className="field">
-              <label htmlFor="norm-id-inline">norm_id</label>
-              <input
-                id="norm-id-inline"
-                type="text"
-                value={normId}
-                onChange={(event) => setNormId(event.target.value)}
-                placeholder="CUSTOM_001"
-              />
-              <small className="muted">Уникальный идентификатор, латиница и подчёркивания.</small>
-            </div>
-            <div className="field">
-              <label htmlFor="norm-title-inline">Название</label>
-              <input
-                id="norm-title-inline"
-                type="text"
-                value={normTitle}
-                onChange={(event) => setNormTitle(event.target.value)}
-                placeholder="Краткая формулировка"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="norm-section-inline">Раздел</label>
-              <input
-                id="norm-section-inline"
-                type="text"
-                value={normSection}
-                onChange={(event) => setNormSection(event.target.value)}
-                placeholder="Запросы / Транзакции / Безопасность"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="norm-scope-inline">Область</label>
-              <input
-                id="norm-scope-inline"
-                type="text"
-                value={normScope}
-                onChange={(event) => setNormScope(event.target.value)}
-                placeholder="сервер / клиент / любой модуль"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="norm-detector-inline">Тип детектора</label>
-              <input
-                id="norm-detector-inline"
-                type="text"
-                value={normDetectorType}
-                onChange={(event) => setNormDetectorType(event.target.value)}
-                placeholder="custom/manual"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="norm-check-inline">Тип проверки</label>
-              <input
-                id="norm-check-inline"
-                type="text"
-                value={normCheckType}
-                onChange={(event) => setNormCheckType(event.target.value)}
-                placeholder="manual/llm/static"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="norm-severity-inline">Серьёзность</label>
-              <select
-                id="norm-severity-inline"
-                value={normSeverity}
-                onChange={(event) => setNormSeverity(event.target.value)}
-              >
-                <option value="critical">critical</option>
-                <option value="major">major</option>
-                <option value="minor">minor</option>
-                <option value="info">info</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="norm-version-inline">Версия</label>
-              <input
-                id="norm-version-inline"
-                type="number"
-                min={1}
-                value={normVersion}
-                onChange={(event) => setNormVersion(event.target.value)}
-              />
-            </div>
-            <div className="field" style={{ gridColumn: '1 / -1' }}>
-              <label htmlFor="norm-text-inline">Текст нормы</label>
-              <textarea
-                id="norm-text-inline"
-                rows={6}
-                value={normText}
-                onChange={(event) => setNormText(event.target.value)}
-              />
-              <small className="muted">Полное правило с формулировкой нарушения.</small>
-            </div>
-            <div className="field">
-              <label htmlFor="norm-source-ref-inline">Источник (опционально)</label>
-              <input
-                id="norm-source-ref-inline"
-                type="text"
-                value={normSourceRef}
-                onChange={(event) => setNormSourceRef(event.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="norm-source-excerpt-inline">Пример/выдержка (опционально)</label>
-              <input
-                id="norm-source-excerpt-inline"
-                type="text"
-                value={normSourceExcerpt}
-                onChange={(event) => setNormSourceExcerpt(event.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="norm-code-inline">Применимо к коду</label>
-              <input
-                id="norm-code-inline"
-                type="checkbox"
-                checked={normCodeApplicable}
-                onChange={(event) => setNormCodeApplicable(event.target.checked)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="norm-active-inline">Активна</label>
-              <input
-                id="norm-active-inline"
-                type="checkbox"
-                checked={normIsActive}
-                onChange={(event) => setNormIsActive(event.target.checked)}
-              />
-            </div>
-            <button type="submit" className="btn btn-primary" disabled={createNormMutation.isPending}>
-              {createNormMutation.isPending ? 'Сохраняем…' : 'Создать норму'}
-            </button>
-          </form>
-          {normMessage && (
-            <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>
-              {normMessage}
-            </p>
-          )}
-        </section>
+            {runSourcesQuery.error && (
+              <p className="alert alert-error">Не удалось загрузить исходный код запуска.</p>
+            )}
+            {!runSourcesQuery.isLoading && !runSourcesQuery.error && !normSources.length && (
+              <div className="empty-state">Исходный код не найден в артефактах.</div>
+            )}
+            {normSources.map((source) => (
+              <details key={source.path} className="card" open>
+                <summary>
+                  {source.path}{' '}
+                  <span className="muted">({source.lineCount} строк)</span>
+                </summary>
+                <pre
+                  data-source-path={source.path}
+                  data-line-start="1"
+                  data-line-end={String(source.lineCount)}
+                >
+                  {source.content}
+                </pre>
+              </details>
+            ))}
+          </section>
+        </>
       )}
 
       <div className="tabs">
