@@ -234,7 +234,7 @@ def submit_results(
     review_run.detectors_version = payload.detectors_version
     review_run.norms_version = payload.norms_version
     if payload.llm_prompt_version is not None:
-        review_run.llm_prompt_version = payload.llm_prompt_version
+        review_run.llm_prompt_version = payload.llm_prompt_version[:50]
     if payload.metrics:
         context = dict(review_run.context or {})
         metrics = dict(context.get("metrics") or {})
