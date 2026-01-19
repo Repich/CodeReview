@@ -442,43 +442,6 @@ textarea {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 30;
-  padding: 2rem;
-}
-
-.modal {
-  width: min(720px, 100%);
-  max-height: 80vh;
-  overflow: auto;
-  background: var(--surface);
-  border-radius: 1rem;
-  padding: 1.5rem;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
-  border: 1px solid var(--border);
-}
-
-.modal-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
 .tab-button:hover {
   color: var(--text);
   border-color: var(--primary);

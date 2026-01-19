@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, FormEvent } from 'react';
+import { useState, useMemo, useEffect, FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
@@ -122,7 +122,6 @@ function RunDetailsPage() {
     lineStart: number | null;
     lineEnd: number | null;
   } | null>(null);
-  const [showSelectionModal, setShowSelectionModal] = useState(false);
   const [showNormForm, setShowNormForm] = useState(false);
   const [normId, setNormId] = useState('');
   const [normTitle, setNormTitle] = useState('');
@@ -139,7 +138,6 @@ function RunDetailsPage() {
   const [normVersion, setNormVersion] = useState('1');
   const [normMessage, setNormMessage] = useState<string | null>(null);
   const [normState, setNormState] = useState<'idle' | 'success' | 'error'>('idle');
-  const selectionTimerRef = useRef<number | null>(null);
 
   const runQuery = useQuery({
     queryKey: ['run', id],
@@ -329,92 +327,10 @@ function RunDetailsPage() {
   }, [isActiveRun]);
 
   useEffect(() => {
-    if (!canTeach || activeTab !== 'norms') {
-      setSelectionDraft(null);
-      setShowNormForm(false);
-      setShowSelectionModal(false);
-      return undefined;
-    }
-    const handler = () => {
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed) {
-        if (selectionTimerRef.current) {
-          window.clearTimeout(selectionTimerRef.current);
-          selectionTimerRef.current = null;
-        }
-        setSelectionDraft(null);
-        setShowSelectionModal(false);
-        return;
-      }
-      const rawText = selection.toString().trim();
-      if (!rawText) {
-        if (selectionTimerRef.current) {
-          window.clearTimeout(selectionTimerRef.current);
-          selectionTimerRef.current = null;
-        }
-        setSelectionDraft(null);
-        setShowSelectionModal(false);
-        return;
-      }
-      const anchorElement =
-        selection.anchorNode instanceof HTMLElement
-          ? selection.anchorNode
-          : selection.anchorNode?.parentElement || null;
-      const focusElement =
-        selection.focusNode instanceof HTMLElement
-          ? selection.focusNode
-          : selection.focusNode?.parentElement || null;
-      const container =
-        anchorElement?.closest?.('[data-source-path]') ||
-        focusElement?.closest?.('[data-source-path]') ||
-        null;
-      if (!container) {
-        if (selectionTimerRef.current) {
-          window.clearTimeout(selectionTimerRef.current);
-          selectionTimerRef.current = null;
-        }
-        setSelectionDraft(null);
-        setShowSelectionModal(false);
-        return;
-      }
-      const file = container.getAttribute('data-source-path');
-      const lineStartAttr = container.getAttribute('data-line-start');
-      const lineEndAttr = container.getAttribute('data-line-end');
-      const lines = rawText
-        .split('\n')
-        .map((line) => {
-          const match = line.match(/^\s*(\d+)\s*:/);
-          return match ? Number(match[1]) : null;
-        })
-        .filter((value): value is number => value !== null);
-      const lineStart = lines.length
-        ? Math.min(...lines)
-        : lineStartAttr
-        ? Number(lineStartAttr)
-        : null;
-      const lineEnd = lines.length
-        ? Math.max(...lines)
-        : lineEndAttr
-        ? Number(lineEndAttr)
-        : null;
-      const text = rawText.length > 4000 ? `${rawText.slice(0, 4000)}…` : rawText;
-      if (selectionTimerRef.current) {
-        window.clearTimeout(selectionTimerRef.current);
-      }
-      selectionTimerRef.current = window.setTimeout(() => {
-        setSelectionDraft({ text, file, lineStart, lineEnd });
-        setShowSelectionModal(true);
-      }, 200);
-    };
-    document.addEventListener('selectionchange', handler);
-    return () => {
-      document.removeEventListener('selectionchange', handler);
-      if (selectionTimerRef.current) {
-        window.clearTimeout(selectionTimerRef.current);
-        selectionTimerRef.current = null;
-      }
-    };
-  }, [canTeach, activeTab]);
+    if (activeTab === 'norms' && canTeach) return;
+    setSelectionDraft(null);
+    setShowNormForm(false);
+  }, [activeTab, canTeach]);
 
   const progressText = useMemo(() => {
     const runData = runQuery.data;
@@ -634,12 +550,62 @@ function RunDetailsPage() {
   };
 
   const handleOpenNormForm = () => {
-    if (!selectionDraft) return;
-    if (!showNormForm && !normSourceExcerpt) {
-      setNormSourceExcerpt(selectionDraft.text);
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) {
+      setNormMessage('Сначала выделите фрагмент кода в блоке исходников.');
+      setNormState('error');
+      return;
     }
+    const rawText = selection.toString().trim();
+    if (!rawText) {
+      setNormMessage('Сначала выделите фрагмент кода в блоке исходников.');
+      setNormState('error');
+      return;
+    }
+    const anchorElement =
+      selection.anchorNode instanceof HTMLElement
+        ? selection.anchorNode
+        : selection.anchorNode?.parentElement || null;
+    const focusElement =
+      selection.focusNode instanceof HTMLElement
+        ? selection.focusNode
+        : selection.focusNode?.parentElement || null;
+    const container =
+      anchorElement?.closest?.('[data-source-path]') ||
+      focusElement?.closest?.('[data-source-path]') ||
+      null;
+    if (!container) {
+      setNormMessage('Выделите код внутри блока исходников на вкладке "Новые нормы".');
+      setNormState('error');
+      return;
+    }
+    const file = container.getAttribute('data-source-path');
+    const lineStartAttr = container.getAttribute('data-line-start');
+    const lineEndAttr = container.getAttribute('data-line-end');
+    const lines = rawText
+      .split('\n')
+      .map((line) => {
+        const match = line.match(/^\s*(\d+)\s*:/);
+        return match ? Number(match[1]) : null;
+      })
+      .filter((value): value is number => value !== null);
+    const lineStart = lines.length
+      ? Math.min(...lines)
+      : lineStartAttr
+      ? Number(lineStartAttr)
+      : null;
+    const lineEnd = lines.length
+      ? Math.max(...lines)
+      : lineEndAttr
+      ? Number(lineEndAttr)
+      : null;
+    const text = rawText.length > 4000 ? `${rawText.slice(0, 4000)}…` : rawText;
+    const draft = { text, file, lineStart, lineEnd };
+    setSelectionDraft(draft);
+    setNormSourceExcerpt(draft.text);
+    setNormMessage(null);
+    setNormState('idle');
     setShowNormForm(true);
-    setShowSelectionModal(false);
   };
 
   const handleNormSubmit = async (event: FormEvent) => {
@@ -873,18 +839,22 @@ function RunDetailsPage() {
                           }`
                         : ''
                     }`
-                  : 'Выделите фрагмент кода ниже'}
+                  : 'Выделите фрагмент кода и нажмите "Создать норму".'}
               </div>
             </div>
             <button
               className="btn btn-primary"
               type="button"
               onClick={handleOpenNormForm}
-              disabled={!selectionDraft}
             >
               Создать норму
             </button>
           </div>
+          {normMessage && !showNormForm && (
+            <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>
+              {normMessage}
+            </p>
+          )}
           {showNormForm && (
             <section className="card" style={{ marginBottom: '1.5rem' }}>
               <div className="card-header">
@@ -1055,40 +1025,6 @@ function RunDetailsPage() {
                 </p>
               )}
             </section>
-          )}
-          {showSelectionModal && selectionDraft && (
-            <div className="modal-backdrop" role="dialog" aria-modal="true">
-              <div className="modal">
-                <div className="modal-header">
-                  <div>
-                    <h3 className="card-title">Выделение для новой нормы</h3>
-                    <p className="muted">
-                      {selectionDraft.file || 'Без файла'}
-                      {selectionDraft.lineStart
-                        ? `:${selectionDraft.lineStart}${
-                            selectionDraft.lineEnd && selectionDraft.lineEnd !== selectionDraft.lineStart
-                              ? `-${selectionDraft.lineEnd}`
-                              : ''
-                          }`
-                        : ''}
-                    </p>
-                  </div>
-                </div>
-                <pre>{selectionDraft.text}</pre>
-                <div className="modal-actions">
-                  <button className="btn btn-primary" type="button" onClick={handleOpenNormForm}>
-                    Заполнить норму
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    onClick={() => setShowSelectionModal(false)}
-                  >
-                    Закрыть
-                  </button>
-                </div>
-              </div>
-            </div>
           )}
           <section className="card" style={{ marginBottom: '1.5rem' }}>
             <div className="card-header">
