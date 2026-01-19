@@ -855,3 +855,1476 @@ norms:
     source_reference: "norms.yaml"
     priority: 1
     exceptions: ""
+  - norm_id: TIME_USE_SESSION_TIME
+    section: Работа в разных часовых поясах
+    category: code_style
+    title: На сервере использовать ТекущаяДатаСеанса
+    norm_text: Во всех серверных процедурах и функциях вместо функции ТекущаяДата, которая возвращает дату и время серверного
+      компьютера, следует использовать функцию ТекущаяДатаСеанса, которая приводит время сервера к часовому поясу пользовательского
+      сеанса.
+    tags:
+    - code-style
+    scope: серверный код
+    code_applicability: true
+    automation_hint: code
+    check_type: static
+    default_severity: major
+    detector_type: timezones
+  - norm_id: MSG_NOT_SOOBSHIT
+    section: Сообщения пользователю
+    category: messages_notifications
+    title: Не использовать метод Сообщить
+    norm_text: Метод Сообщить применять не следует. Вместо него рекомендуется использовать объект СообщениеПользователю или
+      стандартные обертки библиотек (например, ОбщегоНазначенияКлиент.СообщитьПользователю).
+    tags:
+    - advisory
+    - messages
+    scope: любые модули
+    code_applicability: true
+    automation_hint: mixed
+    check_type: static
+    default_severity: major
+    detector_type: messages
+  - norm_id: QUERY_NO_COMMENT_PATCHING
+    section: Оформление текстов запросов
+    category: queries_performance
+    title: Не модифицировать текст запросов через комментарии
+    norm_text: Недопустимо использовать комментарии для модификации текста запроса, например оставлять закомментированные фрагменты
+      в тексте запроса и затем менять их на выполняемые с помощью СтрЗаменить. Текст запроса должен формироваться явно.
+    tags:
+    - queries
+    scope: все тексты запросов
+    code_applicability: true
+    automation_hint: code
+    check_type: static
+    default_severity: major
+    detector_type: queries
+  - norm_id: TRX_PAIR_BEGIN_END
+    section: Транзакции
+    category: transactions_locks
+    title: Парность НачатьТранзакцию и Зафиксировать/Отменить
+    norm_text: Все вызовы НачатьТранзакцию с одной стороны и ЗафиксироватьТранзакцию или ОтменитьТранзакцию с другой стороны
+      должны быть парными. Нельзя начинать транзакцию без последующей фиксации или отмены.
+    tags:
+    - transactions
+    scope: все приложения
+    code_applicability: true
+    automation_hint: code
+    check_type: static
+    default_severity: critical
+    detector_type: transactions
+  - norm_id: TRX_SAME_METHOD
+    section: Транзакции
+    category: transactions_locks
+    title: Начало и конец транзакции в одном методе
+    norm_text: Начало транзакции и ее фиксация или отмена должны происходить в контексте одного метода. Не допускается, чтобы
+      НачатьТранзакцию вызывалась в одном методе, а ЗафиксироватьТранзакцию или ОтменитьТранзакцию — в другом.
+    tags:
+    - transactions
+    scope: все приложения
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: transactions
+  - norm_id: TRX_WITH_TRY
+    section: Транзакции
+    category: transactions_locks
+    title: Транзакция в блоке Попытка/Исключение
+    norm_text: Код, выполняемый в явной транзакции, должен располагаться внутри блока Попытка/Исключение. В случае возникновения
+      ошибки внутри транзакции необходимо обеспечить корректное завершение транзакции.
+    tags:
+    - transactions
+    scope: все приложения
+    code_applicability: true
+    automation_hint: code
+    check_type: static
+    default_severity: critical
+    detector_type: transactions
+  - norm_id: TRX_ROLLBACK_ON_EXCEPTION
+    section: Транзакции
+    category: transactions_locks
+    title: В Исключение сначала ОтменитьТранзакцию
+    norm_text: В обработчике Исключение для кода, выполняющего явную транзакцию, сначала следует вызвать ОтменитьТранзакцию,
+      и только после этого выполнять другие действия, например вывод сообщения пользователю или запись в журнал регистрации.
+    tags:
+    - transactions
+    scope: все приложения
+    code_applicability: true
+    automation_hint: code
+    check_type: static
+    default_severity: critical
+    detector_type: transactions
+  - norm_id: TRX_NO_DB_ACCESS_AFTER_ERROR
+    section: Транзакции
+    category: transactions_locks
+    title: Не обращаться к базе в ошибочной транзакции
+    norm_text: Если в активной транзакции уже происходили ошибки и транзакция не была отменена, дальнейшие обращения к базе
+      данных могут приводить к ошибке "В этой транзакции уже происходили ошибки". В такой ситуации следует сначала явно отменить
+      транзакцию.
+    tags:
+    - transactions
+    scope: все приложения
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: transactions
+  - norm_id: TRX_MIN_SCOPE
+    section: Транзакции
+    category: transactions_locks
+    title: Минимизировать объём кода в транзакции
+    norm_text: В рамках транзакции следует стремиться выполнять минимум действий, только те, которые невозможно выполнить вне
+      транзакции без нарушения целостности данных. Не следует в транзакции вызывать внешние ресурсы (сетевые папки, файлы, веб-сервисы
+      и т.п.).
+    tags:
+    - transactions
+    scope: все приложения
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: transactions
+  - norm_id: SEC_SERVER_ENTRY_POINTS
+    section: Безопасность прикладного интерфейса сервера
+    category: code_style
+    title: Опасные точки входа в серверный код
+    norm_text: 'Повышенный риск представляют серверные процедуры и функции, вызываемые с клиента: экспортные процедуры и функции
+      общих модулей с признаком Вызов сервера, а также любые процедуры и функции модулей форм, объявленные с директивами &НаСервере
+      и &НаСервереБезКонте…'
+    tags:
+    - code-style
+    scope: управляемое и обычное приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: static
+    default_severity: major
+    detector_type: security
+  - norm_id: SEC_FORM_SERVER_LOGIC
+    section: Безопасность и архитектура модулей форм
+    category: code_style
+    title: Не размещать бизнес-логику в серверных методах форм
+    norm_text: В серверных процедурах и функциях модулей форм не рекомендуется размещать бизнес-логику, не относящуюся непосредственно
+      к клиент-серверному взаимодействию и обработке реквизитов формы.
+    tags:
+    - advisory
+    - code-style
+    scope: модули форм
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+  - norm_id: SEC_NO_DYNAMIC_CODE
+    section: Безопасность
+    category: queries_performance
+    title: Не выполнять внешние тексты кода и запросов
+    norm_text: Любые возможности выполнения внешнего кода или произвольных текстов запросов на сервере представляют серьезную
+      угрозу безопасности системы. Следует избегать конструкций, позволяющих выполнять произвольный код по данным пользователя.
+    tags:
+    - queries
+    scope: серверный код
+    code_applicability: true
+    automation_hint: code
+    check_type: static
+    default_severity: critical
+    detector_type: security
+  - norm_id: DOC_MOST_SHOULD_POST
+    section: Требования к проведению документов
+    category: data_model_registers
+    title: Большинство документов должны проводиться
+    norm_text: Регистрация события в системе (отражение в учете) выполняется посредством проведения документа. Непроведенный
+      документ — черновик без проверок и участия в учете; проведенный документ — итог, который должен участвовать в учете.
+    tags:
+    - advisory
+    - data-model
+    scope: документы
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: documents
+  - norm_id: DOC_STATUSES_CONTROL_AFTER_POST
+    section: Требования к проведению документов
+    category: governance_release
+    title: Статусы контролируются после проведения
+    norm_text: Если документ проходит несколько этапов (статусов), то проведение фиксирует первичное отражение в учете, а смена
+      статусов проведенного документа сопровождается дополнительными проверками и заполнением данных.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: документы со статусами
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: documents
+  - norm_id: DOC_NON_POSTING_EXCEPTIONS
+    section: Требования к проведению документов
+    category: data_model_registers
+    title: Исключения для непроводимых документов
+    norm_text: Не проводить допускается только те документы, которые не предназначены для отражения событий в учете и служат
+      для регистрации заявок/инициатив без учетных последствий.
+    tags:
+    - data-model
+    scope: документы
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: documents
+  - norm_id: DOC_SAVE_IN_POST_MODE
+    section: Требования к проведению документов
+    category: data_model_registers
+    title: Запись сразу в режиме проведения
+    norm_text: Если пользователь должен одновременно зарегистрировать событие и отразить его в учете, документ следует записывать
+      сразу в режиме проведения, без дополнительного шага "Провести" позже. Нельзя перекладывать решение на пользователя.
+    tags:
+    - data-model
+    scope: документы
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: documents
+  - norm_id: DOC_REPOST_STABLE
+    section: Требования к проведению документов
+    category: ui_forms_behavior
+    title: Повторное проведение без изменений
+    norm_text: Если в документе не менялись данные, влияющие на проводки, повторное проведение не должно менять сформированные
+      движения и результаты проведения.
+    tags:
+    - forms
+    - ui
+    scope: документы
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: documents
+  - norm_id: DOC_MOVEMENTS_NOT_DEPEND_ON_REGISTERS
+    section: Требования к проведению документов
+    category: data_model_registers
+    title: Проводки не зависят от остатков
+    norm_text: Алгоритмы формирования движений должны по максимуму избегать зависимости от текущего состояния регистров (остатков).
+      Результат проведения не должен меняться от внешнего состояния базы.
+    tags:
+    - data-model
+    scope: документы
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: documents
+  - norm_id: DOC_USE_DOCUMENT_DATA_FOR_MOVEMENTS
+    section: Требования к проведению документов
+    category: ui_forms_behavior
+    title: Проводки опираются на данные документа
+    norm_text: Для выполнения стабильного проведения документ должен хранить все необходимые данные, чтобы формировать движения
+      без обращения к внешним источникам. Данные, не сохраняемые в документе, не должны влиять на проводки.
+    tags:
+    - forms
+    - ui
+    scope: документы
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: documents
+  - norm_id: DOC_HANDLE_EXTERNAL_CHANGES
+    section: Требования к проведению документов
+    category: background_jobs
+    title: Реакция на внешние изменения
+    norm_text: 'Если зависимость от внешних настроек или данных устранить нельзя, необходимо предусмотреть механизм обработки:
+      фоновые пересчеты, контрольные задания или уведомление пользователя о необходимости перепроведения.'
+    tags:
+    - reg-tasks
+    scope: документы
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: documents
+  - norm_id: DOC_STORE_EXTERNAL_DATA_SNAPSHOT
+    section: Требования к проведению документов
+    category: data_model_registers
+    title: Сохранять внешние данные в документе
+    norm_text: Если пользователь может менять значения внешних реквизитов (НСИ), влияющих на формирования движений, актуальные
+      значения следует сохранять в самом документе для повторного проведения.
+    tags:
+    - data-model
+    scope: документы
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: documents
+  - norm_id: DOC_MINIMIZE_OPTION_INFLUENCE
+    section: Требования к проведению документов
+    category: code_style
+    title: Настройки минимально влияют на движения
+    norm_text: Настройки программы (функциональные опции и т.п.) должны оказывать минимальное влияние на результат проведения.
+      Пользователь не должен получать разные проводки лишь из-за смены опций.
+    tags:
+    - code-style
+    scope: документы
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: documents
+  - norm_id: DOC_REQUIRE_REPOST_AFTER_LOGIC_CHANGE
+    section: Требования к проведению документов
+    category: ui_forms_behavior
+    title: Перепроведение при изменении логики
+    norm_text: При изменении логики формирования движений необходимо либо обеспечить актуализацию существующих документов обработчиками
+      обновления информационной базы, либо требовать их перепроведения.
+    tags:
+    - forms
+    - ui
+    scope: документы
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: documents
+  - norm_id: ROLE_ATOMIC_PROFILES
+    section: Настройка ролей и прав доступа
+    category: security_access
+    title: Роли атомарны и собираются в профили
+    norm_text: Роли создаются «атомарными», т.е. дающими права на доступ к элементарным функциям программы. Из этих ролей формируются
+      профили пользователей, назначаемые средствами БСП.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+  - norm_id: ROLE_FULL_ACCESS_SCOPE
+    section: Настройка ролей и прав доступа
+    category: security_access
+    title: Роли ПолныеПрава и АдминистраторСистемы
+    norm_text: Роль ПолныеПрава вместе с ролью АдминистраторСистемы обеспечивает неограниченный доступ без RLS ко всем объектам.
+      Эти роли служат базой для административных задач.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+  - norm_id: ROLE_NO_INTERACTIVE_DELETE
+    section: Настройка ролей и прав доступа
+    category: security_access
+    title: Запрет интерактивного удаления
+    norm_text: Ни одна роль (включая ПолныеПрава и АдминистраторСистемы) не должна предоставлять право на интерактивное удаление
+      ссылочных объектов. После создания нового объекта права удаления в ролях нужно отключать вручную.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+  - norm_id: ROLE_DELETE_ONLY_ADMINS
+    section: Настройка ролей и прав доступа
+    category: security_access
+    title: Удаление ссылочных объектов
+    norm_text: Право удалять ссылочные объекты должно предоставляться только ролям ПолныеПрава и АдминистраторСистемы.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+  - norm_id: ROLE_SET_RIGHTS_NEW_OBJECTS
+    section: Настройка ролей и прав доступа
+    category: security_access
+    title: Флаг прав для новых объектов
+    norm_text: Флаг «Устанавливать права для новых объектов» должен быть включен только у роли ПолныеПрава. Для всех остальных
+      ролей этот флаг должен быть снят.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+  - norm_id: ROLE_ADMIN_ONLY_PRIVILEGES
+    section: Настройка ролей и прав доступа
+    category: security_access
+    title: Админские права без дополнительных ролей
+    norm_text: Если право предназначено только для администратора системы, достаточно включить его в роли ПолныеПрава или АдминистраторСистемы.
+      Создавать отдельные роли для таких прав не требуется.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+  - norm_id: ROLE_PRIVILEGED_DOCUMENTS
+    section: Настройка ролей и прав доступа
+    category: security_access
+    title: Документы проводят в привилегированном режиме
+    norm_text: Во всех документах, предполагающих проведение, должны быть включены флаги «Привилегированный режим при проведении»
+      и «Привилегированный режим при отмене проведения», чтобы не требовать ролей на изменение регистров.
+    tags:
+    - security
+    scope: документы
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+  - norm_id: ROLE_PRIVILEGED_FUNC_OPTIONS
+    section: Настройка ролей и прав доступа
+    category: security_access
+    title: Функциональные опции и привилегированный режим
+    norm_text: Во всех функциональных опциях должны быть включены флаги привилегированного получения. Исключение составляют
+      специально спроектированные параметризированные опции с разными значениями для разных ролей.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+  - norm_id: ROLE_NO_GENERIC_RIGHTS
+    section: Настройка ролей и прав доступа
+    category: security_access
+    title: Общие права только в стандартных ролях
+    norm_text: Не допускается создавать собственные роли, предоставляющие общие права (Администрирование, Управление пользователями
+      и т.п.). Эти права должны остаться в стандартных ролях БСП.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+  - norm_id: ROLE_NO_CROSS_SUBSYSTEM
+    section: Настройка ролей и прав доступа
+    category: security_access
+    title: Роли не пересекают подсистемы
+    norm_text: Роль не должна давать права на объекты, относящиеся к другим подсистемам. Роли проектируют внутри контекста конкретной
+      подсистемы.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+  - norm_id: STD_ROLES_NEED_DESIGN
+    section: Стандартные роли
+    category: security_access
+    title: Проектирование стандартных ролей
+    norm_text: Если конфигурация использует разграничение прав, необходимо заранее спроектировать стандартный набор ролей, соответствующий
+      типовым обязанностям пользователей, чтобы на внедрении не пришлось создавать новые роли.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLES'
+  - norm_id: STD_ROLES_CORRESPOND_POSITIONS
+    section: Стандартные роли
+    category: ui_forms_behavior
+    title: Роли соответствуют должностным обязанностям
+    norm_text: В простейшем случае роли напрямую соответствуют должностным обязанностям пользователей. Профиль пользователя
+      формируют из стандартных ролей без дублирования прав.
+    tags:
+    - forms
+    - ui
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLES'
+  - norm_id: STD_ROLE_FULLACCESS
+    section: Стандартные роли
+    category: security_access
+    title: Роль ПолныеПрава
+    norm_text: Роль ПолныеПрава (FullAccess) обязательна и предоставляет полный доступ ко всем объектам без учёта RLS. Она используется
+      только администраторами.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_SYSADMIN
+    section: Стандартные роли
+    category: ui_forms_behavior
+    title: Роль АдминистраторСистемы
+    norm_text: Роль АдминистраторСистемы (SystemAdministrator) обязательна и дополняет ПолныеПрава административными функциями
+      платформы, необходимыми для сопровождения.
+    tags:
+    - forms
+    - ui
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_INTERACTIVE_EXTERNAL
+    section: Стандартные роли
+    category: reporting_printing
+    title: Интерактивное открытие внешних отчетов
+    norm_text: Роль ИнтерактивноеОткрытиеВнешнихОтчетовИОбработок предоставляет права на запуск внешних файлов и должна присутствовать
+      во всех конфигурациях, где такая возможность необходима.
+    tags:
+    - reports
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_BASE_SET
+    section: Стандартные роли
+    category: reporting_printing
+    title: Базовый набор стандартных ролей
+    norm_text: Роли ПолныеПрава, АдминистраторСистемы и ИнтерактивноеОткрытиеВнешнихОтчетовИОбработок должны включаться в каждую
+      конфигурацию по умолчанию.
+    tags:
+    - reports
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_LIMITED_DELETE
+    section: Стандартные роли
+    category: security_access
+    title: Отдельные роли для удалений
+    norm_text: Если требуется разрешить удаление объектов пользователям без Полных прав, рекомендуется создавать отдельные роли
+      для удаления конкретных объектов, а не расширять базовые роли.
+    tags:
+    - advisory
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_ADMINISTRATION
+    section: Стандартные роли
+    category: security_access
+    title: Роль Администрирование
+    norm_text: Роль Администрирование предоставляет права «Администрирование» и «Администрирование сеансов» и используется для
+      выделения функций сопровождения пользователям без Полных прав.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_OUTPUT
+    section: Стандартные роли
+    category: security_access
+    title: Роль вывода на принтер/файл
+    norm_text: Роль ВыводНаПринтерФайлБуферОбмена предоставляет право вывода на устройства и должна назначаться пользователям,
+      которым это нужно.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_CLIENT_START
+    section: Стандартные роли
+    category: security_access
+    title: Роли запуска клиентов
+    norm_text: 'Для запуска разных типов клиентов существуют отдельные роли: StartAutomation, StartWebClient, StartExternalConnection,
+      StartThickClient, StartThinClient. Пользователь должен иметь только те роли, которые соответствуют разрешенным способам
+      работы.'
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_UPDATE_CONFIGURATION
+    section: Стандартные роли
+    category: security_access
+    title: Обновление конфигурации
+    norm_text: Роль ОбновлениеКонфигурацииБазыДанных предоставляет право обновлять конфигурацию и назначается ограниченному
+      кругу администраторов.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_VIEW_EVENT_LOG
+    section: Стандартные роли
+    category: data_model_registers
+    title: Просмотр журнала регистрации
+    norm_text: Роль ПросмотрЖурналаРегистрации предоставляет право «Журнал регистрации» и назначается пользователям, контролирующим
+      события в базе.
+    tags:
+    - data-model
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_TECH_MODE
+    section: Стандартные роли
+    category: security_access
+    title: Режим технического специалиста
+    norm_text: Роль РежимТехническогоСпециалиста предоставляет одноименное право и используется для доступа к функциям диагностики/отладки.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_SAVE_USER_DATA
+    section: Стандартные роли
+    category: security_access
+    title: Роль сохранения данных пользователя
+    norm_text: Роль СохранениеДанныхПользователя предоставляет право «Сохранение данных пользователя» и назначается тем, кому
+      нужно выгружать свои настройки.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_EXTRA_RIGHTS
+    section: Стандартные роли
+    category: security_access
+    title: Дополнительные роли для временных прав
+    norm_text: Когда пользователю требуется временный доступ к дополнительным функциям подсистемы, создают отдельную роль и
+      временно включают её в профиль пользователя вместо изменения базовых ролей.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_FUNCTIONAL_COMPOSITION
+    section: Стандартные роли
+    category: security_access
+    title: Композиция ролей из функций
+    norm_text: В конфигурациях, где роли соответствуют отдельным функциям, пользовательские профили формируют как композицию
+      этих ролей для гибкой настройки доступа.
+    tags:
+    - security
+    scope: управляемое приложение
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_EXTENSION_BASIC
+    section: Стандартные роли
+    category: security_access
+    title: Права для объектов расширений
+    norm_text: Для объектов расширений создают отдельные роли. Если права не различаются, достаточно одной роли; при разном
+      доступе создают набор ролей для администраторов, пользователей и внешних пользователей.
+    tags:
+    - security
+    scope: расширения
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_EXTENSION_BSP
+    section: Стандартные роли
+    category: security_access
+    title: Именование ролей расширений в БСП
+    norm_text: В конфигурациях на БСП роли расширений именуются по стандарту (например, <ИмяРасширения>_Администратор) и наследуются
+      от типовых ролей БСП.
+    tags:
+    - security
+    scope: расширения
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: STD_ROLE_EXTENSION_NO_BSP
+    section: Стандартные роли
+    category: security_access
+    title: Расширения без БСП
+    norm_text: В конфигурациях без БСП роли расширений следует хранить в самой конфигурации и синхронизировать их с назначениями
+      прав, чтобы изменения расширения не нарушали безопасность.
+    tags:
+    - security
+    scope: расширения
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: security
+    auto_actionable: false
+    source_standard: '#stdROLE'
+  - norm_id: FORM_NO_DIRECT_METADATA_WRITE
+    section: Модули форм
+    category: ui_forms_behavior
+    title: Модуль формы не должен напрямую создавать или записывать объекты НСИ
+    norm_text: Код формы не должен напрямую создавать элементы справочников, документы и наборы записей регистров. Форма собирает
+      пользовательский ввод и передает его в прикладной сервис/общий модуль, где выполняется запись с учетом транзакций, прав
+      и логирования.
+    tags:
+    - forms
+    - ui
+    scope: модули форм
+    code_applicability: true
+    automation_hint: code
+    check_type: static
+    default_severity: major
+    detector_type: ui_forms_behavior
+  - norm_id: BRANCH_DEV_01
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Для каждой исправительной версии создают отдельное хранилище
+    norm_text: Для выпуска каждой исправительной версии создается новое хранилище на основе последней выпущенной версии, а не
+      копируется основное хранилище.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_02
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Исправительная версия не содержит крупных доработок
+    norm_text: Исправительная версия предназначена для критичных и небольших изменений. Если требуется объемная доработка, её
+      планируют в следующем плановом релизе.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_03
+    section: Технология разветвленной разработки конфигураций
+    category: code_style
+    title: Все закладки в исправительном хранилище содержат комментарии
+    norm_text: При работе в хранилище исправительной версии каждая закладка должна сопровождаться содержательным комментарием,
+      аналогичным требованиям к плановой ветке.
+    tags:
+    - code-style
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_04
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Изменения из исправительной версии синхронно переносятся в основную
+    norm_text: Все изменения из исправительной версии необходимо переносить в основное хранилище с помощью сравнения и объединения
+      конфигураций, чтобы не расходились идентификаторы объектов.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_05
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Отмечать номер сборки в хранилище
+    norm_text: При сборке исправительной версии на закладке, которая идёт в релиз, устанавливают метку с номером сборки для
+      облегчения трассировки.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_06
+    section: Технология разветвленной разработки конфигураций
+    category: background_jobs
+    title: Плановые версии ведутся в основном хранилище
+    norm_text: Разработка плановых версий выполняется в основном хранилище конфигурации.
+    tags:
+    - reg-tasks
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_07
+    section: Технология разветвленной разработки конфигураций
+    category: code_style
+    title: Закладки плановой версии должны содержать комментарии
+    norm_text: Каждая закладка в основном хранилище сопровождается комментарием с описанием внесённых изменений.
+    tags:
+    - code-style
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_08
+    section: Технология разветвленной разработки конфигураций
+    category: devops_install
+    title: Все закладки проходят код-ревью
+    norm_text: Перед установкой закладки в основное хранилище изменения должны быть просмотрены другим разработчиком или ведущим
+      (код-ревью).
+    tags:
+    - devops
+    - process-only
+    scope: разработка
+    code_applicability: false
+    automation_hint: process
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_09
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Вести журнал изменений по задачам
+    norm_text: Для каждой задачи нужно фиксировать перечень изменённых объектов и ссылку на закладку/коммит, чтобы иметь трассировку.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_10
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Запрещены прямые изменения в продуктивном хранилище
+    norm_text: Любые изменения в продуктивном решении должны происходить через ветки/хранилища. Прямое редактирование конфигурации
+      в продуктиве запрещено.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_11
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Работа с несколькими ветками требует согласованных правил
+    norm_text: При параллельной работе нескольких команд необходимо заранее установить регламент ветвления, мерджей и приоритетов
+      задач, чтобы избежать конфликтов.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_12
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Использовать пронумерованные ветки/хранилища
+    norm_text: Ветки/хранилища следует именовать по номеру релиза или исправления, чтобы легко отслеживать происхождение изменений.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_13
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Ветки исправлений живут ограниченное время
+    norm_text: Исправительные ветки должны закрываться сразу после выпуска хотфикса. Затягивать их существование не допускается.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_14
+    section: Технология разветвленной разработки конфигураций
+    category: metadata_design
+    title: Перенос объектов между ветками выполняют через сравнение
+    norm_text: Объекты метаданных переносят между ветками только через механизм сравнения и объединения, чтобы сохранить идентификаторы
+      и зависимости.
+    tags:
+    - metadata
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_15
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Слияния веток документируются
+    norm_text: Каждое слияние веток фиксируется в журнале (номер задач, ветки-источники, ответственный), чтобы можно было отследить
+      историю изменений.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_16
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Регулярная синхронизация плановой и исправительной веток
+    norm_text: Нужно поддерживать регулярный обмен изменениями между плановой и исправительной ветками, чтобы минимизировать
+      конфликты при слиянии.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_17
+    section: Технология разветвленной разработки конфигураций
+    category: devops_install
+    title: Пакетные обновления объектов
+    norm_text: При переносе изменений следует группировать объекты по смыслу, чтобы не смешивать несвязанные правки в одном
+      слиянии.
+    tags:
+    - devops
+    - process-only
+    scope: разработка
+    code_applicability: false
+    automation_hint: process
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_18
+    section: Технология разветвленной разработки конфигураций
+    category: devops_install
+    title: Миграция данных сопровождает изменения конфигурации
+    norm_text: Если изменения в ветке требуют преобразования данных, скрипты/обработчики обновления должны храниться вместе
+      с веткой и выполняться при переносе.
+    tags:
+    - devops
+    - process-only
+    scope: разработка
+    code_applicability: false
+    automation_hint: process
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_19
+    section: Технология разветвленной разработки конфигураций
+    category: metadata_design
+    title: Согласование версий библиотек
+    norm_text: При ветвлении конфигурации нужно фиксировать версии используемых библиотек (БСП и др.), чтобы избежать расхождений
+      при объединении веток.
+    tags:
+    - metadata
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_20
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Единый список задач для веток
+    norm_text: План и статус задач должны вестись централизованно (трекер), чтобы понимать, какие изменения в каких ветках находятся.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_21
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Автоматические проверки перед слиянием
+    norm_text: Перед слиянием ветки следует выполнять автоматические проверки/тесты, чтобы гарантировать качество изменений.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_22
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Разделение ответственности за ветки
+    norm_text: Для каждой ветки назначается ответственный (тимлид или релиз-инженер), который следит за регламентом и качеством
+      изменений.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_23
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Регулярные синхронизации с заказчиком
+    norm_text: При разветвленной разработке необходимо согласовывать с заказчиком план ветвления и выпусков, уведомляя о появлении
+      исправительных версий.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_24
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Использование средств сравнения конфигураций
+    norm_text: Все участники обязаны использовать стандартные средства сравнения/объединения 1С для анализа изменений между
+      ветками.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_25
+    section: Технология разветвленной разработки конфигураций
+    category: governance_release
+    title: Архивация закрытых веток
+    norm_text: После закрытия ветки её хранилище архивируют или удаляют, чтобы не хранить устаревшие копии и избежать случайной
+      работы в них.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: BRANCH_DEV_26
+    section: Технология разветвленной разработки конфигураций
+    category: code_style
+    title: Документация ветвления
+    norm_text: Регламент ветвления, названия веток, процедуры выпуска исправительных и плановых версий должны быть описаны в
+      документации и доступны всей команде.
+    tags:
+    - code-style
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: process
+  - norm_id: TRX_RULES_01
+    section: 'Транзакции: правила использования'
+    category: transactions_locks
+    title: Все вызовы НачатьТранзакцию должны иметь парную фиксацию или отмену
+    norm_text: Все вызовы НачатьТранзакцию должны сопровождаться ЗафиксироватьТранзакцию или ОтменитьТранзакцию. Нельзя начинать
+      транзакцию без завершения.
+    tags:
+    - transactions
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: critical
+    detector_type: transactions
+  - norm_id: TRX_RULES_02
+    section: 'Транзакции: правила использования'
+    category: transactions_locks
+    title: Начало и конец транзакции в одном методе
+    norm_text: НачатьТранзакцию и последующее Зафиксировать/Отменить должны выполняться в контексте одного метода; нельзя распределять
+      их по разным процедурам.
+    tags:
+    - transactions
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: transactions
+  - norm_id: TRX_RULES_03
+    section: 'Транзакции: правила использования'
+    category: transactions_locks
+    title: Код транзакции помещают в блок Попытка/Исключение
+    norm_text: Весь код, выполняемый внутри явной транзакции, следует помещать в блок Попытка/Исключение, чтобы гарантировать
+      завершение транзакции при ошибках.
+    tags:
+    - transactions
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: critical
+    detector_type: transactions
+  - norm_id: TRX_RULES_04
+    section: 'Транзакции: правила использования'
+    category: transactions_locks
+    title: При исключении сначала ОтменитьТранзакцию
+    norm_text: В обработчике Исключение необходимо сначала вызвать ОтменитьТранзакцию, и только затем выполнять другие действия
+      (логирование, сообщения).
+    tags:
+    - transactions
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: critical
+    detector_type: transactions
+  - norm_id: TRX_RULES_05
+    section: 'Транзакции: правила использования'
+    category: transactions_locks
+    title: Не обращаться к базе после ошибки в транзакции
+    norm_text: Если внутри транзакции произошла ошибка, пока транзакция не отменена, запрещены новые обращения к базе (иначе
+      возникнет "В этой транзакции уже происходили ошибки").
+    tags:
+    - transactions
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: transactions
+  - norm_id: TRX_RULES_06
+    section: 'Транзакции: правила использования'
+    category: transactions_locks
+    title: Минимизировать объём кода в транзакции
+    norm_text: В транзакции оставляют только ту часть логики, которая действительно требует целостности. Внешние вызовы (файлы,
+      сетевые ресурсы) нужно переносить вне транзакции.
+    tags:
+    - transactions
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: transactions
+  - norm_id: PERF_SERVER_CALLS_01
+    section: Минимизация количества серверных вызовов и трафика
+    category: code_style
+    title: Контроль количества серверных вызовов
+    norm_text: Разработку управляемого приложения ведут с контролем количества вызовов серверных процедур и функций. На одно
+      действие пользователя код конфигурации не должен вызывать сервер дополнительные разы без обоснования.
+    tags:
+    - code-style
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_02
+    section: Минимизация количества серверных вызовов и трафика
+    category: queries_performance
+    title: Оптимизация трафика для низкой скорости и мобильного клиента
+    norm_text: Для режимов с низкой скоростью соединения и мобильного клиента важно оптимизировать не только количество вызовов,
+      но и объём передаваемых данных, тестируя в режиме имитации задержек.
+    tags:
+    - queries
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_03
+    section: Минимизация количества серверных вызовов и трафика
+    category: governance_release
+    title: Запуск приложения без обращений на сервер
+    norm_text: Код модуля приложения (ПередНачаломРаботыСистемы и др.) не должен вызывать сервер напрямую. Если нужны данные,
+      их получают одним серверным вызовом, возвращающим все параметры для запуска.
+    tags:
+    - governance
+    - needs-manual-review
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_04
+    section: Минимизация количества серверных вызовов и трафика
+    category: queries_performance
+    title: Инициализация данных в одном запросе
+    norm_text: При запуске формы или рабочей области данные следует получать одним серверным вызовом, а не несколькими последовательными
+      запросами к серверу.
+    tags:
+    - queries
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_05
+    section: Минимизация количества серверных вызовов и трафика
+    category: code_style
+    title: Использовать пакетные серверные вызовы
+    norm_text: Если требуется выполнить несколько операций на сервере, их объединяют в одну процедуру/функцию, чтобы снизить
+      количество переходов клиент–сервер.
+    tags:
+    - code-style
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_06
+    section: Минимизация количества серверных вызовов и трафика
+    category: performance_runtime
+    title: Использовать кэширование на клиенте
+    norm_text: Повторно используемые данные следует кэшировать на клиенте или в клиентских общих модулях, чтобы не обращаться
+      к серверу каждый раз.
+    tags:
+    - performance
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_07
+    section: Минимизация количества серверных вызовов и трафика
+    category: code_style
+    title: Для длительных операций реализовать ожидание результата с помощью процедуры ОжидатьЗавершение о
+    norm_text: Для длительных операций реализовать ожидание результата с помощью процедуры ОжидатьЗавершение общего модуля ДлительныеОперацииКлиент.
+    tags:
+    - code-style
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_08
+    section: Минимизация количества серверных вызовов и трафика
+    category: ui_forms_behavior
+    title: Для проверки состояния сервера, которое необходимо только для отдельно открытой формы без испол
+    norm_text: Для проверки состояния сервера, которое необходимо только для отдельно открытой формы без использования длительных
+      операций, допустимо делать бесконтекстные (быстрые) серверные вызовы, однако следует выбирать как можно больший период
+      вызова в рамках решаемой …
+    tags:
+    - advisory
+    - forms
+    - ui
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_09
+    section: Минимизация количества серверных вызовов и трафика
+    category: code_style
+    title: 'Для периодической проверки состояния сервера и отправки оповещений клиентским сеансам: добавлят'
+    norm_text: 'Для периодической проверки состояния сервера и отправки оповещений клиентским сеансам: добавлять описание периодического
+      серверного оповещения в процедуре ПриДобавленииСерверныхОповещений общего модуля ОбщегоНазначенияПереопределяемый; реализовывать
+      процедуру…'
+    tags:
+    - code-style
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_10
+    section: Минимизация количества серверных вызовов и трафика
+    category: code_style
+    title: 'Для периодической отправки данных с клиента на сервер: размещать клиентский код для добавления '
+    norm_text: 'Для периодической отправки данных с клиента на сервер: размещать клиентский код для добавления данных отправляемых
+      на сервер в процедуре ПередПериодическойОтправкойДанныхКлиентаНаСервер общего модуля ОбщегоНазначенияКлиентПереопределяемый;
+      размещать серверный…'
+    tags:
+    - code-style
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_11
+    section: Минимизация количества серверных вызовов и трафика
+    category: ui_forms_behavior
+    title: В случае если открытие формы выполняется из кода, следует открывать форму за один вызов с помощ
+    norm_text: В случае если открытие формы выполняется из кода, следует открывать форму за один вызов с помощью метода глобального
+      контекста ОткрытьФорму (при использовании версии платформы 1С:Предприятие 8.2 и более ранних версий - также ОткрытьФормуМодально).
+    tags:
+    - forms
+    - ui
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_12
+    section: Минимизация количества серверных вызовов и трафика
+    category: data_model_registers
+    title: При открытии формы не допускается выполнять обращений к серверу из кода модуля формы в обработч
+    norm_text: При открытии формы не допускается выполнять обращений к серверу из кода модуля формы в обработчиках клиентских
+      событий формы, таких как ПриОткрытии и ПриПовторномОткрытии.
+    tags:
+    - data-model
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_13
+    section: Минимизация количества серверных вызовов и трафика
+    category: metadata_design
+    title: Не следует при открытии формы подключать несколько различных обработчиков ожидания (с помощью м
+    norm_text: Не следует при открытии формы подключать несколько различных обработчиков ожидания (с помощью метода ПодключитьОбработчикОжидания),
+      которые проверяют готовность запущенных фоновых заданий и обновляют данные формы, например, выводят на форму различные
+      результа…
+    tags:
+    - metadata
+    scope: разработка
+    code_applicability: true
+    automation_hint: mixed
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_14
+    section: Минимизация количества серверных вызовов и трафика
+    category: code_style
+    title: Выполнение локальной команды формы должно приводить не более чем к одному вызову сервера
+    norm_text: Выполнение локальной команды формы должно приводить не более чем к одному вызову сервера.
+    tags:
+    - advisory
+    - code-style
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
+  - norm_id: PERF_SERVER_CALLS_15
+    section: Минимизация количества серверных вызовов и трафика
+    category: data_model_registers
+    title: 'В общем случае, при выборе из справочника допускается выполнять только один серверный вызов из '
+    norm_text: В общем случае, при выборе из справочника допускается выполнять только один серверный вызов из кода, к которому
+      приводит вызов метода глобального контекста ОткрытьФорму (или ОткрытьФормуМодально).
+    tags:
+    - data-model
+    scope: разработка
+    code_applicability: true
+    automation_hint: code
+    check_type: semantic
+    default_severity: major
+    detector_type: performance
