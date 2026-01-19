@@ -10,6 +10,6 @@ COPY backend /app/backend
 COPY norms.yaml /app/norms.yaml
 COPY critical_norms.yaml /app/critical_norms.yaml
 COPY scripts /app/scripts
-COPY docs/teacher_guide.md /app/docs/teacher_guide.md
+COPY docs/teacher_guide.html /app/docs/teacher_guide.html
 
 CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

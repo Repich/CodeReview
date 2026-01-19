@@ -404,6 +404,14 @@ textarea {
   margin-bottom: 1.5rem;
 }
 
+.sticky-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  background: var(--surface);
+  padding: 0.75rem 0;
+}
+
 .tab-button {
   border: 1px solid var(--border);
   background: var(--surface);
@@ -416,6 +424,22 @@ textarea {
   align-items: center;
   gap: 0.5rem;
   transition: all 0.2s ease;
+}
+
+.sticky-norm-toolbar {
+  position: sticky;
+  top: 3.4rem;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
 .tab-button:hover {

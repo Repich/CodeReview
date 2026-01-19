@@ -30,7 +30,7 @@ app = create_app()
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
 INDEX_FILE = STATIC_ROOT / "index.html"
 DOCS_ROOT = Path(__file__).resolve().parents[2] / "docs"
-TEACHER_GUIDE_FILE = DOCS_ROOT / "teacher_guide.md"
+TEACHER_GUIDE_FILE = DOCS_ROOT / "teacher_guide.html"
 
 
 def _is_within_static(target: Path) -> bool:
