@@ -12,7 +12,7 @@ from backend.app.services.llm_playground import LLMPlaygroundError, request_llm_
 
 logger = logging.getLogger(__name__)
 
-MAX_NORM_TEXT_CHARS = 400
+MAX_NORM_TEXT_CHARS = 0  # мы не отправляем norm_text
 
 CANONICAL_SECTIONS: list[tuple[str, tuple[str, ...]]] = [
     ("Безопасность", ("безопас", "парол", "auth", "tls", "rce", "sql-инъ", "доступ")),
@@ -58,15 +58,12 @@ def _load_catalog_norms() -> list[dict[str, Any]]:
 
 
 def _truncate_norm(entry: dict[str, Any]) -> dict[str, Any]:
-    text = entry.get("norm_text") or ""
-    short_text = textwrap.shorten(text, width=MAX_NORM_TEXT_CHARS, placeholder="…")
     return {
         "norm_id": entry.get("norm_id"),
         "title": entry.get("title"),
         "section": entry.get("section"),
         "scope": entry.get("scope"),
         "default_severity": entry.get("default_severity"),
-        "norm_text": short_text,
     }
 
 

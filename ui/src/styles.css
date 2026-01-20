@@ -54,7 +54,7 @@ a:hover {
   position: absolute;
   inset: 0;
   background: repeating-linear-gradient(
-    90deg,
+    180deg,
     #ffd200 0,
     #ffd200 12px,
     #000 12px,
