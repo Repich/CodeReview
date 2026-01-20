@@ -117,8 +117,9 @@ function RunDetailsPage() {
   const [showDiff, setShowDiff] = useState(false);
   const [showAIContext, setShowAIContext] = useState(false);
   const [showFindingsContext, setShowFindingsContext] = useState(true);
-  const [showAISources, setShowAISources] = useState(false);
+  const [showAISources, setShowAISources] = useState(true);
   const [showNormSources, setShowNormSources] = useState(false);
+  const [selectedAiId, setSelectedAiId] = useState<string | null>(null);
   const [selectionDraft, setSelectionDraft] = useState<{
     text: string;
     file: string | null;
@@ -321,7 +322,7 @@ function RunDetailsPage() {
   }, [isActiveRun]);
 
   useEffect(() => {
-    if (activeTab === 'norms' && canTeach) return;
+    if (activeTab === 'ai' && canTeach) return;
     setSelectionDraft(null);
     setShowNormForm(false);
     setShowNormSources(false);
@@ -405,6 +406,31 @@ function RunDetailsPage() {
     });
     return map;
   }, [orderedAiFindings]);
+  const selectedAiFinding = useMemo(
+    () => orderedAiFindings.find((f) => f.id === selectedAiId) || null,
+    [orderedAiFindings, selectedAiId],
+  );
+  const highlightedRange = useMemo(() => {
+    const finding = selectedAiFinding;
+    if (!finding) return null;
+    const ev = (finding.evidence || []).find((item) => item.file || item.lines) || null;
+    const file = ev?.file || (finding as any).file_path || null;
+    let lineStart: number | null = (finding as any).line_start ?? null;
+    let lineEnd: number | null = (finding as any).line_end ?? lineStart;
+    if (ev?.lines) {
+      const nums = (ev.lines.match(/\d+/g) || []).map(Number);
+      if (nums.length >= 1) {
+        lineStart = nums[0];
+        lineEnd = nums[1] ?? nums[0];
+      }
+    }
+    if (!file) return null;
+    return {
+      file,
+      lineStart: lineStart || 0,
+      lineEnd: lineEnd || lineStart || 0,
+    };
+  }, [selectedAiFinding]);
   const totalFindings = findingsQuery.data?.total ?? 0;
   const severityCounts = useMemo(() => {
     const counts: Record<string, number> = {
@@ -472,19 +498,50 @@ function RunDetailsPage() {
       };
     });
   }, [runSourcesQuery.data]);
+  const renderSource = (source: RunSource) => {
+    const lines = source.content.split('\n');
+    return (
+      <pre
+        data-source-path={source.path}
+        data-line-start="1"
+        data-line-end={String(lines.length)}
+        style={{ maxHeight: '60vh', overflow: 'auto', background: '#0b1021', color: '#e5e7eb', padding: '0.75rem', borderRadius: '0.5rem' }}
+      >
+        {lines.map((line, idx) => {
+          const ln = idx + 1;
+          const isHl =
+            highlightedRange &&
+            highlightedRange.file === source.path &&
+            ln >= highlightedRange.lineStart &&
+            ln <= highlightedRange.lineEnd;
+          return (
+            <div
+              key={`${source.path}:${ln}`}
+              style={{
+                background: isHl ? 'rgba(255, 210, 0, 0.2)' : 'transparent',
+                padding: '0 0.25rem',
+              }}
+            >
+              <span style={{ color: '#7e8696', marginRight: '0.5rem' }}>
+                {String(ln).padStart(4, ' ')}:
+              </span>
+              <span>{line}</span>
+            </div>
+          );
+        })}
+      </pre>
+    );
+  };
   const changeRangeMap = run?.context?.change_ranges as Record<string, unknown> | undefined;
   const changeRangeCount = changeRangeMap ? Object.keys(changeRangeMap).length : 0;
   const hasChangeRanges = changeRangeCount > 0;
   const tabs = useMemo(() => {
-      const items = [
-        ...(canTeach
-          ? [{ id: 'norms', label: 'Новые нормы', count: runSourcesQuery.data?.length ?? 0 }]
-          : []),
-        { id: 'findings', label: 'Найденные нарушения', count: totalFindings },
-        { id: 'ai', label: 'Предложения LLM', count: aiFindings.length },
-        {
-          id: 'complexity',
-          label: 'Когнитивная сложность',
+    const items = [
+      { id: 'findings', label: 'Найденные нарушения', count: totalFindings },
+      { id: 'ai', label: 'Предложения LLM', count: aiFindings.length },
+      {
+        id: 'complexity',
+        label: 'Когнитивная сложность',
         count: complexityMetrics?.procedures?.length ?? 0,
       },
       {
@@ -498,7 +555,6 @@ function RunDetailsPage() {
     ];
     return items.filter((item) => (item.adminOnly ? isAdmin : true));
   }, [
-    canTeach,
     totalFindings,
     aiFindings.length,
     complexityMetrics,
@@ -506,7 +562,6 @@ function RunDetailsPage() {
     auditQuery.data,
     artifactsQuery.data,
     isAdmin,
-    runSourcesQuery.data,
   ]);
 
   if (runQuery.isLoading || findingsQuery.isLoading) {
@@ -1140,28 +1195,211 @@ function RunDetailsPage() {
           {aiFindingsQuery.error && (
             <p className="alert alert-error">Не удалось загрузить предложения LLM.</p>
           )}
-          <div className="card-list">
-            {orderedAiFindings.map((finding) => (
-              <AIFindingCard
-                key={finding.id}
-                finding={finding}
-                sequence={aiOrderMap.get(finding.id)}
-                onChangeStatus={
-                  canEditRun
-                    ? (status, reviewerComment) =>
-                        handleAiStatusChange(finding.id, status, reviewerComment)
-                    : undefined
-                }
-                isUpdating={
-                  updateAiFinding.isPending && updateAiFinding.variables?.findingId === finding.id
-                }
-                readOnly={!canEditRun}
-                sourceLookup={showAIContext ? sourceLookup : null}
-              />
-            ))}
-            {!aiFindings.length && !aiFindingsQuery.isLoading && (
-              <div className="empty-state">LLM не предложила дополнительных норм.</div>
-            )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) 1fr', gap: '1rem' }}>
+            <div className="card-list">
+              {orderedAiFindings.map((finding) => (
+                <div
+                  key={finding.id}
+                  onClick={() => {
+                    setSelectedAiId(finding.id);
+                    if (finding.norm_text) {
+                      setNormText(finding.norm_text);
+                    } else if ((finding as any).message) {
+                      setNormText((finding as any).message);
+                    }
+                  }}
+                  style={{
+                    border: finding.id === selectedAiId ? '1px solid var(--primary)' : undefined,
+                    borderRadius: '0.75rem',
+                    padding: '0.25rem',
+                  }}
+                >
+                  <AIFindingCard
+                    finding={finding}
+                    sequence={aiOrderMap.get(finding.id)}
+                    onChangeStatus={
+                      canEditRun
+                        ? (status, reviewerComment) =>
+                            handleAiStatusChange(finding.id, status, reviewerComment)
+                        : undefined
+                    }
+                    isUpdating={
+                      updateAiFinding.isPending && updateAiFinding.variables?.findingId === finding.id
+                    }
+                    readOnly={!canEditRun}
+                    sourceLookup={showAIContext ? sourceLookup : null}
+                  />
+                </div>
+              ))}
+              {!aiFindings.length && !aiFindingsQuery.isLoading && (
+                <div className="empty-state">LLM не предложила дополнительных норм.</div>
+              )}
+            </div>
+
+            <div className="card" style={{ padding: '1rem' }}>
+              <div className="card-header">
+                <div>
+                  <h3 className="card-title">Контекст и нормы</h3>
+                  <p className="muted">Исходный код целиком, выделение выбранного предложения.</p>
+                </div>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={() => {
+                    setShowNormForm(true);
+                    if (selectedAiFinding?.norm_text) {
+                      setNormText(selectedAiFinding.norm_text);
+                    }
+                  }}
+                >
+                  Создать норму
+                </button>
+              </div>
+              {lastSuggested && (
+                <section className="card" style={{ marginBottom: '1rem' }}>
+                  <div className="card-header">
+                    <div>
+                      <h3 className="card-title">Результат автооформления</h3>
+                      <p className="muted">
+                        Статус: {lastSuggested.status}
+                        {lastSuggested.duplicate_of?.length ? (
+                          <>
+                            {' '}
+                            · Дубликат:{' '}
+                            {lastSuggested.duplicate_of
+                              .map(
+                                (id) =>
+                                  `${id}${
+                                    lastSuggested.duplicate_titles && lastSuggested.duplicate_titles[id]
+                                      ? ` — ${lastSuggested.duplicate_titles[id]}`
+                                      : ''
+                                  }`,
+                              )
+                              .join(', ')}
+                          </>
+                        ) : null}
+                      </p>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gap: '0.35rem' }}>
+                    <div>
+                      <strong>norm_id:</strong> {lastSuggested.generated_norm_id || '—'}
+                    </div>
+                    <div>
+                      <strong>Название:</strong> {lastSuggested.generated_title || '—'}
+                    </div>
+                    <div>
+                      <strong>Раздел:</strong> {lastSuggested.generated_section || lastSuggested.section}
+                      {' · '}
+                      <strong>Серьёзность:</strong>{' '}
+                      {lastSuggested.generated_severity || lastSuggested.severity}
+                    </div>
+                    <div>
+                      <strong>Область:</strong> {lastSuggested.generated_scope || '—'}
+                    </div>
+                    <div>
+                      <strong>Текст нормы:</strong>
+                      <div className="muted" style={{ whiteSpace: 'pre-wrap' }}>
+                        {lastSuggested.generated_text || lastSuggested.text_raw}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+              {showNormForm && (
+                <section className="card" style={{ marginBottom: '1rem' }}>
+                  <div className="card-header">
+                    <div>
+                      <h3 className="card-title">Новая норма</h3>
+                      <p className="muted">Заполните обязательные поля и сохраните норму.</p>
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      onClick={() => setShowNormForm(false)}
+                    >
+                      Скрыть
+                    </button>
+                  </div>
+                  <form onSubmit={handleNormSubmit} className="form-grid" style={{ gap: '1rem' }}>
+                    <div className="field">
+                      <label htmlFor="norm-section-inline">Раздел</label>
+                      <select
+                        id="norm-section-inline"
+                        value={normSection}
+                        onChange={(event) => setNormSection(event.target.value)}
+                        disabled={normSectionsQuery.isLoading}
+                      >
+                        {(normSectionsQuery.data || []).map((section) => (
+                          <option key={section} value={section}>
+                            {section}
+                          </option>
+                        ))}
+                        {!normSectionsQuery.data?.length && <option value="">Нет данных</option>}
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="norm-severity-inline">Серьёзность</label>
+                      <select
+                        id="norm-severity-inline"
+                        value={normSeverity}
+                        onChange={(event) =>
+                          setNormSeverity(event.target.value as 'critical' | 'major' | 'minor' | 'info')
+                        }
+                      >
+                        <option value="critical">critical</option>
+                        <option value="major">major</option>
+                        <option value="minor">minor</option>
+                        <option value="info">info</option>
+                      </select>
+                    </div>
+                    <div className="field" style={{ gridColumn: '1 / -1' }}>
+                      <label htmlFor="norm-text-inline">Текст нормы</label>
+                      <textarea
+                        id="norm-text-inline"
+                        rows={4}
+                        value={normText}
+                        onChange={(event) => setNormText(event.target.value)}
+                        placeholder="Опишите нарушение свободным текстом; LLM оформит норму и проверит дубль."
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={createNormMutation.isPending}
+                    >
+                      {createNormMutation.isPending ? 'Сохраняем…' : 'Создать норму'}
+                    </button>
+                    {isSuggesting && <div className="loader-beeline" aria-label="Ожидаем ответ LLM" />}
+                  </form>
+                  {normMessage && (
+                    <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>
+                      {normMessage}
+                    </p>
+                  )}
+                </section>
+              )}
+
+              {showAISources && (
+                <div style={{ display: 'grid', gap: '0.75rem' }}>
+                  {runSourcesQuery.error && (
+                    <p className="alert alert-error">Не удалось загрузить исходный код запуска.</p>
+                  )}
+                  {runSourcesQuery.isLoading && <span className="muted">Загружаем исходники…</span>}
+                  {!runSourcesQuery.isLoading &&
+                    !runSourcesQuery.error &&
+                    (runSourcesQuery.data || []).map((source) => (
+                      <details key={source.path} className="card" open>
+                        <summary>
+                          {source.path}{' '}
+                          <span className="muted">({source.content.split('\n').length} строк)</span>
+                        </summary>
+                        {renderSource(source)}
+                      </details>
+                    ))}
+                </div>
+              )}
+            </div>
           </div>
         </section>
       )}
