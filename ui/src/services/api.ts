@@ -483,6 +483,60 @@ export async function createNorm(payload: Omit<NormRecord, 'id' | 'created_at' |
   return data;
 }
 
+// Suggested norms (teacher)
+export interface SuggestedNormCreatePayload {
+  section: string;
+  severity: 'critical' | 'major' | 'minor' | 'info';
+  text: string;
+}
+
+export interface SuggestedNorm {
+  id: string;
+  author_id: string;
+  section: string;
+  severity: string;
+  text_raw: string;
+  status: string;
+  duplicate_of?: string[] | null;
+  generated_norm_id?: string | null;
+  generated_title?: string | null;
+  generated_section?: string | null;
+  generated_scope?: string | null;
+  generated_detector_type?: string | null;
+  generated_check_type?: string | null;
+  generated_severity?: string | null;
+  generated_version?: number | null;
+  generated_text?: string | null;
+  created_at: string;
+  updated_at: string;
+  vote_score: number;
+  user_vote: number | null;
+}
+
+export interface SuggestedNormListResponse {
+  items: SuggestedNorm[];
+  total: number;
+}
+
+export async function fetchSuggestedNormSections() {
+  const { data } = await client.get<string[]>('/suggested-norms/sections');
+  return data;
+}
+
+export async function createSuggestedNorm(payload: SuggestedNormCreatePayload) {
+  const { data } = await client.post<SuggestedNorm>('/suggested-norms', payload);
+  return data;
+}
+
+export async function fetchSuggestedNorms(params?: { status?: string; limit?: number; offset?: number }) {
+  const { data } = await client.get<SuggestedNormListResponse>('/suggested-norms', { params });
+  return data;
+}
+
+export async function voteSuggestedNorm(normId: string, vote: 1 | -1) {
+  await client.post(`/suggested-norms/${normId}/vote`, { vote });
+}
+
 export interface LoginPayload {
   email: string;
   password: string;

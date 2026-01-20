@@ -17,12 +17,14 @@ import backend.app.api.routes.norms as norms
 import backend.app.api.routes.review_runs as review_runs
 import backend.app.api.routes.users as users
 import backend.app.api.routes.wallets as wallets
+import backend.app.api.routes.suggested_norms as suggested_norms
 
 api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(ai_findings.router)
 api_router.include_router(norms.router)
+api_router.include_router(suggested_norms.router)
 api_router.include_router(review_runs.router)
 api_router.include_router(findings.router)
 api_router.include_router(feedback.router)

@@ -8,6 +8,7 @@ from backend.app.models.finding import Finding
 from backend.app.models.llm import LLMPromptVersion
 from backend.app.models.norm import Norm
 from backend.app.models.review_run import ReviewRun
+from backend.app.models.suggested_norm import SuggestedNorm, SuggestedNormVote
 from backend.app.models.user import UserAccount, Wallet, WalletTransaction
 
 __all__ = [
@@ -22,6 +23,8 @@ __all__ = [
     "LLMPromptVersion",
     "Norm",
     "ReviewRun",
+    "SuggestedNorm",
+    "SuggestedNormVote",
     "UserAccount",
     "Wallet",
     "WalletTransaction",

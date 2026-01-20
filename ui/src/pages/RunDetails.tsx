@@ -15,7 +15,8 @@ import {
   deleteReviewRun,
   rerunReviewRun,
   fetchRunSources,
-  createNorm,
+  createSuggestedNorm,
+  fetchSuggestedNormSections,
 } from '../services/api';
 import type {
   Finding,
@@ -123,19 +124,9 @@ function RunDetailsPage() {
     lineEnd: number | null;
   } | null>(null);
   const [showNormForm, setShowNormForm] = useState(false);
-  const [normId, setNormId] = useState('');
-  const [normTitle, setNormTitle] = useState('');
   const [normSection, setNormSection] = useState('');
-  const [normScope, setNormScope] = useState('');
-  const [normDetectorType, setNormDetectorType] = useState('custom');
-  const [normCheckType, setNormCheckType] = useState('manual');
-  const [normSeverity, setNormSeverity] = useState('major');
+  const [normSeverity, setNormSeverity] = useState<'critical' | 'major' | 'minor' | 'info'>('major');
   const [normText, setNormText] = useState('');
-  const [normSourceRef, setNormSourceRef] = useState('user');
-  const [normSourceExcerpt, setNormSourceExcerpt] = useState('');
-  const [normCodeApplicable, setNormCodeApplicable] = useState(true);
-  const [normIsActive, setNormIsActive] = useState(true);
-  const [normVersion, setNormVersion] = useState('1');
   const [normMessage, setNormMessage] = useState<string | null>(null);
   const [normState, setNormState] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -211,6 +202,12 @@ function RunDetailsPage() {
       Boolean(id) && (showDiff || showAIContext || showFindingsContext || activeTab === 'norms'),
   });
 
+  const normSectionsQuery = useQuery({
+    queryKey: ['suggested-norm-sections'],
+    queryFn: () => fetchSuggestedNormSections(),
+    enabled: canTeach,
+  });
+
   const updateAiFinding = useMutation<
     AIFinding,
     unknown,
@@ -224,21 +221,8 @@ function RunDetailsPage() {
   });
 
   const createNormMutation = useMutation({
-    mutationFn: (payload: {
-      norm_id: string;
-      title: string;
-      section: string;
-      scope: string;
-      detector_type: string;
-      check_type: string;
-      default_severity: string;
-      norm_text: string;
-      source_reference?: string | null;
-      source_excerpt?: string | null;
-      code_applicability: boolean;
-      is_active: boolean;
-      version: number;
-    }) => createNorm(payload),
+    mutationFn: (payload: { section: string; severity: 'critical' | 'major' | 'minor' | 'info'; text: string }) =>
+      createSuggestedNorm(payload),
   });
 
   const deleteRunMutation = useMutation({
@@ -331,6 +315,12 @@ function RunDetailsPage() {
     setSelectionDraft(null);
     setShowNormForm(false);
   }, [activeTab, canTeach]);
+
+  useEffect(() => {
+    if (normSectionsQuery.data && normSectionsQuery.data.length && !normSection) {
+      setNormSection(normSectionsQuery.data[0]);
+    }
+  }, [normSectionsQuery.data, normSection]);
 
   const progressText = useMemo(() => {
     const runData = runQuery.data;
@@ -602,7 +592,6 @@ function RunDetailsPage() {
     const text = rawText.length > 4000 ? `${rawText.slice(0, 4000)}…` : rawText;
     const draft = { text, file, lineStart, lineEnd };
     setSelectionDraft(draft);
-    setNormSourceExcerpt(draft.text);
     setNormMessage(null);
     setNormState('idle');
     setShowNormForm(true);
@@ -613,37 +602,23 @@ function RunDetailsPage() {
     if (!canTeach) return;
     setNormMessage(null);
     setNormState('idle');
-    if (!normId || !normTitle || !normSection || !normScope || !normText) {
-      setNormMessage('Заполните обязательные поля: norm_id, название, раздел, область, текст нормы.');
+    if (!normSection || !normText) {
+      setNormMessage('Заполните раздел и текст нормы.');
       setNormState('error');
       return;
     }
     try {
       await createNormMutation.mutateAsync({
-        norm_id: normId.trim(),
-        title: normTitle.trim(),
         section: normSection.trim(),
-        scope: normScope.trim(),
-        detector_type: normDetectorType.trim() || 'custom',
-        check_type: normCheckType.trim() || 'manual',
-        default_severity: normSeverity,
-        norm_text: normText.trim(),
-        source_reference: normSourceRef.trim() || null,
-        source_excerpt: normSourceExcerpt.trim() || null,
-        code_applicability: normCodeApplicable,
-        is_active: normIsActive,
-        version: Number(normVersion) || 1,
+        severity: normSeverity,
+        text: normText.trim(),
       });
-      setNormMessage('Норма создана.');
+      setNormMessage(
+        'Норма отправлена: если не найден дубль, она будет добавлена после автооформления. Можно перезапустить анализ для применения.',
+      );
       setNormState('success');
-      setNormId('');
-      setNormTitle('');
       setNormSection('');
-      setNormScope('');
       setNormText('');
-      setNormSourceRef('user');
-      setNormSourceExcerpt('');
-      setNormVersion('1');
       setShowNormForm(false);
     } catch (error) {
       console.error('Failed to create norm', error);
@@ -880,90 +855,36 @@ function RunDetailsPage() {
               )}
               <form onSubmit={handleNormSubmit} className="form-grid" style={{ gap: '1rem' }}>
                 <div className="field">
-                  <label htmlFor="norm-id-inline">norm_id</label>
-                  <input
-                    id="norm-id-inline"
-                    type="text"
-                    value={normId}
-                    onChange={(event) => setNormId(event.target.value)}
-                    placeholder="CUSTOM_001"
-                  />
-                  <small className="muted">
-                    Уникальный идентификатор, латиница и подчёркивания.
-                  </small>
-                </div>
-                <div className="field">
-                  <label htmlFor="norm-title-inline">Название</label>
-                  <input
-                    id="norm-title-inline"
-                    type="text"
-                    value={normTitle}
-                    onChange={(event) => setNormTitle(event.target.value)}
-                    placeholder="Краткая формулировка"
-                  />
-                </div>
-                <div className="field">
                   <label htmlFor="norm-section-inline">Раздел</label>
-                  <input
+                  <select
                     id="norm-section-inline"
-                    type="text"
                     value={normSection}
                     onChange={(event) => setNormSection(event.target.value)}
-                    placeholder="Запросы / Транзакции / Безопасность"
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="norm-scope-inline">Область</label>
-                  <input
-                    id="norm-scope-inline"
-                    type="text"
-                    value={normScope}
-                    onChange={(event) => setNormScope(event.target.value)}
-                    placeholder="сервер / клиент / любой модуль"
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="norm-detector-inline">Тип детектора</label>
-                  <input
-                    id="norm-detector-inline"
-                    type="text"
-                    value={normDetectorType}
-                    onChange={(event) => setNormDetectorType(event.target.value)}
-                    placeholder="custom/manual"
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="norm-check-inline">Тип проверки</label>
-                  <input
-                    id="norm-check-inline"
-                    type="text"
-                    value={normCheckType}
-                    onChange={(event) => setNormCheckType(event.target.value)}
-                    placeholder="manual/llm/static"
-                  />
+                    disabled={normSectionsQuery.isLoading}
+                  >
+                    {(normSectionsQuery.data || []).map((section) => (
+                      <option key={section} value={section}>
+                        {section}
+                      </option>
+                    ))}
+                    {!normSectionsQuery.data?.length && <option value="">Нет данных</option>}
+                  </select>
+                  <small className="muted">Выберите подходящий раздел из существующих.</small>
                 </div>
                 <div className="field">
                   <label htmlFor="norm-severity-inline">Серьёзность</label>
                   <select
                     id="norm-severity-inline"
                     value={normSeverity}
-                    onChange={(event) => setNormSeverity(event.target.value)}
+                    onChange={(event) =>
+                      setNormSeverity(event.target.value as 'critical' | 'major' | 'minor' | 'info')
+                    }
                   >
                     <option value="critical">critical</option>
                     <option value="major">major</option>
                     <option value="minor">minor</option>
                     <option value="info">info</option>
                   </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="norm-version-inline">Версия</label>
-                  <input
-                    id="norm-version-inline"
-                    type="number"
-                    min={1}
-                    value={normVersion}
-                    onChange={(event) => setNormVersion(event.target.value)}
-                  />
                 </div>
                 <div className="field" style={{ gridColumn: '1 / -1' }}>
                   <label htmlFor="norm-text-inline">Текст нормы</label>
@@ -972,43 +893,7 @@ function RunDetailsPage() {
                     rows={6}
                     value={normText}
                     onChange={(event) => setNormText(event.target.value)}
-                  />
-                  <small className="muted">Полное правило с формулировкой нарушения.</small>
-                </div>
-                <div className="field">
-                  <label htmlFor="norm-source-ref-inline">Источник (опционально)</label>
-                  <input
-                    id="norm-source-ref-inline"
-                    type="text"
-                    value={normSourceRef}
-                    onChange={(event) => setNormSourceRef(event.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="norm-source-excerpt-inline">Пример/выдержка (опционально)</label>
-                  <input
-                    id="norm-source-excerpt-inline"
-                    type="text"
-                    value={normSourceExcerpt}
-                    onChange={(event) => setNormSourceExcerpt(event.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="norm-code-inline">Применимо к коду</label>
-                  <input
-                    id="norm-code-inline"
-                    type="checkbox"
-                    checked={normCodeApplicable}
-                    onChange={(event) => setNormCodeApplicable(event.target.checked)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="norm-active-inline">Активна</label>
-                  <input
-                    id="norm-active-inline"
-                    type="checkbox"
-                    checked={normIsActive}
-                    onChange={(event) => setNormIsActive(event.target.checked)}
+                    placeholder="Опишите нарушение свободным текстом; LLM оформит норму и проверит дубль."
                   />
                 </div>
                 <button

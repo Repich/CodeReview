@@ -18,6 +18,8 @@ import {
   forceFailReviewRun,
   createNorm,
   updateUserRole,
+  fetchSuggestedNorms,
+  voteSuggestedNorm,
   LLMPlaygroundResponse,
   NormRecord,
   requeueReviewRun,
@@ -127,7 +129,7 @@ function AdminPage() {
   const [normIsActive, setNormIsActive] = useState(true);
   const [normVersion, setNormVersion] = useState('1');
   const [activeTab, setActiveTab] = useState<
-    'users' | 'llm' | 'runs' | 'access' | 'caddy' | 'norms'
+    'users' | 'llm' | 'runs' | 'access' | 'caddy' | 'norms' | 'suggested'
   >('users');
 
   const usersQuery = useQuery({
@@ -200,6 +202,12 @@ function AdminPage() {
     enabled: canManageNorms,
   });
 
+  const suggestedNormsQuery = useQuery({
+    queryKey: ['suggested-norms'],
+    queryFn: () => fetchSuggestedNorms({ limit: 200 }),
+    enabled: canManageNorms,
+  });
+
   const statusMutation = useMutation({
     mutationFn: ({ userId, status }: { userId: string; status: string }) =>
       updateUserStatus(userId, status),
@@ -244,6 +252,14 @@ function AdminPage() {
       createNorm(payload),
     onSuccess: () => {
       normsDbQuery.refetch();
+    },
+  });
+
+  const suggestedNormVoteMutation = useMutation({
+    mutationFn: ({ normId, vote }: { normId: string; vote: 1 | -1 }) =>
+      voteSuggestedNorm(normId, vote),
+    onSuccess: () => {
+      suggestedNormsQuery.refetch();
     },
   });
 
@@ -896,9 +912,89 @@ function AdminPage() {
         </>
       )}
 
+      {activeTab === 'suggested' && canManageNorms && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <div className="card-header">
+            <div>
+              <h2 className="card-title">Заявки норм</h2>
+              <p className="muted">Результаты автооформления норм через LLM, доступно голосование.</p>
+            </div>
+            <button className="btn btn-secondary" type="button" onClick={() => suggestedNormsQuery.refetch()}>
+              Обновить
+            </button>
+          </div>
+          {suggestedNormsQuery.isLoading && <p className="muted">Загружаем заявки...</p>}
+          {suggestedNormsQuery.error && (
+            <p className="alert alert-error">Не удалось загрузить заявки на нормы.</p>
+          )}
+          {suggestedNormsQuery.data && (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Статус</th>
+                  <th>Раздел / severity</th>
+                  <th>Описание</th>
+                  <th>Голоса</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                {suggestedNormsQuery.data.items.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <span className="table-badge">{item.status}</span>
+                      {item.duplicate_of && item.duplicate_of.length > 0 && (
+                        <div className="muted">Дубликат: {item.duplicate_of.join(', ')}</div>
+                      )}
+                    </td>
+                    <td>
+                      <div>{item.section}</div>
+                      <div className="muted">{item.generated_severity || item.severity}</div>
+                    </td>
+                    <td style={{ maxWidth: '520px', whiteSpace: 'pre-wrap' }}>
+                      <strong>{item.generated_title || item.generated_norm_id || 'Без заголовка'}</strong>
+                      <div className="muted" style={{ marginTop: '0.35rem' }}>
+                        {item.generated_text || item.text_raw}
+                      </div>
+                    </td>
+                    <td>{item.vote_score}</td>
+                    <td>
+                      <div className="btn-group">
+                        <button
+                          type="button"
+                          className={`btn btn-secondary ${item.user_vote === 1 ? 'active' : ''}`}
+                          onClick={() => suggestedNormVoteMutation.mutate({ normId: item.id, vote: 1 })}
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn btn-secondary ${item.user_vote === -1 ? 'active' : ''}`}
+                          onClick={() => suggestedNormVoteMutation.mutate({ normId: item.id, vote: -1 })}
+                        >
+                          -
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {suggestedNormsQuery.data && !suggestedNormsQuery.data.items.length && (
+            <div className="empty-state">Пока нет заявок.</div>
+          )}
+        </div>
+      )}
+
       <div className="tabs">
         {[
-          ...(canManageNorms ? [{ id: 'norms', label: 'Нормы' }] : []),
+          ...(canManageNorms
+            ? [
+                { id: 'norms', label: 'Нормы' },
+                { id: 'suggested', label: 'Заявки норм' },
+              ]
+            : []),
           ...(isAdmin
             ? [
                 { id: 'users', label: 'Пользователи' },
@@ -915,7 +1011,7 @@ function AdminPage() {
             className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
             onClick={() =>
               setActiveTab(
-                tab.id as 'users' | 'llm' | 'runs' | 'access' | 'caddy' | 'norms',
+                tab.id as 'users' | 'llm' | 'runs' | 'access' | 'caddy' | 'norms' | 'suggested',
               )
             }
           >
