@@ -12,36 +12,46 @@ from backend.app.services.llm_playground import LLMPlaygroundError, request_llm_
 
 logger = logging.getLogger(__name__)
 
-MAX_NORMS_FOR_PROMPT = 80
+MAX_NORMS_FOR_PROMPT = 150
 MAX_NORM_TEXT_CHARS = 400
+
+CANONICAL_SECTIONS: list[tuple[str, tuple[str, ...]]] = [
+    ("Безопасность", ("безопас", "парол", "auth", "tls", "rce", "sql-инъ", "доступ")),
+    ("Запросы/SQL", ("запрос", "query", "join", "select", "вт", "индекс", "остат", "упоряд")),
+    ("Транзакции/Блокировки", ("транзак", "блокир", "lock", "монопол", "исключит", "управляемая")),
+    ("Архитектура/Стиль", ("архитект", "паттерн", "solid", "стиль", "code", "оформление")),
+    ("UI/Формы", ("форма", "ui", "интерфейс", "элемент формы", "управляемое прил")),
+    ("Данные/Метаданные", ("метадан", "справочник", "документ", "регистр", "реквизит")),
+    ("Интеграции/Инфра", ("http", "ftp", "интеграц", "обмен", "внешн", "компонент")),
+    ("Производительность", ("производ", "perf", "оптимизац", "кэш", "slow")),
+    ("Прочее", ()),
+]
 
 
 def _load_catalog_norms() -> list[dict[str, Any]]:
     root_dir = Path(__file__).resolve().parents[3]
-    path = root_dir / "norms.yaml"
-    if not path.exists():
-        return []
+    paths = [root_dir / "norms.yaml", root_dir / "critical_norms.yaml"]
     try:
         import yaml  # lazy import
     except ImportError:
         logger.warning("yaml not available, cannot load norms catalog")
         return []
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or []
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Failed to load norms.yaml: %s", exc)
-        return []
-    if isinstance(data, dict):
-        entries = data.get("norms") or []
-    else:
-        entries = data
     results: list[dict[str, Any]] = []
-    for entry in entries:
-        if not isinstance(entry, dict):
+    for path in paths:
+        if not path.exists():
             continue
-        if not entry.get("norm_id"):
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or []
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to load %s: %s", path.name, exc)
             continue
-        results.append(entry)
+        entries = data.get("norms") if isinstance(data, dict) else data
+        for entry in entries or []:
+            if not isinstance(entry, dict):
+                continue
+            if not entry.get("norm_id"):
+                continue
+            results.append(entry)
     return results
 
 
@@ -59,11 +69,25 @@ def _truncate_norm(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_sections_list(db_norms: list[Norm], catalog_norms: list[dict[str, Any]]) -> list[str]:
-    sections = {norm.section for norm in db_norms}
+    sections = set()
+    for norm in db_norms:
+        sections.add(map_section_name(norm.section))
     for entry in catalog_norms:
         if isinstance(entry, dict) and entry.get("section"):
-            sections.add(entry["section"])
-    return sorted(sections)
+            sections.add(map_section_name(entry["section"]))
+    # сохраняем порядок из CANONICAL_SECTIONS
+    ordered = [name for name, _ in CANONICAL_SECTIONS if name in sections]
+    return ordered or [name for name, _ in CANONICAL_SECTIONS]
+
+
+def map_section_name(section: str) -> str:
+    lowered = (section or "").lower()
+    for name, keywords in CANONICAL_SECTIONS:
+        if not keywords:
+            continue
+        if any(k in lowered for k in keywords):
+            return name
+    return "Прочее"
 
 
 def call_llm_for_norm(

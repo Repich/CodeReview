@@ -224,6 +224,7 @@ function RunDetailsPage() {
     mutationFn: (payload: { section: string; severity: 'critical' | 'major' | 'minor' | 'info'; text: string }) =>
       createSuggestedNorm(payload),
   });
+  const [lastSuggested, setLastSuggested] = useState<import('../services/api').SuggestedNorm | null>(null);
 
   const deleteRunMutation = useMutation({
     mutationFn: () => deleteReviewRun(id!),
@@ -608,13 +609,16 @@ function RunDetailsPage() {
       return;
     }
     try {
-      await createNormMutation.mutateAsync({
+      const result = await createNormMutation.mutateAsync({
         section: normSection.trim(),
         severity: normSeverity,
         text: normText.trim(),
       });
+      setLastSuggested(result);
       setNormMessage(
-        'Норма отправлена: если не найден дубль, она будет добавлена после автооформления. Можно перезапустить анализ для применения.',
+        result.status === 'rejected_duplicate'
+          ? 'Норма отклонена как дубликат. Проверьте существующие правила.'
+          : 'Норма оформлена. Можно перезапустить анализ для применения.',
       );
       setNormState('success');
       setNormSection('');
@@ -829,6 +833,42 @@ function RunDetailsPage() {
             <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>
               {normMessage}
             </p>
+          )}
+          {lastSuggested && (
+            <section className="card" style={{ marginBottom: '1.5rem' }}>
+              <div className="card-header">
+                <div>
+                  <h3 className="card-title">Результат автооформления</h3>
+                  <p className="muted">
+                    Статус: {lastSuggested.status}
+                    {lastSuggested.duplicate_of?.length ? ` · Дубликат: ${lastSuggested.duplicate_of.join(', ')}` : ''}
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gap: '0.35rem' }}>
+                <div>
+                  <strong>norm_id:</strong> {lastSuggested.generated_norm_id || '—'}
+                </div>
+                <div>
+                  <strong>Название:</strong> {lastSuggested.generated_title || '—'}
+                </div>
+                <div>
+                  <strong>Раздел:</strong> {lastSuggested.generated_section || lastSuggested.section}
+                  {' · '}
+                  <strong>Серьёзность:</strong>{' '}
+                  {lastSuggested.generated_severity || lastSuggested.severity}
+                </div>
+                <div>
+                  <strong>Область:</strong> {lastSuggested.generated_scope || '—'}
+                </div>
+                <div>
+                  <strong>Текст нормы:</strong>
+                  <div className="muted" style={{ whiteSpace: 'pre-wrap' }}>
+                    {lastSuggested.generated_text || lastSuggested.text_raw}
+                  </div>
+                </div>
+              </div>
+            </section>
           )}
           {showNormForm && (
             <section className="card" style={{ marginBottom: '1.5rem' }}>
