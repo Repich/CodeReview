@@ -38,6 +38,7 @@ class SuggestedNormRead(ORMModel):
     text_raw: str
     status: str
     duplicate_of: list[str] | None = None
+    duplicate_titles: dict[str, str | None] | None = None
     generated_norm_id: str | None = None
     generated_title: str | None = None
     generated_section: str | None = None
@@ -60,4 +61,3 @@ class SuggestedNormListResponse(ORMModel):
 
 class SuggestedNormVoteCreate(ORMModel):
     vote: int = Field(..., description="+1 или -1")
-

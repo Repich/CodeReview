@@ -45,7 +45,8 @@ a:hover {
   border-radius: 50%;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 0 0 2px #000 inset;
+  background: #ffd200;
+  box-shadow: 0 0 0 2px #ffd200 inset;
 }
 
 .loader-beeline::before,
@@ -55,12 +56,12 @@ a:hover {
   inset: 0;
   background: repeating-linear-gradient(
     180deg,
-    #ffd200 0,
-    #ffd200 12px,
+    transparent 0,
+    transparent 12px,
     #000 12px,
     #000 24px
   );
-  animation: beeline-fill 1.5s linear infinite;
+  animation: beeline-fill 1.2s linear infinite;
 }
 
 .loader-beeline::after {

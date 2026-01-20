@@ -22,7 +22,12 @@ from backend.app.services.suggested_norms import (
 router = APIRouter(prefix="/suggested-norms", tags=["suggested_norms"])
 
 
-def _to_read_model(item: SuggestedNorm, current_user: UserAccount | None, vote_score: int) -> SuggestedNormRead:
+def _to_read_model(
+    item: SuggestedNorm,
+    current_user: UserAccount | None,
+    vote_score: int,
+    dup_titles: dict[str, str],
+) -> SuggestedNormRead:
     user_vote = None
     if current_user:
         for vote in item.votes:
@@ -37,6 +42,7 @@ def _to_read_model(item: SuggestedNorm, current_user: UserAccount | None, vote_s
         text_raw=item.text_raw,
         status=item.status,
         duplicate_of=item.duplicate_of,
+        duplicate_titles={k: dup_titles.get(k) for k in (item.duplicate_of or [])},
         generated_norm_id=item.generated_norm_id,
         generated_title=item.generated_title,
         generated_section=item.generated_section,
@@ -82,6 +88,7 @@ def create_suggested_norm(
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"LLM error: {exc}") from exc
 
+    dup_titles = {n.norm_id: n.title for n in db.query(Norm).all()}
     norm = SuggestedNorm(
         author_id=current_user.id,
         section=payload.section,
@@ -104,7 +111,7 @@ def create_suggested_norm(
     db.add(norm)
     db.commit()
     db.refresh(norm)
-    return _to_read_model(norm, current_user, vote_score=0)
+    return _to_read_model(norm, current_user, vote_score=0, dup_titles=dup_titles)
 
 
 @router.get("", response_model=SuggestedNormListResponse)
@@ -120,12 +127,13 @@ def list_suggested_norms(
         query = query.filter(SuggestedNorm.status == status)
     total = query.count()
     items = query.order_by(SuggestedNorm.created_at.desc()).offset(offset).limit(limit).all()
+    dup_titles = {n.norm_id: n.title for n in db.query(Norm).all()}
     results: list[SuggestedNormRead] = []
     for item in items:
         vote_sum = db.query(func.coalesce(func.sum(SuggestedNormVote.vote), 0)).filter(
             SuggestedNormVote.norm_id == item.id
         ).scalar()
-        results.append(_to_read_model(item, current_user, vote_score=vote_sum or 0))
+        results.append(_to_read_model(item, current_user, vote_score=vote_sum or 0, dup_titles=dup_titles))
     return SuggestedNormListResponse(items=results, total=total)
 
 

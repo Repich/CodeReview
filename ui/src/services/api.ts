@@ -498,6 +498,7 @@ export interface SuggestedNorm {
   text_raw: string;
   status: string;
   duplicate_of?: string[] | null;
+  duplicate_titles?: Record<string, string | null> | null;
   generated_norm_id?: string | null;
   generated_title?: string | null;
   generated_section?: string | null;

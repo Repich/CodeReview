@@ -117,6 +117,8 @@ function RunDetailsPage() {
   const [showDiff, setShowDiff] = useState(false);
   const [showAIContext, setShowAIContext] = useState(false);
   const [showFindingsContext, setShowFindingsContext] = useState(true);
+  const [showAISources, setShowAISources] = useState(false);
+  const [showNormSources, setShowNormSources] = useState(false);
   const [selectionDraft, setSelectionDraft] = useState<{
     text: string;
     file: string | null;
@@ -199,7 +201,13 @@ function RunDetailsPage() {
     queryKey: ['run-sources', id],
     queryFn: () => fetchRunSources(id!),
     enabled:
-      Boolean(id) && (showDiff || showAIContext || showFindingsContext || activeTab === 'norms'),
+      Boolean(id) &&
+      (showDiff ||
+        showAIContext ||
+        showAISources ||
+        showNormSources ||
+        showFindingsContext ||
+        activeTab === 'norms'),
   });
 
   const normSectionsQuery = useQuery({
@@ -316,6 +324,7 @@ function RunDetailsPage() {
     if (activeTab === 'norms' && canTeach) return;
     setSelectionDraft(null);
     setShowNormForm(false);
+    setShowNormSources(false);
   }, [activeTab, canTeach]);
 
   useEffect(() => {
@@ -832,6 +841,13 @@ function RunDetailsPage() {
             >
               Создать норму
             </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => setShowNormSources((prev) => !prev)}
+            >
+              {showNormSources ? 'Скрыть исходники' : 'Показать исходный код'}
+            </button>
           </div>
           {normMessage && !showNormForm && (
             <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>
@@ -845,7 +861,23 @@ function RunDetailsPage() {
                   <h3 className="card-title">Результат автооформления</h3>
                   <p className="muted">
                     Статус: {lastSuggested.status}
-                    {lastSuggested.duplicate_of?.length ? ` · Дубликат: ${lastSuggested.duplicate_of.join(', ')}` : ''}
+                    {lastSuggested.duplicate_of?.length ? (
+                      <>
+                        {' '}
+                        · Дубликат:
+                        {' '}
+                        {lastSuggested.duplicate_of
+                          .map(
+                            (id) =>
+                              `${id}${
+                                lastSuggested.duplicate_titles && lastSuggested.duplicate_titles[id]
+                                  ? ` — ${lastSuggested.duplicate_titles[id]}`
+                                  : ''
+                              }`,
+                          )
+                          .join(', ')}
+                      </>
+                    ) : null}
                   </p>
                 </div>
               </div>
@@ -956,36 +988,38 @@ function RunDetailsPage() {
               )}
             </section>
           )}
-          <section className="card" style={{ marginBottom: '1.5rem' }}>
-            <div className="card-header">
-              <div>
-                <h2 className="card-title">Исходный код запуска</h2>
-                <p className="muted">{normSources.length} файлов</p>
+          {showNormSources && (
+            <section className="card" style={{ marginBottom: '1.5rem' }}>
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Исходный код запуска</h2>
+                  <p className="muted">{normSources.length} файлов</p>
+                </div>
+                {runSourcesQuery.isLoading && <span className="muted">Загружаем…</span>}
               </div>
-              {runSourcesQuery.isLoading && <span className="muted">Загружаем…</span>}
-            </div>
-            {runSourcesQuery.error && (
-              <p className="alert alert-error">Не удалось загрузить исходный код запуска.</p>
-            )}
-            {!runSourcesQuery.isLoading && !runSourcesQuery.error && !normSources.length && (
-              <div className="empty-state">Исходный код не найден в артефактах.</div>
-            )}
-            {normSources.map((source) => (
-              <details key={source.path} className="card" open>
-                <summary>
-                  {source.path}{' '}
-                  <span className="muted">({source.lineCount} строк)</span>
-                </summary>
-                <pre
-                  data-source-path={source.path}
-                  data-line-start="1"
-                  data-line-end={String(source.lineCount)}
-                >
-                  {source.content}
-                </pre>
-              </details>
-            ))}
-          </section>
+              {runSourcesQuery.error && (
+                <p className="alert alert-error">Не удалось загрузить исходный код запуска.</p>
+              )}
+              {!runSourcesQuery.isLoading && !runSourcesQuery.error && !normSources.length && (
+                <div className="empty-state">Исходный код не найден в артефактах.</div>
+              )}
+              {normSources.map((source) => (
+                <details key={source.path} className="card" open>
+                  <summary>
+                    {source.path}{' '}
+                    <span className="muted">({source.lineCount} строк)</span>
+                  </summary>
+                  <pre
+                    data-source-path={source.path}
+                    data-line-start="1"
+                    data-line-end={String(source.lineCount)}
+                  >
+                    {source.content}
+                  </pre>
+                </details>
+              ))}
+            </section>
+          )}
         </>
       )}
 
@@ -1094,6 +1128,13 @@ function RunDetailsPage() {
               >
                 {showAIContext ? 'Скрыть контекст' : 'Показать контекст'}
               </button>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => setShowAISources((prev) => !prev)}
+              >
+                {showAISources ? 'Скрыть исходники' : 'Показать исходный код'}
+              </button>
             </div>
           </div>
           {aiFindingsQuery.error && (
@@ -1122,6 +1163,39 @@ function RunDetailsPage() {
               <div className="empty-state">LLM не предложила дополнительных норм.</div>
             )}
           </div>
+        </section>
+      )}
+
+      {activeTab === 'ai' && showAISources && (
+        <section className="card" style={{ marginBottom: '1.5rem' }}>
+          <div className="card-header">
+            <div>
+              <h2 className="card-title">Исходный код запуска</h2>
+              <p className="muted">{normSources.length} файлов</p>
+            </div>
+            {runSourcesQuery.isLoading && <span className="muted">Загружаем…</span>}
+          </div>
+          {runSourcesQuery.error && (
+            <p className="alert alert-error">Не удалось загрузить исходный код запуска.</p>
+          )}
+          {!runSourcesQuery.isLoading && !runSourcesQuery.error && !normSources.length && (
+            <div className="empty-state">Исходный код не найден в артефактах.</div>
+          )}
+          {normSources.map((source) => (
+            <details key={source.path} className="card" open>
+              <summary>
+                {source.path}{' '}
+                <span className="muted">({source.lineCount} строк)</span>
+              </summary>
+              <pre
+                data-source-path={source.path}
+                data-line-start="1"
+                data-line-end={String(source.lineCount)}
+              >
+                {source.content}
+              </pre>
+            </details>
+          ))}
         </section>
       )}
 
