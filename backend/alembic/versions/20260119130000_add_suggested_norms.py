@@ -1,7 +1,7 @@
 """add suggested norms tables
 
 Revision ID: 20260119130000
-Revises: 20260116100000_add_teacher_role
+Revises: 20260116100000
 Create Date: 2026-01-19 13:00:00.000000
 """
 
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = "20260119130000_add_suggested_norms"
-down_revision = "20260116100000_add_teacher_role"
+revision = "20260119130000"
+down_revision = "20260116100000"
 branch_labels = None
 depends_on = None
 
