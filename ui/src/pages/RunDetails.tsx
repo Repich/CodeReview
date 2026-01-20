@@ -505,7 +505,15 @@ function RunDetailsPage() {
         data-source-path={source.path}
         data-line-start="1"
         data-line-end={String(lines.length)}
-        style={{ maxHeight: '60vh', overflow: 'auto', background: '#0b1021', color: '#e5e7eb', padding: '0.75rem', borderRadius: '0.5rem' }}
+        style={{
+          maxHeight: '55vh',
+          overflow: 'auto',
+          background: '#fff',
+          color: '#0f172a',
+          padding: '0.75rem',
+          borderRadius: '0.5rem',
+          border: '1px solid var(--border)',
+        }}
       >
         {lines.map((line, idx) => {
           const ln = idx + 1;
@@ -1195,8 +1203,15 @@ function RunDetailsPage() {
           {aiFindingsQuery.error && (
             <p className="alert alert-error">Не удалось загрузить предложения LLM.</p>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) 1fr', gap: '1rem' }}>
-            <div className="card-list">
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '360px 1fr',
+              gap: '1rem',
+              alignItems: 'start',
+            }}
+          >
+            <div className="card-list" style={{ maxHeight: '80vh', overflow: 'auto' }}>
               {orderedAiFindings.map((finding) => (
                 <div
                   key={finding.id}
@@ -1236,24 +1251,33 @@ function RunDetailsPage() {
               )}
             </div>
 
-            <div className="card" style={{ padding: '1rem' }}>
-              <div className="card-header">
+            <div className="card" style={{ padding: '1rem', maxHeight: '85vh', overflow: 'hidden' }}>
+              <div className="card-header" style={{ marginBottom: '0.5rem' }}>
                 <div>
                   <h3 className="card-title">Контекст и нормы</h3>
                   <p className="muted">Исходный код целиком, выделение выбранного предложения.</p>
                 </div>
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  onClick={() => {
-                    setShowNormForm(true);
-                    if (selectedAiFinding?.norm_text) {
-                      setNormText(selectedAiFinding.norm_text);
-                    }
-                  }}
-                >
-                  Создать норму
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setShowAISources((prev) => !prev)}
+                  >
+                    {showAISources ? 'Скрыть исходники' : 'Показать исходники'}
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    onClick={() => {
+                      setShowNormForm(true);
+                      if (selectedAiFinding?.norm_text) {
+                        setNormText(selectedAiFinding.norm_text);
+                      }
+                    }}
+                  >
+                    Создать норму
+                  </button>
+                </div>
               </div>
               {lastSuggested && (
                 <section className="card" style={{ marginBottom: '1rem' }}>
@@ -1381,7 +1405,7 @@ function RunDetailsPage() {
               )}
 
               {showAISources && (
-                <div style={{ display: 'grid', gap: '0.75rem' }}>
+                <div style={{ display: 'grid', gap: '0.75rem', maxHeight: '60vh', overflow: 'auto' }}>
                   {runSourcesQuery.error && (
                     <p className="alert alert-error">Не удалось загрузить исходный код запуска.</p>
                   )}
@@ -1389,13 +1413,24 @@ function RunDetailsPage() {
                   {!runSourcesQuery.isLoading &&
                     !runSourcesQuery.error &&
                     (runSourcesQuery.data || []).map((source) => (
-                      <details key={source.path} className="card" open>
-                        <summary>
-                          {source.path}{' '}
-                          <span className="muted">({source.content.split('\n').length} строк)</span>
-                        </summary>
+                      <div key={source.path} style={{ border: '1px solid var(--border)', borderRadius: '0.75rem' }}>
+                        <div
+                          style={{
+                            padding: '0.5rem 0.75rem',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            background: '#f7f7fb',
+                            borderBottom: '1px solid var(--border)',
+                          }}
+                        >
+                          <div>
+                            <strong>{source.path}</strong>{' '}
+                            <span className="muted">({source.content.split('\n').length} строк)</span>
+                          </div>
+                        </div>
                         {renderSource(source)}
-                      </details>
+                      </div>
                     ))}
                 </div>
               )}
