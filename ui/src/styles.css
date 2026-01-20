@@ -1,3 +1,10 @@
+@import './styles/cards.css';
+@import './styles/forms.css';
+@import './styles/tables.css';
+@import './styles/labels.css';
+@import './styles/tooltip.css';
+@import './styles/loader.css';
+
 :root {
   --bg: #f6f7fb;
   --surface: #ffffff;

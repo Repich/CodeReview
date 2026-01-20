@@ -12,7 +12,6 @@ from backend.app.services.llm_playground import LLMPlaygroundError, request_llm_
 
 logger = logging.getLogger(__name__)
 
-MAX_NORMS_FOR_PROMPT = 150
 MAX_NORM_TEXT_CHARS = 400
 
 CANONICAL_SECTIONS: list[tuple[str, tuple[str, ...]]] = [
@@ -50,6 +49,9 @@ def _load_catalog_norms() -> list[dict[str, Any]]:
             if not isinstance(entry, dict):
                 continue
             if not entry.get("norm_id"):
+                continue
+            sev = str(entry.get("default_severity") or "").lower()
+            if sev == "info":
                 continue
             results.append(entry)
     return results
@@ -98,25 +100,29 @@ def call_llm_for_norm(
     catalog_norms: list[dict[str, Any]] | None = None,
 ) -> SuggestedNormLLMResult:
     catalog_norms = catalog_norms or []
-    combined_norms = [
-        _truncate_norm(
-            {
-                "norm_id": norm.norm_id,
-                "title": norm.title,
-                "section": norm.section,
-                "scope": norm.scope,
-                "default_severity": norm.default_severity,
-                "norm_text": norm.norm_text,
-            }
+    combined_norms = []
+    for norm in db_norms:
+        if str(norm.default_severity or "").lower() == "info":
+            continue
+        combined_norms.append(
+            _truncate_norm(
+                {
+                    "norm_id": norm.norm_id,
+                    "title": norm.title,
+                    "section": norm.section,
+                    "scope": norm.scope,
+                    "default_severity": norm.default_severity,
+                    "norm_text": norm.norm_text,
+                }
+            )
         )
-        for norm in db_norms
-    ] + [_truncate_norm(entry) for entry in catalog_norms]
-    combined_norms = combined_norms[:MAX_NORMS_FOR_PROMPT]
+    for entry in catalog_norms:
+        combined_norms.append(_truncate_norm(entry))
 
     system_prompt = (
         "Ты заполняешь карточку новой нормы код-ревью 1С. "
         "Тебе дают черновой текст нормы от пользователя. "
-        "Нужно: (1) Проверить, дубликат ли это существующей нормы; "
+        "Нужно: (1) Проверить, дубликат ли это существующей нормы (любое смысловое совпадение темы считается дубликатом, даже если формулировки различаются); "
         "(2) Если не дубликат — оформить норму по образцу: norm_id, title, section, scope, "
         "detector_type, check_type, default_severity, version (целое), norm_text (формализуй, но по смыслу пользователя). "
         "Всегда отвечай строго JSON без комментариев."

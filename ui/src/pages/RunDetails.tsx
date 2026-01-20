@@ -225,6 +225,7 @@ function RunDetailsPage() {
       createSuggestedNorm(payload),
   });
   const [lastSuggested, setLastSuggested] = useState<import('../services/api').SuggestedNorm | null>(null);
+  const [isSuggesting, setIsSuggesting] = useState(false);
 
   const deleteRunMutation = useMutation({
     mutationFn: () => deleteReviewRun(id!),
@@ -603,9 +604,11 @@ function RunDetailsPage() {
     if (!canTeach) return;
     setNormMessage(null);
     setNormState('idle');
+    setIsSuggesting(true);
     if (!normSection || !normText) {
       setNormMessage('Заполните раздел и текст нормы.');
       setNormState('error');
+      setIsSuggesting(false);
       return;
     }
     try {
@@ -629,6 +632,7 @@ function RunDetailsPage() {
       setNormMessage('Не удалось создать норму.');
       setNormState('error');
     }
+    setIsSuggesting(false);
   };
 
   const handleDeleteRun = () => {
@@ -943,6 +947,7 @@ function RunDetailsPage() {
                 >
                   {createNormMutation.isPending ? 'Сохраняем…' : 'Создать норму'}
                 </button>
+                {isSuggesting && <div className="loader-beeline" aria-label="Ожидаем ответ LLM" />}
               </form>
               {normMessage && (
                 <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>

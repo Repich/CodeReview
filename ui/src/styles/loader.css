@@ -1,0 +1,37 @@
+.loader-beeline {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 0 2px #000 inset;
+}
+
+.loader-beeline::before,
+.loader-beeline::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    #ffd200 0,
+    #ffd200 12px,
+    #000 12px,
+    #000 24px
+  );
+  animation: beeline-fill 1.5s linear infinite;
+}
+
+.loader-beeline::after {
+  opacity: 0.5;
+  filter: blur(1px);
+}
+
+@keyframes beeline-fill {
+  0% {
+    transform: translateY(100%);
+  }
+  100% {
+    transform: translateY(-100%);
+  }
+}
