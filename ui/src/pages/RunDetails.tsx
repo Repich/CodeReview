@@ -1176,7 +1176,7 @@ function RunDetailsPage() {
             <div>
               <h2 className="card-title">Предложения LLM</h2>
               <p className="muted">
-                {aiFindings.length}/{aiFindingsQuery.data?.total ?? 0}
+                {aiFindingsQuery.isLoading ? 'Загружаем…' : `${aiFindings.length}/${aiFindingsQuery.data?.total ?? 0}`}
               </p>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -1203,10 +1203,17 @@ function RunDetailsPage() {
           {aiFindingsQuery.error && (
             <p className="alert alert-error">Не удалось загрузить предложения LLM.</p>
           )}
+          {aiFindingsQuery.isLoading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem' }}>
+              <div className="loader-beeline" aria-label="Загрузка предложений LLM" />
+              <div className="muted">Загружаем предложения LLM…</div>
+            </div>
+          )}
+          {!aiFindingsQuery.isLoading && (
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '360px 1fr',
+              gridTemplateColumns: '520px minmax(700px, 1fr)',
               gap: '1rem',
               alignItems: 'start',
             }}
@@ -1436,6 +1443,7 @@ function RunDetailsPage() {
               )}
             </div>
           </div>
+          )}
         </section>
       )}
 
