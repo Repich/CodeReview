@@ -8,6 +8,7 @@ from backend.app.api.deps import get_current_admin, get_current_teacher, get_db
 from backend.app.models import SuggestedNorm, SuggestedNormVote, UserAccount
 from backend.app.models.norm import Norm
 from backend.app.schemas.suggested_norms import (
+    SuggestedNormAccept,
     SuggestedNormCreate,
     SuggestedNormListResponse,
     SuggestedNormRead,
@@ -175,6 +176,7 @@ def vote_suggested_norm(
 @router.post("/{norm_id}/accept", response_model=SuggestedNormRead)
 def accept_suggested_norm(
     norm_id: str,
+    payload: SuggestedNormAccept | None = None,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> SuggestedNormRead:
@@ -183,14 +185,30 @@ def accept_suggested_norm(
         raise HTTPException(status_code=404, detail="Suggested norm not found")
     if norm.status in {"accepted_auto", "accepted_manual"}:
         raise HTTPException(status_code=400, detail="Suggested norm already accepted")
-    if not norm.generated_norm_id or not norm.generated_title or not norm.generated_text:
-        raise HTTPException(status_code=400, detail="Suggested norm is missing generated fields")
+    norm_id_value = (payload.norm_id if payload and payload.norm_id else norm.generated_norm_id or "").strip()
+    title_value = (payload.title if payload and payload.title else norm.generated_title or "").strip()
+    text_value = (payload.norm_text if payload and payload.norm_text else norm.generated_text or "").strip()
+    section_value = (payload.section if payload and payload.section else norm.generated_section or norm.section or "").strip()
+    scope_value = (payload.scope if payload and payload.scope else norm.generated_scope or "любой модуль").strip()
+    if not norm_id_value or not title_value or not text_value:
+        raise HTTPException(status_code=400, detail="norm_id, title, and norm_text are required")
     try:
-        append_suggested_norm_to_pattern_file(norm)
+        append_suggested_norm_to_pattern_file(
+            norm_id=norm_id_value,
+            title=title_value,
+            norm_text=text_value,
+            section=section_value or "Прочее",
+            scope=scope_value or "любой модуль",
+        )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    norm.generated_norm_id = norm_id_value
+    norm.generated_title = title_value
+    norm.generated_text = text_value
+    norm.generated_section = section_value
+    norm.generated_scope = scope_value
     norm.status = "accepted_manual"
     db.add(norm)
     db.commit()

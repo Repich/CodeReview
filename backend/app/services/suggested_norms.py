@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from backend.app.models.norm import Norm
-from backend.app.models.suggested_norm import SuggestedNorm
 from backend.app.schemas.suggested_norms import SuggestedNormLLMResult
 from backend.app.services.llm_playground import LLMPlaygroundError, request_llm_playground
 
@@ -189,14 +188,17 @@ def _extract_json(text: str) -> dict[str, Any] | None:
     return None
 
 
-def append_suggested_norm_to_pattern_file(norm: SuggestedNorm) -> None:
+def append_suggested_norm_to_pattern_file(
+    norm_id: str,
+    title: str,
+    norm_text: str,
+    section: str,
+    scope: str,
+) -> None:
     try:
         import yaml  # lazy import
     except ImportError as exc:
         raise RuntimeError("yaml not available, cannot update pattern norms file") from exc
-
-    if not norm.generated_norm_id or not norm.generated_title or not norm.generated_text:
-        raise ValueError("suggested norm is missing generated fields")
 
     root_dir = Path(__file__).resolve().parents[3]
     path = root_dir / "pattern_1С.yaml"
@@ -211,17 +213,15 @@ def append_suggested_norm_to_pattern_file(norm: SuggestedNorm) -> None:
             existing = data
         else:
             existing = []
-    if any(entry.get("norm_id") == norm.generated_norm_id for entry in existing if isinstance(entry, dict)):
+    if any(entry.get("norm_id") == norm_id for entry in existing if isinstance(entry, dict)):
         raise ValueError("norm_id already exists in pattern file")
 
-    section = norm.generated_section or norm.section
-    scope = norm.generated_scope or "любой модуль"
     entry = {
-        "norm_id": norm.generated_norm_id,
-        "title": norm.generated_title,
+        "norm_id": norm_id,
+        "title": title,
         "section": section,
         "category": "custom",
-        "norm_text": norm.generated_text,
+        "norm_text": norm_text,
         "rationale": "",
         "detection_hint": "",
         "scope": scope,

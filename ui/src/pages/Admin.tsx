@@ -20,6 +20,7 @@ import {
   voteSuggestedNorm,
   acceptSuggestedNorm,
   LLMPlaygroundResponse,
+  SuggestedNormAcceptPayload,
   requeueReviewRun,
   runLLMPlayground,
   updateUserStatus,
@@ -114,6 +115,19 @@ function AdminPage() {
     'users' | 'llm' | 'runs' | 'access' | 'caddy' | 'norms'
   >('users');
   const [normsSubTab, setNormsSubTab] = useState<'catalog' | 'requests'>('catalog');
+  const [manualAcceptOpen, setManualAcceptOpen] = useState<Record<string, boolean>>({});
+  const [manualAcceptInputs, setManualAcceptInputs] = useState<
+    Record<
+      string,
+      {
+        normId: string;
+        title: string;
+        text: string;
+        section: string;
+        scope: string;
+      }
+    >
+  >({});
 
   const usersQuery = useQuery({
     queryKey: ['admin-users', userEmailFilter, userStatusFilter, usersLimit],
@@ -233,9 +247,13 @@ function AdminPage() {
   });
 
   const suggestedNormAcceptMutation = useMutation({
-    mutationFn: (normId: string) => acceptSuggestedNorm(normId),
-    onSuccess: () => {
+    mutationFn: ({ normId, payload }: { normId: string; payload?: SuggestedNormAcceptPayload }) =>
+      acceptSuggestedNorm(normId, payload),
+    onSuccess: (_data, variables) => {
       suggestedNormsQuery.refetch();
+      if (variables?.normId) {
+        setManualAcceptOpen((prev) => ({ ...prev, [variables.normId]: false }));
+      }
     },
   });
 
@@ -729,24 +747,187 @@ function AdminPage() {
                         >
                           -
                         </button>
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            onClick={() => suggestedNormAcceptMutation.mutate(item.id)}
-                            disabled={
-                              suggestedNormAcceptMutation.isPending
-                              || !item.generated_norm_id
-                              || !item.generated_title
-                              || !item.generated_text
-                              || item.status === 'accepted_auto'
-                              || item.status === 'accepted_manual'
-                            }
-                          >
-                            Принять норму
-                          </button>
-                        )}
+                        {isAdmin && (() => {
+                          const manualOpen = manualAcceptOpen[item.id] || false;
+                          const manualInput = manualAcceptInputs[item.id];
+                          const hasGenerated = Boolean(item.generated_norm_id && item.generated_title && item.generated_text);
+                          const manualReady = Boolean(
+                            manualOpen
+                            && manualInput
+                            && manualInput.normId.trim()
+                            && manualInput.title.trim()
+                            && manualInput.text.trim(),
+                          );
+                          const isAccepted = item.status === 'accepted_auto' || item.status === 'accepted_manual';
+                          const canAcceptGenerated = hasGenerated && !manualOpen;
+                          const canAcceptManual = manualReady;
+                          const disabled = suggestedNormAcceptMutation.isPending || isAccepted || (!canAcceptGenerated && !canAcceptManual);
+                          const payload = canAcceptManual
+                            ? {
+                                norm_id: manualInput.normId.trim(),
+                                title: manualInput.title.trim(),
+                                section: manualInput.section.trim(),
+                                scope: manualInput.scope.trim(),
+                                norm_text: manualInput.text.trim(),
+                              }
+                            : undefined;
+                          return (
+                            <>
+                              {!hasGenerated && !manualOpen && (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  onClick={() => {
+                                    setManualAcceptOpen((prev) => ({ ...prev, [item.id]: true }));
+                                    setManualAcceptInputs((prev) => ({
+                                      ...prev,
+                                      [item.id]: prev[item.id] || {
+                                        normId: '',
+                                        title: '',
+                                        text: item.text_raw || '',
+                                        section: item.section || 'Прочее',
+                                        scope: item.generated_scope || 'любой модуль',
+                                      },
+                                    }));
+                                  }}
+                                  disabled={isAccepted}
+                                >
+                                  Заполнить вручную
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={() => suggestedNormAcceptMutation.mutate({ normId: item.id, payload })}
+                                disabled={disabled}
+                              >
+                                Принять норму
+                              </button>
+                            </>
+                          );
+                        })()}
                       </div>
+                      {isAdmin && manualAcceptOpen[item.id] && (
+                        <div className="form-grid" style={{ marginTop: '0.75rem', gap: '0.75rem' }}>
+                          <div className="field">
+                            <label htmlFor={`manual-norm-id-${item.id}`}>norm_id</label>
+                            <input
+                              id={`manual-norm-id-${item.id}`}
+                              type="text"
+                              value={manualAcceptInputs[item.id]?.normId ?? ''}
+                              onChange={(event) =>
+                                setManualAcceptInputs((prev) => ({
+                                  ...prev,
+                                  [item.id]: {
+                                    ...(prev[item.id] || {
+                                      normId: '',
+                                      title: '',
+                                      text: item.text_raw || '',
+                                      section: item.section || 'Прочее',
+                                      scope: item.generated_scope || 'любой модуль',
+                                    }),
+                                    normId: event.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder="CUSTOM_001"
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`manual-norm-title-${item.id}`}>Название</label>
+                            <input
+                              id={`manual-norm-title-${item.id}`}
+                              type="text"
+                              value={manualAcceptInputs[item.id]?.title ?? ''}
+                              onChange={(event) =>
+                                setManualAcceptInputs((prev) => ({
+                                  ...prev,
+                                  [item.id]: {
+                                    ...(prev[item.id] || {
+                                      normId: '',
+                                      title: '',
+                                      text: item.text_raw || '',
+                                      section: item.section || 'Прочее',
+                                      scope: item.generated_scope || 'любой модуль',
+                                    }),
+                                    title: event.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder="Краткая формулировка"
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`manual-norm-section-${item.id}`}>Раздел</label>
+                            <input
+                              id={`manual-norm-section-${item.id}`}
+                              type="text"
+                              value={manualAcceptInputs[item.id]?.section ?? ''}
+                              onChange={(event) =>
+                                setManualAcceptInputs((prev) => ({
+                                  ...prev,
+                                  [item.id]: {
+                                    ...(prev[item.id] || {
+                                      normId: '',
+                                      title: '',
+                                      text: item.text_raw || '',
+                                      section: item.section || 'Прочее',
+                                      scope: item.generated_scope || 'любой модуль',
+                                    }),
+                                    section: event.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`manual-norm-scope-${item.id}`}>Область</label>
+                            <input
+                              id={`manual-norm-scope-${item.id}`}
+                              type="text"
+                              value={manualAcceptInputs[item.id]?.scope ?? ''}
+                              onChange={(event) =>
+                                setManualAcceptInputs((prev) => ({
+                                  ...prev,
+                                  [item.id]: {
+                                    ...(prev[item.id] || {
+                                      normId: '',
+                                      title: '',
+                                      text: item.text_raw || '',
+                                      section: item.section || 'Прочее',
+                                      scope: item.generated_scope || 'любой модуль',
+                                    }),
+                                    scope: event.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="field" style={{ gridColumn: '1 / -1' }}>
+                            <label htmlFor={`manual-norm-text-${item.id}`}>Текст нормы</label>
+                            <textarea
+                              id={`manual-norm-text-${item.id}`}
+                              rows={4}
+                              value={manualAcceptInputs[item.id]?.text ?? ''}
+                              onChange={(event) =>
+                                setManualAcceptInputs((prev) => ({
+                                  ...prev,
+                                  [item.id]: {
+                                    ...(prev[item.id] || {
+                                      normId: '',
+                                      title: '',
+                                      text: item.text_raw || '',
+                                      section: item.section || 'Прочее',
+                                      scope: item.generated_scope || 'любой модуль',
+                                    }),
+                                    text: event.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

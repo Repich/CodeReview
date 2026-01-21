@@ -61,3 +61,11 @@ class SuggestedNormListResponse(ORMModel):
 
 class SuggestedNormVoteCreate(ORMModel):
     vote: int = Field(..., description="+1 или -1")
+
+
+class SuggestedNormAccept(ORMModel):
+    norm_id: str | None = Field(default=None, min_length=1, max_length=255)
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    section: str | None = Field(default=None, min_length=1, max_length=255)
+    scope: str | None = Field(default=None, min_length=1, max_length=255)
+    norm_text: str | None = Field(default=None, min_length=1)

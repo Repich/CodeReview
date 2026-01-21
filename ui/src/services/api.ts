@@ -519,6 +519,14 @@ export interface SuggestedNormListResponse {
   total: number;
 }
 
+export interface SuggestedNormAcceptPayload {
+  norm_id?: string;
+  title?: string;
+  section?: string;
+  scope?: string;
+  norm_text?: string;
+}
+
 export async function fetchSuggestedNormSections() {
   const { data } = await client.get<string[]>('/suggested-norms/sections');
   return data;
@@ -538,8 +546,8 @@ export async function voteSuggestedNorm(normId: string, vote: 1 | -1) {
   await client.post(`/suggested-norms/${normId}/vote`, { vote });
 }
 
-export async function acceptSuggestedNorm(normId: string) {
-  const { data } = await client.post<SuggestedNorm>(`/suggested-norms/${normId}/accept`);
+export async function acceptSuggestedNorm(normId: string, payload?: SuggestedNormAcceptPayload) {
+  const { data } = await client.post<SuggestedNorm>(`/suggested-norms/${normId}/accept`, payload);
   return data;
 }
 
