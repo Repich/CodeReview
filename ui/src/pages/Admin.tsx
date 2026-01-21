@@ -12,16 +12,13 @@ import {
   fetchCompanies,
   fetchCurrentUser,
   fetchNormCatalog,
-  fetchNorms,
   fetchRuns,
   fetchUsers,
   forceFailReviewRun,
-  createNorm,
   updateUserRole,
   fetchSuggestedNorms,
   voteSuggestedNorm,
   LLMPlaygroundResponse,
-  NormRecord,
   requeueReviewRun,
   runLLMPlayground,
   updateUserStatus,
@@ -112,25 +109,10 @@ function AdminPage() {
   const [normSource, setNormSource] = useState<'static' | 'llm'>('static');
   const [normSearch, setNormSearch] = useState('');
   const [normLimit, setNormLimit] = useState('200');
-  const [normMessage, setNormMessage] = useState<string | null>(null);
-  const [normState, setNormState] = useState<'idle' | 'success' | 'error'>('idle');
-  const [isSubmittingNorm, setSubmittingNorm] = useState(false);
-  const [normId, setNormId] = useState('');
-  const [normTitle, setNormTitle] = useState('');
-  const [normSection, setNormSection] = useState('');
-  const [normScope, setNormScope] = useState('');
-  const [normDetectorType, setNormDetectorType] = useState('custom');
-  const [normCheckType, setNormCheckType] = useState('manual');
-  const [normSeverity, setNormSeverity] = useState('major');
-  const [normText, setNormText] = useState('');
-  const [normSourceRef, setNormSourceRef] = useState('');
-  const [normSourceExcerpt, setNormSourceExcerpt] = useState('');
-  const [normCodeApplicable, setNormCodeApplicable] = useState(true);
-  const [normIsActive, setNormIsActive] = useState(true);
-  const [normVersion, setNormVersion] = useState('1');
   const [activeTab, setActiveTab] = useState<
-    'users' | 'llm' | 'runs' | 'access' | 'caddy' | 'norms' | 'suggested'
+    'users' | 'llm' | 'runs' | 'access' | 'caddy' | 'norms'
   >('users');
+  const [normsSubTab, setNormsSubTab] = useState<'catalog' | 'requests'>('catalog');
 
   const usersQuery = useQuery({
     queryKey: ['admin-users', userEmailFilter, userStatusFilter, usersLimit],
@@ -196,12 +178,6 @@ function AdminPage() {
     enabled: canManageNorms,
   });
 
-  const normsDbQuery = useQuery({
-    queryKey: ['norms-db'],
-    queryFn: () => fetchNorms({ limit: 200 }),
-    enabled: canManageNorms,
-  });
-
   const suggestedNormsQuery = useQuery({
     queryKey: ['suggested-norms'],
     queryFn: () => fetchSuggestedNorms({ limit: 200 }),
@@ -247,14 +223,6 @@ function AdminPage() {
     },
   });
 
-  const normCreateMutation = useMutation({
-    mutationFn: (payload: Omit<NormRecord, 'id' | 'created_at' | 'updated_at'>) =>
-      createNorm(payload),
-    onSuccess: () => {
-      normsDbQuery.refetch();
-    },
-  });
-
   const suggestedNormVoteMutation = useMutation({
     mutationFn: ({ normId, vote }: { normId: string; vote: 1 | -1 }) =>
       voteSuggestedNorm(normId, vote),
@@ -281,52 +249,6 @@ function AdminPage() {
   const handleNormCatalogSubmit = (event: FormEvent) => {
     event.preventDefault();
     normCatalogQuery.refetch();
-  };
-
-  const handleNormCreateSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!canManageNorms) return;
-    setSubmittingNorm(true);
-    setNormMessage(null);
-    setNormState('idle');
-    try {
-      if (!normId || !normTitle || !normSection || !normScope || !normText) {
-        setNormMessage('Заполните обязательные поля: norm_id, название, раздел, область, текст нормы.');
-        setNormState('error');
-        return;
-      }
-      await normCreateMutation.mutateAsync({
-        norm_id: normId.trim(),
-        title: normTitle.trim(),
-        section: normSection.trim(),
-        scope: normScope.trim(),
-        detector_type: normDetectorType.trim() || 'custom',
-        check_type: normCheckType.trim() || 'manual',
-        default_severity: normSeverity,
-        norm_text: normText.trim(),
-        source_reference: normSourceRef.trim() || null,
-        source_excerpt: normSourceExcerpt.trim() || null,
-        code_applicability: normCodeApplicable,
-        is_active: normIsActive,
-        version: Number(normVersion) || 1,
-      });
-      setNormMessage('Норма создана.');
-      setNormState('success');
-      setNormId('');
-      setNormTitle('');
-      setNormSection('');
-      setNormScope('');
-      setNormText('');
-      setNormSourceRef('');
-      setNormSourceExcerpt('');
-      setNormVersion('1');
-    } catch (error) {
-      console.error('Failed to create norm', error);
-      setNormMessage('Не удалось создать норму.');
-      setNormState('error');
-    } finally {
-      setSubmittingNorm(false);
-    }
   };
 
   const handleAdjustSubmit = async (event: FormEvent) => {
@@ -626,6 +548,23 @@ function AdminPage() {
 
       {activeTab === 'norms' && canManageNorms && (
         <>
+          <div className="tabs" style={{ marginBottom: '1rem' }}>
+            {[
+              { id: 'catalog', label: 'Каталог норм' },
+              { id: 'requests', label: 'Заявки норм' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`tab-button ${normsSubTab === tab.id ? 'active' : ''}`}
+                onClick={() => setNormsSubTab(tab.id as 'catalog' | 'requests')}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {normsSubTab === 'catalog' && (
           <div className="card" style={{ marginBottom: '1.5rem' }}>
             <div className="card-header">
               <div>
@@ -718,283 +657,88 @@ function AdminPage() {
               </div>
             )}
           </div>
+          )}
 
-          <div className="card" style={{ marginBottom: '1.5rem' }}>
-            <div className="card-header">
-              <div>
-                <h2 className="card-title">Пользовательские нормы</h2>
-                <p className="muted">
-                  Создавайте нормы в формате системы. Эти нормы пока не участвуют в анализе,
-                  но сохраняются в базе для обучения и экспертизы.
-                </p>
+          {normsSubTab === 'requests' && (
+            <div className="card" style={{ marginBottom: '1.5rem' }}>
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Заявки норм</h2>
+                  <p className="muted">Результаты автооформления норм через LLM, доступно голосование.</p>
+                </div>
+                <button className="btn btn-secondary" type="button" onClick={() => suggestedNormsQuery.refetch()}>
+                  Обновить
+                </button>
               </div>
-            </div>
-            <form onSubmit={handleNormCreateSubmit} className="form-grid" style={{ gap: '1rem' }}>
-              <div className="field">
-                <label htmlFor="norm-id">norm_id</label>
-                <input
-                  id="norm-id"
-                  type="text"
-                  value={normId}
-                  onChange={(event) => setNormId(event.target.value)}
-                  placeholder="CUSTOM_001"
-                />
-                <small className="muted">Уникальный идентификатор, латиница и подчёркивания.</small>
-              </div>
-              <div className="field">
-                <label htmlFor="norm-title">Название</label>
-                <input
-                  id="norm-title"
-                  type="text"
-                  value={normTitle}
-                  onChange={(event) => setNormTitle(event.target.value)}
-                  placeholder="Краткая формулировка"
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="norm-section">Раздел</label>
-                <input
-                  id="norm-section"
-                  type="text"
-                  value={normSection}
-                  onChange={(event) => setNormSection(event.target.value)}
-                  placeholder="Запросы / Транзакции / Безопасность"
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="norm-scope">Область</label>
-                <input
-                  id="norm-scope"
-                  type="text"
-                  value={normScope}
-                  onChange={(event) => setNormScope(event.target.value)}
-                  placeholder="сервер / клиент / любой модуль"
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="norm-detector-type">Тип детектора</label>
-                <input
-                  id="norm-detector-type"
-                  type="text"
-                  value={normDetectorType}
-                  onChange={(event) => setNormDetectorType(event.target.value)}
-                  placeholder="custom/manual"
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="norm-check-type">Тип проверки</label>
-                <input
-                  id="norm-check-type"
-                  type="text"
-                  value={normCheckType}
-                  onChange={(event) => setNormCheckType(event.target.value)}
-                  placeholder="manual/llm/static"
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="norm-severity">Серьёзность</label>
-                <select
-                  id="norm-severity"
-                  value={normSeverity}
-                  onChange={(event) => setNormSeverity(event.target.value)}
-                >
-                  <option value="critical">critical</option>
-                  <option value="major">major</option>
-                  <option value="minor">minor</option>
-                  <option value="info">info</option>
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="norm-version">Версия</label>
-                <input
-                  id="norm-version"
-                  type="number"
-                  min={1}
-                  value={normVersion}
-                  onChange={(event) => setNormVersion(event.target.value)}
-                />
-              </div>
-              <div className="field" style={{ gridColumn: '1 / -1' }}>
-                <label htmlFor="norm-text">Текст нормы</label>
-                <textarea
-                  id="norm-text"
-                  rows={6}
-                  value={normText}
-                  onChange={(event) => setNormText(event.target.value)}
-                />
-                <small className="muted">Полное правило с формулировкой нарушения.</small>
-              </div>
-              <div className="field">
-                <label htmlFor="norm-source-ref">Источник (опционально)</label>
-                <input
-                  id="norm-source-ref"
-                  type="text"
-                  value={normSourceRef}
-                  onChange={(event) => setNormSourceRef(event.target.value)}
-                  placeholder="Документ/раздел"
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="norm-source-excerpt">Выдержка источника (опционально)</label>
-                <input
-                  id="norm-source-excerpt"
-                  type="text"
-                  value={normSourceExcerpt}
-                  onChange={(event) => setNormSourceExcerpt(event.target.value)}
-                  placeholder="Короткая цитата"
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="norm-code-applicable">Применимо к коду</label>
-                <input
-                  id="norm-code-applicable"
-                  type="checkbox"
-                  checked={normCodeApplicable}
-                  onChange={(event) => setNormCodeApplicable(event.target.checked)}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="norm-active">Активна</label>
-                <input
-                  id="norm-active"
-                  type="checkbox"
-                  checked={normIsActive}
-                  onChange={(event) => setNormIsActive(event.target.checked)}
-                />
-              </div>
-              <button type="submit" className="btn btn-primary" disabled={isSubmittingNorm}>
-                Создать норму
-              </button>
-            </form>
-            {normMessage && (
-              <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>
-                {normMessage}
-              </p>
-            )}
-            {normsDbQuery.isLoading && <p className="muted">Загружаем пользовательские нормы...</p>}
-            {normsDbQuery.error && (
-              <p className="alert alert-error">Не удалось загрузить пользовательские нормы.</p>
-            )}
-            {normsDbQuery.data && (
-              <div className="table-container" style={{ marginTop: '1rem' }}>
+              {suggestedNormsQuery.isLoading && <p className="muted">Загружаем заявки...</p>}
+              {suggestedNormsQuery.error && (
+                <p className="alert alert-error">Не удалось загрузить заявки на нормы.</p>
+              )}
+              {suggestedNormsQuery.data && (
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>norm_id</th>
-                      <th>Название</th>
-                      <th>Раздел</th>
-                      <th>Severity</th>
                       <th>Статус</th>
+                      <th>Раздел / severity</th>
+                      <th>Описание</th>
+                      <th>Голоса</th>
+                      <th>Действия</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {normsDbQuery.data.map((norm) => (
-                      <tr key={norm.id}>
-                        <td>{norm.norm_id}</td>
-                        <td>{norm.title}</td>
-                        <td>{norm.section}</td>
-                        <td>{norm.default_severity}</td>
-                        <td>{norm.is_active ? 'Активна' : 'Выключена'}</td>
-                      </tr>
-                    ))}
-                    {!normsDbQuery.data.length && (
-                      <tr>
-                        <td colSpan={5} className="muted">
-                          Пользовательских норм пока нет.
+                    {suggestedNormsQuery.data.items.map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <span className="table-badge">{item.status}</span>
+                          {item.duplicate_of && item.duplicate_of.length > 0 && (
+                            <div className="muted">Дубликат: {item.duplicate_of.join(', ')}</div>
+                          )}
+                        </td>
+                        <td>
+                          <div>{item.section}</div>
+                          <div className="muted">{item.generated_severity || item.severity}</div>
+                        </td>
+                        <td style={{ maxWidth: '520px', whiteSpace: 'pre-wrap' }}>
+                          <strong>{item.generated_title || item.generated_norm_id || 'Без заголовка'}</strong>
+                          <div className="muted" style={{ marginTop: '0.35rem' }}>
+                            {item.generated_text || item.text_raw}
+                          </div>
+                        </td>
+                        <td>{item.vote_score}</td>
+                        <td>
+                          <div className="btn-group">
+                            <button
+                              type="button"
+                              className={`btn btn-secondary ${item.user_vote === 1 ? 'active' : ''}`}
+                              onClick={() => suggestedNormVoteMutation.mutate({ normId: item.id, vote: 1 })}
+                            >
+                              +
+                            </button>
+                            <button
+                              type="button"
+                              className={`btn btn-secondary ${item.user_vote === -1 ? 'active' : ''}`}
+                              onClick={() => suggestedNormVoteMutation.mutate({ normId: item.id, vote: -1 })}
+                            >
+                              -
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                    )}
+                    ))}
                   </tbody>
                 </table>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {activeTab === 'suggested' && canManageNorms && (
-        <div className="card" style={{ marginBottom: '1.5rem' }}>
-          <div className="card-header">
-            <div>
-              <h2 className="card-title">Заявки норм</h2>
-              <p className="muted">Результаты автооформления норм через LLM, доступно голосование.</p>
+              )}
+              {suggestedNormsQuery.data && !suggestedNormsQuery.data.items.length && (
+                <div className="empty-state">Пока нет заявок.</div>
+              )}
             </div>
-            <button className="btn btn-secondary" type="button" onClick={() => suggestedNormsQuery.refetch()}>
-              Обновить
-            </button>
-          </div>
-          {suggestedNormsQuery.isLoading && <p className="muted">Загружаем заявки...</p>}
-          {suggestedNormsQuery.error && (
-            <p className="alert alert-error">Не удалось загрузить заявки на нормы.</p>
           )}
-          {suggestedNormsQuery.data && (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Статус</th>
-                  <th>Раздел / severity</th>
-                  <th>Описание</th>
-                  <th>Голоса</th>
-                  <th>Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {suggestedNormsQuery.data.items.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <span className="table-badge">{item.status}</span>
-                      {item.duplicate_of && item.duplicate_of.length > 0 && (
-                        <div className="muted">Дубликат: {item.duplicate_of.join(', ')}</div>
-                      )}
-                    </td>
-                    <td>
-                      <div>{item.section}</div>
-                      <div className="muted">{item.generated_severity || item.severity}</div>
-                    </td>
-                    <td style={{ maxWidth: '520px', whiteSpace: 'pre-wrap' }}>
-                      <strong>{item.generated_title || item.generated_norm_id || 'Без заголовка'}</strong>
-                      <div className="muted" style={{ marginTop: '0.35rem' }}>
-                        {item.generated_text || item.text_raw}
-                      </div>
-                    </td>
-                    <td>{item.vote_score}</td>
-                    <td>
-                      <div className="btn-group">
-                        <button
-                          type="button"
-                          className={`btn btn-secondary ${item.user_vote === 1 ? 'active' : ''}`}
-                          onClick={() => suggestedNormVoteMutation.mutate({ normId: item.id, vote: 1 })}
-                        >
-                          +
-                        </button>
-                        <button
-                          type="button"
-                          className={`btn btn-secondary ${item.user_vote === -1 ? 'active' : ''}`}
-                          onClick={() => suggestedNormVoteMutation.mutate({ normId: item.id, vote: -1 })}
-                        >
-                          -
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {suggestedNormsQuery.data && !suggestedNormsQuery.data.items.length && (
-            <div className="empty-state">Пока нет заявок.</div>
-          )}
-        </div>
+        </>
       )}
 
       <div className="tabs">
         {[
-          ...(canManageNorms
-            ? [
-                { id: 'norms', label: 'Нормы' },
-                { id: 'suggested', label: 'Заявки норм' },
-              ]
-            : []),
+          ...(canManageNorms ? [{ id: 'norms', label: 'Нормы' }] : []),
           ...(isAdmin
             ? [
                 { id: 'users', label: 'Пользователи' },
@@ -1010,8 +754,8 @@ function AdminPage() {
             type="button"
             className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
             onClick={() =>
-              setActiveTab(
-                tab.id as 'users' | 'llm' | 'runs' | 'access' | 'caddy' | 'norms' | 'suggested',
+            setActiveTab(
+                tab.id as 'users' | 'llm' | 'runs' | 'access' | 'caddy' | 'norms',
               )
             }
           >

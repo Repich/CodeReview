@@ -57,9 +57,9 @@ a:hover {
   background: repeating-linear-gradient(
     180deg,
     transparent 0,
-    transparent 12px,
-    #000 12px,
-    #000 24px
+    transparent 10px,
+    #000 10px,
+    #000 20px
   );
   animation: beeline-fill 1.2s linear infinite;
 }
