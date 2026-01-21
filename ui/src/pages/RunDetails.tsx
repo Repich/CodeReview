@@ -59,12 +59,6 @@ const formatDecimal = (value?: number | null) => {
   return value.toFixed(3);
 };
 
-const formatSourceWithLineNumbers = (lines: string[]) =>
-  lines
-    .map((line, index) => `${String(index + 1).padStart(4, ' ')}: ${line}`)
-    .join('\n')
-    .trimEnd();
-
 type FindingGroup = {
   base: Finding;
   items: Finding[];
@@ -115,12 +109,9 @@ function RunDetailsPage() {
   const [nowTs, setNowTs] = useState(() => Date.now());
   const [activeTab, setActiveTab] = useState('findings');
   const [showDiff, setShowDiff] = useState(false);
-  const [showAIContext, setShowAIContext] = useState(false);
   const [showFindingsContext, setShowFindingsContext] = useState(true);
-  const [showAISources, setShowAISources] = useState(true);
-  const [showNormSources, setShowNormSources] = useState(false);
   const [selectedAiId, setSelectedAiId] = useState<string | null>(null);
-  const [aiLeftWidth, setAiLeftWidth] = useState(620);
+  const [aiLeftWidth, setAiLeftWidth] = useState(760);
   const [isResizingAI, setIsResizingAI] = useState(false);
   const [selectionDraft, setSelectionDraft] = useState<{
     text: string;
@@ -205,12 +196,7 @@ function RunDetailsPage() {
     queryFn: () => fetchRunSources(id!),
     enabled:
       Boolean(id) &&
-      (showDiff ||
-        showAIContext ||
-        showAISources ||
-        showNormSources ||
-        showFindingsContext ||
-        activeTab === 'norms'),
+      (activeTab === 'ai' || (activeTab === 'findings' && showFindingsContext) || showDiff),
   });
 
   const normSectionsQuery = useQuery({
@@ -327,7 +313,6 @@ function RunDetailsPage() {
     if (activeTab === 'ai' && canTeach) return;
     setSelectionDraft(null);
     setShowNormForm(false);
-    setShowNormSources(false);
   }, [activeTab, canTeach]);
 
   useEffect(() => {
@@ -339,7 +324,7 @@ function RunDetailsPage() {
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       if (!isResizingAI) return;
-      const newWidth = Math.min(Math.max(event.clientX - 280, 420), 900);
+      const newWidth = Math.min(Math.max(event.clientX - 240, 520), 1100);
       setAiLeftWidth(newWidth);
     };
     const handleMouseUp = () => setIsResizingAI(false);
@@ -380,6 +365,7 @@ function RunDetailsPage() {
 
   const run = runQuery.data;
   const aiFindings: AIFinding[] = aiFindingsQuery.data?.items ?? [];
+  const aiCountSummary = aiFindingsQuery.isLoading ? '…' : aiFindings.length;
   const orderedAiFindings = useMemo(() => {
     const items = [...aiFindings];
     const textCompare = (a: string, b: string) => a.localeCompare(b, 'ru');
@@ -506,17 +492,6 @@ function RunDetailsPage() {
     });
     return map;
   }, [runSourcesQuery.data]);
-  const normSources = useMemo(() => {
-    if (!runSourcesQuery.data) return [];
-    return runSourcesQuery.data.map((source) => {
-      const lines = source.content.split('\n');
-      return {
-        path: source.path,
-        content: formatSourceWithLineNumbers(lines),
-        lineCount: lines.length,
-      };
-    });
-  }, [runSourcesQuery.data]);
   const renderSource = (source: RunSource) => {
     const lines = source.content.split('\n');
     return (
@@ -593,7 +568,19 @@ function RunDetailsPage() {
   ]);
 
   if (runQuery.isLoading || findingsQuery.isLoading) {
-    return <p>Загружаем запуск...</p>;
+    return (
+      <div className="card" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <div className="loader-beeline" aria-label="Загрузка запуска" />
+        <div>
+          <h2 className="card-title" style={{ margin: 0 }}>
+            Загружаем запуск…
+          </h2>
+          <p className="muted" style={{ margin: 0 }}>
+            Получаем данные запуска и предложения LLM
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (runQuery.error) {
@@ -659,7 +646,7 @@ function RunDetailsPage() {
       focusElement?.closest?.('[data-source-path]') ||
       null;
     if (!container) {
-      setNormMessage('Выделите код внутри блока исходников на вкладке "Новые нормы".');
+      setNormMessage('Выделите код внутри блока исходников справа от предложений.');
       setNormState('error');
       return;
     }
@@ -850,7 +837,7 @@ function RunDetailsPage() {
           </div>
           <div>
             <p className="muted">Предложения LLM</p>
-            <strong>{aiFindings.length}</strong>
+            <strong>{aiCountSummary}</strong>
             <div className="pill-row">
               {(['pending', 'confirmed', 'rejected'] as const)
                 .filter((status) => aiCounts[status] > 0)
@@ -897,214 +884,6 @@ function RunDetailsPage() {
           </button>
         ))}
       </div>
-
-      {activeTab === 'norms' && canTeach && (
-        <>
-          <div className="sticky-norm-toolbar">
-            <div>
-              <strong>Новые нормы</strong>
-              <div className="muted">
-                {selectionDraft
-                  ? `${selectionDraft.file || 'Без файла'}${
-                      selectionDraft.lineStart
-                        ? `:${selectionDraft.lineStart}${
-                            selectionDraft.lineEnd && selectionDraft.lineEnd !== selectionDraft.lineStart
-                              ? `-${selectionDraft.lineEnd}`
-                              : ''
-                          }`
-                        : ''
-                    }`
-                  : 'Выделите фрагмент кода и нажмите "Создать норму".'}
-              </div>
-            </div>
-            <button
-              className="btn btn-primary"
-              type="button"
-              onClick={handleOpenNormForm}
-            >
-              Создать норму
-            </button>
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => setShowNormSources((prev) => !prev)}
-            >
-              {showNormSources ? 'Скрыть исходники' : 'Показать исходный код'}
-            </button>
-          </div>
-          {normMessage && !showNormForm && (
-            <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>
-              {normMessage}
-            </p>
-          )}
-          {lastSuggested && (
-            <section className="card" style={{ marginBottom: '1.5rem' }}>
-              <div className="card-header">
-                <div>
-                  <h3 className="card-title">Результат автооформления</h3>
-                  <p className="muted">
-                    Статус: {lastSuggested.status}
-                    {lastSuggested.duplicate_of?.length ? (
-                      <>
-                        {' '}
-                        · Дубликат:
-                        {' '}
-                        {lastSuggested.duplicate_of
-                          .map(
-                            (id) =>
-                              `${id}${
-                                lastSuggested.duplicate_titles && lastSuggested.duplicate_titles[id]
-                                  ? ` — ${lastSuggested.duplicate_titles[id]}`
-                                  : ''
-                              }`,
-                          )
-                          .join(', ')}
-                      </>
-                    ) : null}
-                  </p>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gap: '0.35rem' }}>
-                <div>
-                  <strong>norm_id:</strong> {lastSuggested.generated_norm_id || '—'}
-                </div>
-                <div>
-                  <strong>Название:</strong> {lastSuggested.generated_title || '—'}
-                </div>
-                <div>
-                  <strong>Раздел:</strong> {lastSuggested.generated_section || lastSuggested.section}
-                  {' · '}
-                  <strong>Серьёзность:</strong>{' '}
-                  {lastSuggested.generated_severity || lastSuggested.severity}
-                </div>
-                <div>
-                  <strong>Область:</strong> {lastSuggested.generated_scope || '—'}
-                </div>
-                <div>
-                  <strong>Текст нормы:</strong>
-                  <div className="muted" style={{ whiteSpace: 'pre-wrap' }}>
-                    {lastSuggested.generated_text || lastSuggested.text_raw}
-                  </div>
-                </div>
-              </div>
-            </section>
-          )}
-          {showNormForm && (
-            <section className="card" style={{ marginBottom: '1.5rem' }}>
-              <div className="card-header">
-                <div>
-                  <h3 className="card-title">Новая норма</h3>
-                  <p className="muted">Заполните обязательные поля и сохраните норму.</p>
-                </div>
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  onClick={() => setShowNormForm(false)}
-                >
-                  Скрыть
-                </button>
-              </div>
-              {selectionDraft && (
-                <div style={{ marginBottom: '1rem' }}>
-                  <p className="muted" style={{ marginBottom: '0.35rem' }}>
-                    Пример/контекст:
-                  </p>
-                  <pre>{selectionDraft.text}</pre>
-                </div>
-              )}
-              <form onSubmit={handleNormSubmit} className="form-grid" style={{ gap: '1rem' }}>
-                <div className="field">
-                  <label htmlFor="norm-section-inline">Раздел</label>
-                  <select
-                    id="norm-section-inline"
-                    value={normSection}
-                    onChange={(event) => setNormSection(event.target.value)}
-                    disabled={normSectionsQuery.isLoading}
-                  >
-                    {(normSectionsQuery.data || []).map((section) => (
-                      <option key={section} value={section}>
-                        {section}
-                      </option>
-                    ))}
-                    {!normSectionsQuery.data?.length && <option value="">Нет данных</option>}
-                  </select>
-                  <small className="muted">Выберите подходящий раздел из существующих.</small>
-                </div>
-                <div className="field">
-                  <label htmlFor="norm-severity-inline">Серьёзность</label>
-                  <select
-                    id="norm-severity-inline"
-                    value={normSeverity}
-                    onChange={(event) =>
-                      setNormSeverity(event.target.value as 'critical' | 'major' | 'minor' | 'info')
-                    }
-                  >
-                    <option value="critical">critical</option>
-                    <option value="major">major</option>
-                    <option value="minor">minor</option>
-                    <option value="info">info</option>
-                  </select>
-                </div>
-                <div className="field" style={{ gridColumn: '1 / -1' }}>
-                  <label htmlFor="norm-text-inline">Текст нормы</label>
-                  <textarea
-                    id="norm-text-inline"
-                    rows={6}
-                    value={normText}
-                    onChange={(event) => setNormText(event.target.value)}
-                    placeholder="Опишите нарушение свободным текстом; LLM оформит норму и проверит дубль."
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={createNormMutation.isPending}
-                >
-                  {createNormMutation.isPending ? 'Сохраняем…' : 'Создать норму'}
-                </button>
-                {isSuggesting && <div className="loader-beeline" aria-label="Ожидаем ответ LLM" />}
-              </form>
-              {normMessage && (
-                <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>
-                  {normMessage}
-                </p>
-              )}
-            </section>
-          )}
-          {showNormSources && (
-            <section className="card" style={{ marginBottom: '1.5rem' }}>
-              <div className="card-header">
-                <div>
-                  <h2 className="card-title">Исходный код запуска</h2>
-                  <p className="muted">{normSources.length} файлов</p>
-                </div>
-                {runSourcesQuery.isLoading && <span className="muted">Загружаем…</span>}
-              </div>
-              {runSourcesQuery.error && (
-                <p className="alert alert-error">Не удалось загрузить исходный код запуска.</p>
-              )}
-              {!runSourcesQuery.isLoading && !runSourcesQuery.error && !normSources.length && (
-                <div className="empty-state">Исходный код не найден в артефактах.</div>
-              )}
-              {normSources.map((source) => (
-                <details key={source.path} className="card" open>
-                  <summary>
-                    {source.path}{' '}
-                    <span className="muted">({source.lineCount} строк)</span>
-                  </summary>
-                  <pre
-                    data-source-path={source.path}
-                    data-line-start="1"
-                    data-line-end={String(source.lineCount)}
-                  >
-                    {source.content}
-                  </pre>
-                </details>
-              ))}
-            </section>
-          )}
-        </>
-      )}
 
       {activeTab === 'findings' && (
         <>
@@ -1191,7 +970,7 @@ function RunDetailsPage() {
       )}
 
       {activeTab === 'ai' && (
-        <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <section className="card" style={{ marginBottom: '1.5rem', overflow: 'hidden' }}>
           <div className="card-header">
             <div>
               <h2 className="card-title">Предложения LLM</h2>
@@ -1201,105 +980,98 @@ function RunDetailsPage() {
                   : `${aiFindings.length}/${aiFindingsQuery.data?.total ?? 0}`}
               </p>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              {showAIContext && runSourcesQuery.isLoading && (
-                <span className="muted">Загружаем контекст…</span>
-              )}
-              {aiFindingsQuery.isLoading && <span className="muted">Обновляем…</span>}
-              <button
-                className="btn btn-secondary"
-                type="button"
-                onClick={() => setShowAIContext((prev) => !prev)}
-              >
-                {showAIContext ? 'Скрыть контекст' : 'Показать контекст'}
-              </button>
-              <button
-                className="btn btn-secondary"
-                type="button"
-                onClick={() => setShowAISources((prev) => !prev)}
-              >
-                {showAISources ? 'Скрыть исходники' : 'Показать исходный код'}
-              </button>
-            </div>
+            {aiFindingsQuery.isLoading && <span className="muted">Обновляем…</span>}
           </div>
           {aiFindingsQuery.error && (
             <p className="alert alert-error">Не удалось загрузить предложения LLM.</p>
           )}
-          {(aiFindingsQuery.isLoading || runQuery.isLoading) && (
+          {normMessage && !showNormForm && (
+            <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>
+              {normMessage}
+            </p>
+          )}
+          {(aiFindingsQuery.isLoading || runSourcesQuery.isLoading) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem' }}>
               <div className="loader-beeline" aria-label="Загрузка предложений LLM" />
-              <div className="muted">Загружаем запуск и предложения LLM…</div>
+              <div className="muted">Загружаем запуск, исходный код и предложения LLM…</div>
             </div>
           )}
-          {!aiFindingsQuery.isLoading && !runQuery.isLoading && (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: `${aiLeftWidth}px minmax(850px, 1fr)`,
-              gap: '0.75rem',
-              alignItems: 'start',
-              minWidth: `${aiLeftWidth + 850}px`,
-            }}
-          >
-            <div className="card-list" style={{ maxHeight: '80vh', overflow: 'auto' }}>
-              {orderedAiFindings.map((finding) => (
-                <div
-                  key={finding.id}
-                  onClick={() => {
-                    setSelectedAiId(finding.id);
-                    if (finding.norm_text) {
-                      setNormText(finding.norm_text);
-                    } else if ((finding as any).message) {
-                      setNormText((finding as any).message);
-                    }
-                  }}
-                  style={{
-                    border: finding.id === selectedAiId ? '1px solid var(--primary)' : undefined,
-                    borderRadius: '0.75rem',
-                    padding: '0.25rem',
-                  }}
-                >
-                  <AIFindingCard
-                    finding={finding}
-                    sequence={aiOrderMap.get(finding.id)}
-                    onChangeStatus={
-                      canEditRun
-                        ? (status, reviewerComment) =>
-                            handleAiStatusChange(finding.id, status, reviewerComment)
-                        : undefined
-                    }
-                    isUpdating={
-                      updateAiFinding.isPending && updateAiFinding.variables?.findingId === finding.id
-                    }
-                    readOnly={!canEditRun}
-                    sourceLookup={showAIContext ? sourceLookup : null}
-                  />
-                </div>
-              ))}
-              {!aiFindings.length && !aiFindingsQuery.isLoading && (
-                <div className="empty-state">LLM не предложила дополнительных норм.</div>
-              )}
-            </div>
-
-            <div className="card" style={{ padding: '1rem', maxHeight: '85vh', overflow: 'hidden' }}>
-              <div className="card-header" style={{ marginBottom: '0.5rem' }}>
-                <div>
-                  <h3 className="card-title">Контекст и нормы</h3>
-                  <p className="muted">Исходный код целиком, выделение выбранного предложения.</p>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    onClick={() => setShowAISources((prev) => !prev)}
+          {!aiFindingsQuery.isLoading && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `${aiLeftWidth}px 12px 1fr`,
+                columnGap: '0.75rem',
+                alignItems: 'start',
+                minHeight: '72vh',
+                minWidth: `${aiLeftWidth + 950}px`,
+              }}
+            >
+              <div className="card-list" style={{ maxHeight: '78vh', overflow: 'auto' }}>
+                {orderedAiFindings.map((finding) => (
+                  <div
+                    key={finding.id}
+                    onClick={() => {
+                      setSelectedAiId(finding.id);
+                      if (finding.norm_text) {
+                        setNormText(finding.norm_text);
+                      } else if ((finding as any).message) {
+                        setNormText((finding as any).message);
+                      }
+                    }}
+                    style={{
+                      border: finding.id === selectedAiId ? '1px solid var(--primary)' : undefined,
+                      borderRadius: '0.75rem',
+                      padding: '0.25rem',
+                    }}
                   >
-                    {showAISources ? 'Скрыть исходники' : 'Показать исходники'}
-                  </button>
+                    <AIFindingCard
+                      finding={finding}
+                      sequence={aiOrderMap.get(finding.id)}
+                      onChangeStatus={
+                        canEditRun
+                          ? (status, reviewerComment) =>
+                              handleAiStatusChange(finding.id, status, reviewerComment)
+                          : undefined
+                      }
+                      isUpdating={
+                        updateAiFinding.isPending && updateAiFinding.variables?.findingId === finding.id
+                      }
+                      readOnly={!canEditRun}
+                      sourceLookup={sourceLookup}
+                    />
+                  </div>
+                ))}
+                {!aiFindings.length && !aiFindingsQuery.isLoading && (
+                  <div className="empty-state">LLM не предложила дополнительных норм.</div>
+                )}
+              </div>
+
+              <div
+                onMouseDown={() => setIsResizingAI(true)}
+                style={{
+                  cursor: 'col-resize',
+                  width: '12px',
+                  height: '100%',
+                  background:
+                    'repeating-linear-gradient(0deg, #f6d200, #f6d200 6px, #000 6px, #000 10px)',
+                  borderRadius: '6px',
+                  margin: '0 auto',
+                }}
+                aria-label="Перетащите, чтобы изменить ширину колонок"
+              />
+
+              <div className="card" style={{ padding: '1rem', maxHeight: '78vh', overflow: 'auto' }}>
+                <div className="card-header" style={{ marginBottom: '0.5rem' }}>
+                  <div>
+                    <h3 className="card-title">Контекст и нормы</h3>
+                    <p className="muted">Исходный код целиком, выделение выбранного предложения.</p>
+                  </div>
                   <button
                     className="btn btn-primary"
                     type="button"
                     onClick={() => {
-                      setShowNormForm(true);
+                      handleOpenNormForm();
                       if (selectedAiFinding?.norm_text) {
                         setNormText(selectedAiFinding.norm_text);
                       }
@@ -1308,134 +1080,142 @@ function RunDetailsPage() {
                     Создать норму
                   </button>
                 </div>
-              </div>
-              {lastSuggested && (
-                <section className="card" style={{ marginBottom: '1rem' }}>
-                  <div className="card-header">
-                    <div>
-                      <h3 className="card-title">Результат автооформления</h3>
-                      <p className="muted">
-                        Статус: {lastSuggested.status}
-                        {lastSuggested.duplicate_of?.length ? (
-                          <>
-                            {' '}
-                            · Дубликат:{' '}
-                            {lastSuggested.duplicate_of
-                              .map(
-                                (id) =>
-                                  `${id}${
-                                    lastSuggested.duplicate_titles && lastSuggested.duplicate_titles[id]
-                                      ? ` — ${lastSuggested.duplicate_titles[id]}`
-                                      : ''
-                                  }`,
-                              )
-                              .join(', ')}
-                          </>
-                        ) : null}
-                      </p>
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gap: '0.35rem' }}>
-                    <div>
-                      <strong>norm_id:</strong> {lastSuggested.generated_norm_id || '—'}
-                    </div>
-                    <div>
-                      <strong>Название:</strong> {lastSuggested.generated_title || '—'}
-                    </div>
-                    <div>
-                      <strong>Раздел:</strong> {lastSuggested.generated_section || lastSuggested.section}
-                      {' · '}
-                      <strong>Серьёзность:</strong>{' '}
-                      {lastSuggested.generated_severity || lastSuggested.severity}
-                    </div>
-                    <div>
-                      <strong>Область:</strong> {lastSuggested.generated_scope || '—'}
-                    </div>
-                    <div>
-                      <strong>Текст нормы:</strong>
-                      <div className="muted" style={{ whiteSpace: 'pre-wrap' }}>
-                        {lastSuggested.generated_text || lastSuggested.text_raw}
+
+                {lastSuggested && (
+                  <section className="card" style={{ marginBottom: '1rem' }}>
+                    <div className="card-header">
+                      <div>
+                        <h3 className="card-title">Результат автооформления</h3>
+                        <p className="muted">
+                          Статус: {lastSuggested.status}
+                          {lastSuggested.duplicate_of?.length ? (
+                            <>
+                              {' '}
+                              · Дубликат:{' '}
+                              {lastSuggested.duplicate_of
+                                .map(
+                                  (dupId) =>
+                                    `${dupId}${
+                                      lastSuggested.duplicate_titles && lastSuggested.duplicate_titles[dupId]
+                                        ? ` — ${lastSuggested.duplicate_titles[dupId]}`
+                                        : ''
+                                    }`,
+                                )
+                                .join(', ')}
+                            </>
+                          ) : null}
+                        </p>
                       </div>
                     </div>
-                  </div>
-                </section>
-              )}
-              {showNormForm && (
-                <section className="card" style={{ marginBottom: '1rem' }}>
-                  <div className="card-header">
-                    <div>
-                      <h3 className="card-title">Новая норма</h3>
-                      <p className="muted">Заполните обязательные поля и сохраните норму.</p>
+                    <div style={{ display: 'grid', gap: '0.35rem' }}>
+                      <div>
+                        <strong>norm_id:</strong> {lastSuggested.generated_norm_id || '—'}
+                      </div>
+                      <div>
+                        <strong>Название:</strong> {lastSuggested.generated_title || '—'}
+                      </div>
+                      <div>
+                        <strong>Раздел:</strong> {lastSuggested.generated_section || lastSuggested.section}
+                        {' · '}
+                        <strong>Серьёзность:</strong>{' '}
+                        {lastSuggested.generated_severity || lastSuggested.severity}
+                      </div>
+                      <div>
+                        <strong>Область:</strong> {lastSuggested.generated_scope || '—'}
+                      </div>
+                      <div>
+                        <strong>Текст нормы:</strong>
+                        <div className="muted" style={{ whiteSpace: 'pre-wrap' }}>
+                          {lastSuggested.generated_text || lastSuggested.text_raw}
+                        </div>
+                      </div>
                     </div>
-                    <button
-                      className="btn btn-secondary"
-                      type="button"
-                      onClick={() => setShowNormForm(false)}
-                    >
-                      Скрыть
-                    </button>
-                  </div>
-                  <form onSubmit={handleNormSubmit} className="form-grid" style={{ gap: '1rem' }}>
-                    <div className="field">
-                      <label htmlFor="norm-section-inline">Раздел</label>
-                      <select
-                        id="norm-section-inline"
-                        value={normSection}
-                        onChange={(event) => setNormSection(event.target.value)}
-                        disabled={normSectionsQuery.isLoading}
-                      >
-                        {(normSectionsQuery.data || []).map((section) => (
-                          <option key={section} value={section}>
-                            {section}
-                          </option>
-                        ))}
-                        {!normSectionsQuery.data?.length && <option value="">Нет данных</option>}
-                      </select>
-                    </div>
-                    <div className="field">
-                      <label htmlFor="norm-severity-inline">Серьёзность</label>
-                      <select
-                        id="norm-severity-inline"
-                        value={normSeverity}
-                        onChange={(event) =>
-                          setNormSeverity(event.target.value as 'critical' | 'major' | 'minor' | 'info')
-                        }
-                      >
-                        <option value="critical">critical</option>
-                        <option value="major">major</option>
-                        <option value="minor">minor</option>
-                        <option value="info">info</option>
-                      </select>
-                    </div>
-                    <div className="field" style={{ gridColumn: '1 / -1' }}>
-                      <label htmlFor="norm-text-inline">Текст нормы</label>
-                      <textarea
-                        id="norm-text-inline"
-                        rows={4}
-                        value={normText}
-                        onChange={(event) => setNormText(event.target.value)}
-                        placeholder="Опишите нарушение свободным текстом; LLM оформит норму и проверит дубль."
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      className="btn btn-primary"
-                      disabled={createNormMutation.isPending}
-                    >
-                      {createNormMutation.isPending ? 'Сохраняем…' : 'Создать норму'}
-                    </button>
-                    {isSuggesting && <div className="loader-beeline" aria-label="Ожидаем ответ LLM" />}
-                  </form>
-                  {normMessage && (
-                    <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>
-                      {normMessage}
-                    </p>
-                  )}
-                </section>
-              )}
+                  </section>
+                )}
 
-              {showAISources && (
-                <div style={{ display: 'grid', gap: '0.75rem', maxHeight: '60vh', overflow: 'auto' }}>
+                {showNormForm && (
+                  <section className="card" style={{ marginBottom: '1rem' }}>
+                    <div className="card-header">
+                      <div>
+                        <h3 className="card-title">Новая норма</h3>
+                        <p className="muted">Заполните обязательные поля и сохраните норму.</p>
+                      </div>
+                      <button
+                        className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setShowNormForm(false)}
+                  >
+                    Скрыть
+                  </button>
+                </div>
+                    {selectionDraft && (
+                      <div style={{ marginBottom: '0.75rem' }}>
+                        <p className="muted" style={{ marginBottom: '0.35rem' }}>
+                          Пример/контекст:
+                        </p>
+                        <pre>{selectionDraft.text}</pre>
+                      </div>
+                    )}
+                    <form onSubmit={handleNormSubmit} className="form-grid" style={{ gap: '1rem' }}>
+                      <div className="field">
+                        <label htmlFor="norm-section-inline">Раздел</label>
+                        <select
+                          id="norm-section-inline"
+                          value={normSection}
+                          onChange={(event) => setNormSection(event.target.value)}
+                          disabled={normSectionsQuery.isLoading}
+                        >
+                          {(normSectionsQuery.data || []).map((section) => (
+                            <option key={section} value={section}>
+                              {section}
+                            </option>
+                          ))}
+                          {!normSectionsQuery.data?.length && <option value="">Нет данных</option>}
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label htmlFor="norm-severity-inline">Серьёзность</label>
+                        <select
+                          id="norm-severity-inline"
+                          value={normSeverity}
+                          onChange={(event) =>
+                            setNormSeverity(event.target.value as 'critical' | 'major' | 'minor' | 'info')
+                          }
+                        >
+                          <option value="critical">critical</option>
+                          <option value="major">major</option>
+                          <option value="minor">minor</option>
+                          <option value="info">info</option>
+                        </select>
+                      </div>
+                      <div className="field" style={{ gridColumn: '1 / -1' }}>
+                        <label htmlFor="norm-text-inline">Текст нормы</label>
+                        <textarea
+                          id="norm-text-inline"
+                          rows={4}
+                          value={normText}
+                          onChange={(event) => setNormText(event.target.value)}
+                          placeholder="Опишите нарушение свободным текстом; LLM оформит норму и проверит дубль."
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={createNormMutation.isPending}
+                      >
+                        {createNormMutation.isPending ? 'Сохраняем…' : 'Создать норму'}
+                      </button>
+                      {isSuggesting && <div className="loader-beeline" aria-label="Ожидаем ответ LLM" />}
+                    </form>
+                    {normMessage && (
+                      <p className={`alert ${normState === 'success' ? 'alert-success' : 'alert-error'}`}>
+                        {normMessage}
+                      </p>
+                    )}
+                  </section>
+                )}
+
+                <div style={{ display: 'grid', gap: '0.75rem', maxHeight: '54vh', overflow: 'auto' }}>
                   {runSourcesQuery.error && (
                     <p className="alert alert-error">Не удалось загрузить исходный код запуска.</p>
                   )}
@@ -1462,44 +1242,13 @@ function RunDetailsPage() {
                         {renderSource(source)}
                       </div>
                     ))}
+                  {!runSourcesQuery.isLoading &&
+                    !runSourcesQuery.error &&
+                    !(runSourcesQuery.data || []).length && <div className="empty-state">Исходники не найдены.</div>}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
           )}
-        </section>
-      )}
-
-      {activeTab === 'ai' && showAISources && (
-        <section className="card" style={{ marginBottom: '1.5rem' }}>
-          <div className="card-header">
-            <div>
-              <h2 className="card-title">Исходный код запуска</h2>
-              <p className="muted">{normSources.length} файлов</p>
-            </div>
-            {runSourcesQuery.isLoading && <span className="muted">Загружаем…</span>}
-          </div>
-          {runSourcesQuery.error && (
-            <p className="alert alert-error">Не удалось загрузить исходный код запуска.</p>
-          )}
-          {!runSourcesQuery.isLoading && !runSourcesQuery.error && !normSources.length && (
-            <div className="empty-state">Исходный код не найден в артефактах.</div>
-          )}
-          {normSources.map((source) => (
-            <details key={source.path} className="card" open>
-              <summary>
-                {source.path}{' '}
-                <span className="muted">({source.lineCount} строк)</span>
-              </summary>
-              <pre
-                data-source-path={source.path}
-                data-line-start="1"
-                data-line-end={String(source.lineCount)}
-              >
-                {source.content}
-              </pre>
-            </details>
-          ))}
         </section>
       )}
 
