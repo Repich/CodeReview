@@ -120,6 +120,8 @@ function RunDetailsPage() {
   const [showAISources, setShowAISources] = useState(true);
   const [showNormSources, setShowNormSources] = useState(false);
   const [selectedAiId, setSelectedAiId] = useState<string | null>(null);
+  const [aiLeftWidth, setAiLeftWidth] = useState(620);
+  const [isResizingAI, setIsResizingAI] = useState(false);
   const [selectionDraft, setSelectionDraft] = useState<{
     text: string;
     file: string | null;
@@ -333,6 +335,23 @@ function RunDetailsPage() {
       setNormSection(normSectionsQuery.data[0]);
     }
   }, [normSectionsQuery.data, normSection]);
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!isResizingAI) return;
+      const newWidth = Math.min(Math.max(event.clientX - 280, 420), 900);
+      setAiLeftWidth(newWidth);
+    };
+    const handleMouseUp = () => setIsResizingAI(false);
+    if (isResizingAI) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingAI]);
 
   const progressText = useMemo(() => {
     const runData = runQuery.data;
@@ -1203,18 +1222,18 @@ function RunDetailsPage() {
           {aiFindingsQuery.error && (
             <p className="alert alert-error">Не удалось загрузить предложения LLM.</p>
           )}
-          {aiFindingsQuery.isLoading && (
+          {(aiFindingsQuery.isLoading || runQuery.isLoading) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem' }}>
               <div className="loader-beeline" aria-label="Загрузка предложений LLM" />
-              <div className="muted">Загружаем предложения LLM…</div>
+              <div className="muted">Загружаем запуск и предложения LLM…</div>
             </div>
           )}
-          {!aiFindingsQuery.isLoading && (
+          {!aiFindingsQuery.isLoading && !runQuery.isLoading && (
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '520px minmax(700px, 1fr)',
-              gap: '1rem',
+              gridTemplateColumns: `${aiLeftWidth}px minmax(700px, 1fr)`,
+              gap: '0.5rem',
               alignItems: 'start',
             }}
           >
@@ -1257,6 +1276,17 @@ function RunDetailsPage() {
                 <div className="empty-state">LLM не предложила дополнительных норм.</div>
               )}
             </div>
+
+            <div
+              style={{
+                width: '6px',
+                cursor: 'col-resize',
+                background: 'var(--border)',
+                borderRadius: '4px',
+                height: '100%',
+              }}
+              onMouseDown={() => setIsResizingAI(true)}
+            />
 
             <div className="card" style={{ padding: '1rem', maxHeight: '85vh', overflow: 'hidden' }}>
               <div className="card-header" style={{ marginBottom: '0.5rem' }}>
