@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-import textwrap
 from pathlib import Path
 from typing import Any
 
 from backend.app.models.norm import Norm
+from backend.app.models.suggested_norm import SuggestedNorm
 from backend.app.schemas.suggested_norms import SuggestedNormLLMResult
 from backend.app.services.llm_playground import LLMPlaygroundError, request_llm_playground
 
@@ -187,3 +187,58 @@ def _extract_json(text: str) -> dict[str, Any] | None:
         except json.JSONDecodeError:
             return None
     return None
+
+
+def append_suggested_norm_to_pattern_file(norm: SuggestedNorm) -> None:
+    try:
+        import yaml  # lazy import
+    except ImportError as exc:
+        raise RuntimeError("yaml not available, cannot update pattern norms file") from exc
+
+    if not norm.generated_norm_id or not norm.generated_title or not norm.generated_text:
+        raise ValueError("suggested norm is missing generated fields")
+
+    root_dir = Path(__file__).resolve().parents[3]
+    path = root_dir / "pattern_1С.yaml"
+    existing: list[dict[str, Any]] = []
+    existing_text = ""
+    if path.exists():
+        existing_text = path.read_text(encoding="utf-8")
+        data = yaml.safe_load(existing_text) or []
+        if isinstance(data, dict):
+            existing = data.get("norms") or []
+        elif isinstance(data, list):
+            existing = data
+        else:
+            existing = []
+    if any(entry.get("norm_id") == norm.generated_norm_id for entry in existing if isinstance(entry, dict)):
+        raise ValueError("norm_id already exists in pattern file")
+
+    section = norm.generated_section or norm.section
+    scope = norm.generated_scope or "любой модуль"
+    entry = {
+        "norm_id": norm.generated_norm_id,
+        "title": norm.generated_title,
+        "section": section,
+        "category": "custom",
+        "norm_text": norm.generated_text,
+        "rationale": "",
+        "detection_hint": "",
+        "scope": scope,
+        "source_reference": "Заявки норм",
+        "priority": 3,
+        "exceptions": "",
+    }
+
+    snippet = yaml.safe_dump(
+        [entry],
+        allow_unicode=True,
+        sort_keys=False,
+        default_flow_style=False,
+        width=120,
+    )
+    if existing_text.strip():
+        separator = "" if existing_text.endswith("\n") else "\n"
+        path.write_text(f"{existing_text}{separator}{snippet}", encoding="utf-8")
+    else:
+        path.write_text(snippet, encoding="utf-8")

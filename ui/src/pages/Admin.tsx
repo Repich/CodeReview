@@ -18,6 +18,7 @@ import {
   updateUserRole,
   fetchSuggestedNorms,
   voteSuggestedNorm,
+  acceptSuggestedNorm,
   LLMPlaygroundResponse,
   requeueReviewRun,
   runLLMPlayground,
@@ -226,6 +227,13 @@ function AdminPage() {
   const suggestedNormVoteMutation = useMutation({
     mutationFn: ({ normId, vote }: { normId: string; vote: 1 | -1 }) =>
       voteSuggestedNorm(normId, vote),
+    onSuccess: () => {
+      suggestedNormsQuery.refetch();
+    },
+  });
+
+  const suggestedNormAcceptMutation = useMutation({
+    mutationFn: (normId: string) => acceptSuggestedNorm(normId),
     onSuccess: () => {
       suggestedNormsQuery.refetch();
     },
@@ -705,28 +713,46 @@ function AdminPage() {
                           </div>
                         </td>
                         <td>{item.vote_score}</td>
-                        <td>
-                          <div className="btn-group">
-                            <button
-                              type="button"
-                              className={`btn btn-secondary ${item.user_vote === 1 ? 'active' : ''}`}
-                              onClick={() => suggestedNormVoteMutation.mutate({ normId: item.id, vote: 1 })}
-                            >
-                              +
-                            </button>
-                            <button
-                              type="button"
-                              className={`btn btn-secondary ${item.user_vote === -1 ? 'active' : ''}`}
-                              onClick={() => suggestedNormVoteMutation.mutate({ normId: item.id, vote: -1 })}
-                            >
-                              -
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    <td>
+                      <div className="btn-group">
+                        <button
+                          type="button"
+                          className={`btn btn-secondary ${item.user_vote === 1 ? 'active' : ''}`}
+                          onClick={() => suggestedNormVoteMutation.mutate({ normId: item.id, vote: 1 })}
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn btn-secondary ${item.user_vote === -1 ? 'active' : ''}`}
+                          onClick={() => suggestedNormVoteMutation.mutate({ normId: item.id, vote: -1 })}
+                        >
+                          -
+                        </button>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => suggestedNormAcceptMutation.mutate(item.id)}
+                            disabled={
+                              suggestedNormAcceptMutation.isPending
+                              || !item.generated_norm_id
+                              || !item.generated_title
+                              || !item.generated_text
+                              || item.status === 'accepted_auto'
+                              || item.status === 'accepted_manual'
+                              || item.status === 'rejected_duplicate'
+                            }
+                          >
+                            Принять норму
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
               )}
               {suggestedNormsQuery.data && !suggestedNormsQuery.data.items.length && (
                 <div className="empty-state">Пока нет заявок.</div>

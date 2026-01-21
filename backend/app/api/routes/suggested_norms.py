@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_current_teacher, get_db
+from backend.app.api.deps import get_current_admin, get_current_teacher, get_db
 from backend.app.models import SuggestedNorm, SuggestedNormVote, UserAccount
 from backend.app.models.norm import Norm
 from backend.app.schemas.suggested_norms import (
@@ -17,6 +17,7 @@ from backend.app.services.suggested_norms import (
     build_sections_list,
     call_llm_for_norm,
     _load_catalog_norms,
+    append_suggested_norm_to_pattern_file,
 )
 
 router = APIRouter(prefix="/suggested-norms", tags=["suggested_norms"])
@@ -116,7 +117,10 @@ def create_suggested_norm(
 
 @router.get("", response_model=SuggestedNormListResponse)
 def list_suggested_norms(
-    status: str | None = Query(default=None, pattern="^(pending|accepted_auto|rejected_duplicate|rejected_manual)$"),
+    status: str | None = Query(
+        default=None,
+        pattern="^(pending|accepted_auto|accepted_manual|rejected_duplicate|rejected_manual)$",
+    ),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -166,3 +170,35 @@ def vote_suggested_norm(
             )
         )
     db.commit()
+
+
+@router.post("/{norm_id}/accept", response_model=SuggestedNormRead)
+def accept_suggested_norm(
+    norm_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+) -> SuggestedNormRead:
+    norm = db.query(SuggestedNorm).filter_by(id=norm_id).first()
+    if not norm:
+        raise HTTPException(status_code=404, detail="Suggested norm not found")
+    if norm.status in {"accepted_auto", "accepted_manual"}:
+        raise HTTPException(status_code=400, detail="Suggested norm already accepted")
+    if norm.status == "rejected_duplicate" or norm.duplicate_of:
+        raise HTTPException(status_code=400, detail="Duplicate suggested norm cannot be accepted")
+    if not norm.generated_norm_id or not norm.generated_title or not norm.generated_text:
+        raise HTTPException(status_code=400, detail="Suggested norm is missing generated fields")
+    try:
+        append_suggested_norm_to_pattern_file(norm)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    norm.status = "accepted_manual"
+    db.add(norm)
+    db.commit()
+    db.refresh(norm)
+    vote_sum = db.query(func.coalesce(func.sum(SuggestedNormVote.vote), 0)).filter(
+        SuggestedNormVote.norm_id == norm.id
+    ).scalar()
+    dup_titles = {n.norm_id: n.title for n in db.query(Norm).all()}
+    return _to_read_model(norm, current_user, vote_score=vote_sum or 0, dup_titles=dup_titles)
