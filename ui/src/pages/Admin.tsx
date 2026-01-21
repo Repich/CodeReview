@@ -741,7 +741,6 @@ function AdminPage() {
                               || !item.generated_text
                               || item.status === 'accepted_auto'
                               || item.status === 'accepted_manual'
-                              || item.status === 'rejected_duplicate'
                             }
                           >
                             Принять норму

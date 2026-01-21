@@ -183,8 +183,6 @@ def accept_suggested_norm(
         raise HTTPException(status_code=404, detail="Suggested norm not found")
     if norm.status in {"accepted_auto", "accepted_manual"}:
         raise HTTPException(status_code=400, detail="Suggested norm already accepted")
-    if norm.status == "rejected_duplicate" or norm.duplicate_of:
-        raise HTTPException(status_code=400, detail="Duplicate suggested norm cannot be accepted")
     if not norm.generated_norm_id or not norm.generated_title or not norm.generated_text:
         raise HTTPException(status_code=400, detail="Suggested norm is missing generated fields")
     try:
