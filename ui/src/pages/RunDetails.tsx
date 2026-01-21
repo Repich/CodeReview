@@ -562,10 +562,11 @@ function RunDetailsPage() {
   const changeRangeMap = run?.context?.change_ranges as Record<string, unknown> | undefined;
   const changeRangeCount = changeRangeMap ? Object.keys(changeRangeMap).length : 0;
   const hasChangeRanges = changeRangeCount > 0;
+  const aiCountDisplay = aiFindingsQuery.isLoading ? '…' : String(aiFindings.length);
   const tabs = useMemo(() => {
-    const items = [
+    const items: { id: string; label: string; count: number | string; adminOnly?: boolean }[] = [
       { id: 'findings', label: 'Найденные нарушения', count: totalFindings },
-      { id: 'ai', label: 'Предложения LLM', count: aiFindings.length },
+      { id: 'ai', label: 'Предложения LLM', count: aiCountDisplay },
       {
         id: 'complexity',
         label: 'Когнитивная сложность',
@@ -583,7 +584,7 @@ function RunDetailsPage() {
     return items.filter((item) => (item.adminOnly ? isAdmin : true));
   }, [
     totalFindings,
-    aiFindings.length,
+    aiCountDisplay,
     complexityMetrics,
     llmLogsQuery.data,
     auditQuery.data,
@@ -1195,7 +1196,9 @@ function RunDetailsPage() {
             <div>
               <h2 className="card-title">Предложения LLM</h2>
               <p className="muted">
-                {aiFindingsQuery.isLoading ? 'Загружаем…' : `${aiFindings.length}/${aiFindingsQuery.data?.total ?? 0}`}
+                {aiFindingsQuery.isLoading
+                  ? 'Загружаем…'
+                  : `${aiFindings.length}/${aiFindingsQuery.data?.total ?? 0}`}
               </p>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -1232,9 +1235,10 @@ function RunDetailsPage() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: `${aiLeftWidth}px minmax(700px, 1fr)`,
-              gap: '0.5rem',
+              gridTemplateColumns: `${aiLeftWidth}px minmax(850px, 1fr)`,
+              gap: '0.75rem',
               alignItems: 'start',
+              minWidth: `${aiLeftWidth + 850}px`,
             }}
           >
             <div className="card-list" style={{ maxHeight: '80vh', overflow: 'auto' }}>
@@ -1276,17 +1280,6 @@ function RunDetailsPage() {
                 <div className="empty-state">LLM не предложила дополнительных норм.</div>
               )}
             </div>
-
-            <div
-              style={{
-                width: '6px',
-                cursor: 'col-resize',
-                background: 'var(--border)',
-                borderRadius: '4px',
-                height: '100%',
-              }}
-              onMouseDown={() => setIsResizingAI(true)}
-            />
 
             <div className="card" style={{ padding: '1rem', maxHeight: '85vh', overflow: 'hidden' }}>
               <div className="card-header" style={{ marginBottom: '0.5rem' }}>
