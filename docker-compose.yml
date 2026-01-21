@@ -10,6 +10,8 @@ services:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.backend
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       CODEREVIEW_DEBUG: "false"
     healthcheck:
@@ -29,6 +31,8 @@ services:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.worker
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       CODEREVIEW_WORKER_REDIS_URL: redis://redis:6379/0
       CODEREVIEW_WORKER_ENGINE_VERSION: "0.1.0"
