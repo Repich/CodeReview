@@ -436,6 +436,17 @@ function RunDetailsPage() {
       lineEnd: lineEnd || lineStart || 0,
     };
   }, [selectedAiFinding]);
+
+  useEffect(() => {
+    if (!highlightedRange) return;
+    const escapedFile = highlightedRange.file.replace(/"/g, '\\"');
+    const target = document.querySelector(
+      `[data-source-path="${escapedFile}"] [data-line="${highlightedRange.lineStart}"]`,
+    ) as HTMLElement | null;
+    if (target && typeof target.scrollIntoView === 'function') {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [highlightedRange, runSourcesQuery.data]);
   const totalFindings = findingsQuery.data?.total ?? 0;
   const severityCounts = useMemo(() => {
     const counts: Record<string, number> = {
@@ -519,6 +530,7 @@ function RunDetailsPage() {
           return (
             <div
               key={`${source.path}:${ln}`}
+              data-line={ln}
               style={{
                 background: isHl ? 'rgba(255, 210, 0, 0.2)' : 'transparent',
                 padding: '0 0.25rem',
