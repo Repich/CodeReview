@@ -405,6 +405,37 @@ textarea {
   flex: 1;
 }
 
+.segmented-control {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+}
+
+.segmented-control button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.segmented-control button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+
+.segmented-control button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .finding-card details {
   margin-top: 0.5rem;
 }

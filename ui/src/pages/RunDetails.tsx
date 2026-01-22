@@ -631,6 +631,48 @@ function RunDetailsPage() {
           }}
         >
           <div className="card-list" style={{ maxHeight: '78vh', overflow: 'auto' }}>
+            {isCombinedView && (
+              <>
+                <div className="chip" style={{ marginBottom: '0.5rem' }}>
+                  Статический анализ
+                </div>
+                <FindingFilters
+                  severity={severity}
+                  setSeverity={setSeverity}
+                  query={query}
+                  setQuery={setQuery}
+                />
+                {displayFindings.map((item) => {
+                  if (item.kind === 'single') {
+                    return (
+                      <FindingCard
+                        key={`combined-${item.finding.id}`}
+                        finding={item.finding}
+                        sequence={findingOrderMap.get(item.finding.id)}
+                        showContext={false}
+                        sourceLookup={null}
+                      />
+                    );
+                  }
+                  return (
+                    <FindingGroupCard
+                      key={`combined-group-${item.group.base.id}`}
+                      base={item.group.base}
+                      items={item.group.items}
+                      sequence={findingOrderMap.get(item.group.base.id)}
+                      showContext={false}
+                      sourceLookup={null}
+                    />
+                  );
+                })}
+                {!displayFindings.length && (
+                  <div className="empty-state">Статических нарушений не найдено.</div>
+                )}
+                <div className="chip" style={{ margin: '0.75rem 0 0.5rem' }}>
+                  Предложения LLM
+                </div>
+              </>
+            )}
             {orderedAiFindings.map((finding) => (
               <div
                 key={finding.id}
@@ -1195,57 +1237,59 @@ function RunDetailsPage() {
 
       {activeTab === 'findings' && (
         <>
-          <section className="card" style={{ marginBottom: '1.5rem' }}>
-            <div className="card-header">
-              <div>
-                <h2 className="card-title">Найденные нарушения</h2>
-                <p className="muted">
-                  {displayFindings.length} карточек · {filteredFindings.length} нарушений
-                </p>
+          {!isCombinedView && (
+            <section className="card" style={{ marginBottom: '1.5rem' }}>
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Найденные нарушения</h2>
+                  <p className="muted">
+                    {displayFindings.length} карточек · {filteredFindings.length} нарушений
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  {showFindingsContext && runSourcesQuery.isLoading && (
+                    <span className="muted">Загружаем контекст…</span>
+                  )}
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setShowFindingsContext((prev) => !prev)}
+                  >
+                    {showFindingsContext ? 'Скрыть контекст' : 'Показать контекст'}
+                  </button>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                {showFindingsContext && runSourcesQuery.isLoading && (
-                  <span className="muted">Загружаем контекст…</span>
-                )}
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  onClick={() => setShowFindingsContext((prev) => !prev)}
-                >
-                  {showFindingsContext ? 'Скрыть контекст' : 'Показать контекст'}
-                </button>
-              </div>
-            </div>
-            <FindingFilters severity={severity} setSeverity={setSeverity} query={query} setQuery={setQuery} />
-            <div className="card-list">
-              {displayFindings.map((item) => {
-                if (item.kind === 'single') {
+              <FindingFilters severity={severity} setSeverity={setSeverity} query={query} setQuery={setQuery} />
+              <div className="card-list">
+                {displayFindings.map((item) => {
+                  if (item.kind === 'single') {
+                    return (
+                      <FindingCard
+                        key={item.finding.id}
+                        finding={item.finding}
+                        sequence={findingOrderMap.get(item.finding.id)}
+                        showContext={showFindingsContext}
+                        sourceLookup={showFindingsContext ? sourceLookup : null}
+                      />
+                    );
+                  }
                   return (
-                    <FindingCard
-                      key={item.finding.id}
-                      finding={item.finding}
-                      sequence={findingOrderMap.get(item.finding.id)}
+                    <FindingGroupCard
+                      key={`group-${item.group.base.id}`}
+                      base={item.group.base}
+                      items={item.group.items}
+                      sequence={findingOrderMap.get(item.group.base.id)}
                       showContext={showFindingsContext}
                       sourceLookup={showFindingsContext ? sourceLookup : null}
                     />
                   );
-                }
-                return (
-                  <FindingGroupCard
-                    key={`group-${item.group.base.id}`}
-                    base={item.group.base}
-                    items={item.group.items}
-                    sequence={findingOrderMap.get(item.group.base.id)}
-                    showContext={showFindingsContext}
-                    sourceLookup={showFindingsContext ? sourceLookup : null}
-                  />
-                );
-              })}
-              {!displayFindings.length && (
-                <div className="empty-state">Нет нарушений под текущий фильтр.</div>
-              )}
-            </div>
-          </section>
+                })}
+                {!displayFindings.length && (
+                  <div className="empty-state">Нет нарушений под текущий фильтр.</div>
+                )}
+              </div>
+            </section>
+          )}
 
           {isCombinedView && aiSection}
 

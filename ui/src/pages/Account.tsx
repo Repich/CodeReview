@@ -85,33 +85,6 @@ function AccountPage() {
               <dd>{userQuery.data?.company_name || '—'}</dd>
             </div>
           </dl>
-          <div style={{ marginTop: '1rem' }}>
-            <p className="muted" style={{ marginBottom: '0.35rem' }}>
-              Настройки интерфейса
-            </p>
-            <label className="muted" htmlFor="findings-view" style={{ display: 'block' }}>
-              Отображение нарушений
-            </label>
-            <select
-              id="findings-view"
-              className="input"
-              value={findingsView}
-              disabled={settingsMutation.isPending}
-              onChange={(event) => {
-                const value = event.target.value as 'separate' | 'combined';
-                setFindingsView(value);
-                settingsMutation.mutate({ findings_view: value });
-              }}
-            >
-              <option value="separate">Раздельно: нарушения и LLM</option>
-              <option value="combined">Вместе в одной вкладке</option>
-            </select>
-            {settingsMutation.isError && (
-              <p className="alert alert-error" style={{ marginTop: '0.5rem' }}>
-                Не удалось сохранить настройки.
-              </p>
-            )}
-          </div>
         </div>
 
         <div className="card">
@@ -124,6 +97,45 @@ function AccountPage() {
             </span>
           </div>
           <p className="muted">Пополняйте баланс перед запуском анализа.</p>
+        </div>
+
+        <div className="card">
+          <h2 className="card-title">Настройки</h2>
+          <p className="muted" style={{ marginBottom: '0.75rem' }}>
+            Персонализируйте отображение нарушений.
+          </p>
+          <div className="segmented-control" role="group" aria-label="Отображение нарушений">
+            <button
+              type="button"
+              className={findingsView === 'separate' ? 'active' : ''}
+              onClick={() => {
+                setFindingsView('separate');
+                settingsMutation.mutate({ findings_view: 'separate' });
+              }}
+              disabled={settingsMutation.isPending}
+            >
+              Раздельно
+            </button>
+            <button
+              type="button"
+              className={findingsView === 'combined' ? 'active' : ''}
+              onClick={() => {
+                setFindingsView('combined');
+                settingsMutation.mutate({ findings_view: 'combined' });
+              }}
+              disabled={settingsMutation.isPending}
+            >
+              Вместе
+            </button>
+          </div>
+          <p className="muted" style={{ marginTop: '0.75rem' }}>
+            Раздельно — отдельная вкладка LLM. Вместе — единый список слева от кода.
+          </p>
+          {settingsMutation.isError && (
+            <p className="alert alert-error" style={{ marginTop: '0.75rem' }}>
+              Не удалось сохранить настройки.
+            </p>
+          )}
         </div>
       </div>
 
