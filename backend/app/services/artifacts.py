@@ -102,6 +102,14 @@ def save_llm_log(run_id: str, index: int, payload: dict[str, Any]) -> list[tuple
         response_name = f"{run_id}_{stage}_llm_log_{index}_response.txt"
         (target_dir / response_name).write_text(response, encoding="utf-8")
         artifacts.append((f"{stage}_llm_response.txt", response_name, len(response.encode("utf-8"))))
+    redaction_report = payload.get("redaction_report")
+    if isinstance(redaction_report, dict):
+        redaction_name = f"{run_id}_{stage}_llm_redaction_{index}.json"
+        redaction_payload = json.dumps(redaction_report, ensure_ascii=False, indent=2)
+        (target_dir / redaction_name).write_text(redaction_payload, encoding="utf-8")
+        artifacts.append(
+            (f"{stage}_llm_redaction.json", redaction_name, len(redaction_payload.encode("utf-8")))
+        )
     return artifacts
 
 

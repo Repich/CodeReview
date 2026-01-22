@@ -91,3 +91,4 @@ class LLMDiagnostic:
     prompt_version: str | None = None
     unit_id: str | None = None
     unit_name: str | None = None
+    redaction_report: dict[str, Any] | None = None

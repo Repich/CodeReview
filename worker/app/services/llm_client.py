@@ -16,6 +16,7 @@ import httpx
 from worker.app.config import get_settings
 from worker.app.models import AISuggestion, AnalysisTask, DetectorFinding, LLMDiagnostic
 from worker.app.services.code_units import CodeUnit, split_source_into_units
+from worker.app.services.redaction import redact_lines, redact_text, RedactionStats
 from worker.app.services.critical_norms import get_critical_norm_repository
 from worker.app.services.pattern_norms import get_pattern_norm_repository
 from worker.app.services.norms_repo import NormCard
@@ -138,7 +139,7 @@ def generate_ai_suggestions(
                 #     len(norm_cards),
                 #     len(unit_findings),
                 # )
-                prompt = _build_unit_prompt(unit, unit_findings, norm_cards)
+                prompt, redaction_report = _build_unit_prompt(unit, unit_findings, norm_cards)
                 response_text = _call_deepseek(prompt, api_key)
                 if not response_text:
                     logger.warning("LLM unit %s: no response", unit.unit_name)
@@ -165,11 +166,12 @@ def generate_ai_suggestions(
                         response=response_text,
                         context_files=[f"norm:{card.norm_id}" for card in norm_cards],
                         source_paths=[unit.source_path],
-                        static_findings=json.loads(_serialize_findings(unit_findings)),
+                        static_findings=json.loads(_serialize_findings(unit_findings)[0]),
                         created_at=datetime.utcnow().isoformat(),
                         prompt_version=norm_repo.version,
                         unit_id=unit.unit_id,
                         unit_name=unit.unit_name,
+                        redaction_report=redaction_report,
                     )
                 )
 
@@ -180,7 +182,7 @@ def generate_ai_suggestions(
         prompt_versions.append(f"pattern:{pattern_repo.version}")
         for unit in units:
             unit_findings = _filter_findings_for_unit(findings_list, unit)
-            prompt = _build_pattern_prompt(unit, unit_findings, pattern_repo.cards)
+            prompt, redaction_report = _build_pattern_prompt(unit, unit_findings, pattern_repo.cards)
             response_text = _call_deepseek(
                 prompt,
                 api_key,
@@ -210,11 +212,12 @@ def generate_ai_suggestions(
                     response=response_text,
                     context_files=[f"pattern:{card.norm_id}" for card in pattern_repo.cards],
                     source_paths=[unit.source_path],
-                    static_findings=json.loads(_serialize_findings(unit_findings)),
+                    static_findings=json.loads(_serialize_findings(unit_findings)[0]),
                     created_at=datetime.utcnow().isoformat(),
                     prompt_version=f"pattern:{pattern_repo.version}",
                     unit_id=unit.unit_id,
                     unit_name=unit.unit_name,
+                    redaction_report=redaction_report,
                 )
             )
 
@@ -254,7 +257,7 @@ def generate_ai_suggestions(
                     len(query_norm_repo.cards),
                     len(unit_findings),
                 )
-                prompt = _build_query_prompt(unit, unit_findings, query_norm_repo.cards)
+                prompt, redaction_report = _build_query_prompt(unit, unit_findings, query_norm_repo.cards)
                 response_text = _call_deepseek(
                     prompt,
                     api_key,
@@ -286,11 +289,12 @@ def generate_ai_suggestions(
                         response=response_text,
                         context_files=[f"norm:{card.norm_id}" for card in query_norm_repo.cards],
                         source_paths=[unit.source_path],
-                        static_findings=json.loads(_serialize_findings(unit_findings)),
+                        static_findings=json.loads(_serialize_findings(unit_findings)[0]),
                         created_at=datetime.utcnow().isoformat(),
                         prompt_version=query_norm_repo.version,
                         unit_id=unit.unit_id,
                         unit_name=unit.unit_name,
+                        redaction_report=redaction_report,
                     )
                 )
 
@@ -361,9 +365,11 @@ def _build_unit_prompt(
     unit: CodeUnit,
     findings: list[DetectorFinding],
     norm_cards: list[NormCard],
-) -> str:
-    code_block = _extract_relevant_code(unit)
-    serialized_findings = _serialize_findings(findings)
+) -> tuple[str, dict]:
+    code_block, redaction_report = _extract_relevant_code(unit)
+    serialized_findings, findings_redaction = _serialize_findings(findings)
+    if findings_redaction:
+        redaction_report["redacted_in_findings"] = findings_redaction
     norm_text = _truncate_text(_format_norm_cards(norm_cards), MAX_NORM_TEXT_CHARS, "нормы")
     tags = ", ".join(sorted(unit.tags)) if unit.tags else "нет"
     changed_desc = (
@@ -372,7 +378,7 @@ def _build_unit_prompt(
         else f"{unit.start_line}-{unit.end_line}"
     )
 
-    return textwrap.dedent(
+    prompt = textwrap.dedent(
         f"""
         Модуль: {unit.source_path}
         Единица анализа: {unit.unit_name} ({unit.unit_type}), строки {unit.start_line}–{unit.end_line}
@@ -407,19 +413,22 @@ def _build_unit_prompt(
         Ответ: строго JSON-массив без пояснений.
         """
     ).strip()
+    return prompt, redaction_report
 
 
 def _build_query_prompt(
     unit: QueryUnit,
     findings: list[DetectorFinding],
     norm_cards: list[NormCard],
-) -> str:
-    query_block = _format_query_lines(unit)
-    serialized_findings = _serialize_findings(findings)
+) -> tuple[str, dict]:
+    query_block, redaction_report = _format_query_lines(unit)
+    serialized_findings, findings_redaction = _serialize_findings(findings)
+    if findings_redaction:
+        redaction_report["redacted_in_findings"] = findings_redaction
     norm_text = _truncate_text(
         _format_norm_cards(norm_cards), MAX_QUERY_NORM_TEXT_CHARS, "нормы"
     )
-    return textwrap.dedent(
+    prompt = textwrap.dedent(
         f"""
         Модуль: {unit.source_path}
         Блок запроса: строки {unit.start_line}–{unit.end_line}
@@ -454,15 +463,18 @@ def _build_query_prompt(
         Ответ: строго JSON-массив без пояснений.
         """
     ).strip()
+    return prompt, redaction_report
 
 
 def _build_pattern_prompt(
     unit: CodeUnit,
     findings: list[DetectorFinding],
     norm_cards: list[NormCard],
-) -> str:
-    code_block = _extract_relevant_code(unit)
-    serialized_findings = _serialize_findings(findings)
+) -> tuple[str, dict]:
+    code_block, redaction_report = _extract_relevant_code(unit)
+    serialized_findings, findings_redaction = _serialize_findings(findings)
+    if findings_redaction:
+        redaction_report["redacted_in_findings"] = findings_redaction
     norm_text = _truncate_text(
         _format_norm_cards(norm_cards), MAX_PATTERN_NORM_TEXT_CHARS, "паттерны"
     )
@@ -472,7 +484,7 @@ def _build_pattern_prompt(
         if unit.review_ranges
         else f"{unit.start_line}-{unit.end_line}"
     )
-    return textwrap.dedent(
+    prompt = textwrap.dedent(
         f"""
         Модуль: {unit.source_path}
         Единица анализа: {unit.unit_name} ({unit.unit_type}), строки {unit.start_line}–{unit.end_line}
@@ -502,11 +514,18 @@ def _build_pattern_prompt(
         Ответ: строго JSON-массив без пояснений.
         """
     ).strip()
+    return prompt, redaction_report
 
 
-def _serialize_findings(findings: Iterable[DetectorFinding]) -> str:
+def _serialize_findings(findings: Iterable[DetectorFinding]) -> tuple[str, int]:
     payload = []
+    redaction_count = 0
     for item in findings:
+        snippet = item.snippet
+        if snippet:
+            redacted_snippet, stats = redact_text(snippet)
+            snippet = redacted_snippet
+            redaction_count += stats.total_literals
         payload.append(
             {
                 "norm_id": item.norm_id,
@@ -515,10 +534,10 @@ def _serialize_findings(findings: Iterable[DetectorFinding]) -> str:
                 "message": item.message,
                 "file_path": item.file_path,
                 "line": item.line,
-                "snippet": item.snippet,
+                "snippet": snippet,
             }
         )
-    return json.dumps(payload, ensure_ascii=False, indent=2)
+    return json.dumps(payload, ensure_ascii=False, indent=2), redaction_count
 
 
 def _filter_findings_for_unit(
@@ -715,6 +734,37 @@ def _lines_exceed_length(unit: CodeUnit, lines: str | None, limit: int) -> bool:
     return False
 
 
+def _base_redaction_report(unit: CodeUnit | QueryUnit, stats: RedactionStats) -> dict:
+    return {
+        "source_path": unit.source_path,
+        "unit_id": getattr(unit, "unit_id", None),
+        "unit_name": unit.unit_name,
+        "redacted_literals": stats.total_literals,
+        "redacted_lines": stats.lines_with_redactions,
+        "redactions_by_line": stats.redactions_by_line,
+    }
+
+
+def _filter_redaction_report(
+    unit: CodeUnit | QueryUnit,
+    stats: RedactionStats,
+    included_lines: set[int],
+) -> dict:
+    if not included_lines:
+        return _base_redaction_report(unit, stats)
+    redactions_by_line = {
+        line_no: count
+        for line_no, count in stats.redactions_by_line.items()
+        if line_no in included_lines
+    }
+    filtered = RedactionStats(
+        total_literals=sum(redactions_by_line.values()),
+        lines_with_redactions=sorted(redactions_by_line),
+        redactions_by_line=redactions_by_line,
+    )
+    return _base_redaction_report(unit, filtered)
+
+
 def _extract_lines(unit: CodeUnit, lines: str) -> list[str]:
     extracted: list[str] = []
     parts = lines.split(":")
@@ -735,34 +785,50 @@ def _extract_lines(unit: CodeUnit, lines: str) -> list[str]:
     return extracted
 
 
-def _extract_relevant_code(unit: CodeUnit) -> str:
+def _extract_relevant_code(unit: CodeUnit) -> tuple[str, dict]:
     text = unit.text.strip("\n")
     if not text:
-        return ""
+        return "", _base_redaction_report(unit, RedactionStats(0, [], {}))
     lines = unit.text.splitlines()
     cleaned_lines = _strip_comments(lines)
+    redacted_lines, stats = redact_lines(cleaned_lines, unit.start_line)
     if not unit.review_ranges:
         numbered = [
-            f"{unit.start_line + idx:>5}: {line}" for idx, line in enumerate(cleaned_lines)
+            f"{unit.start_line + idx:>5}: {line}" for idx, line in enumerate(redacted_lines)
         ]
-        return _truncate_text("\n".join(numbered), MAX_UNIT_CODE_CHARS, "фрагмент кода")
+        return (
+            _truncate_text("\n".join(numbered), MAX_UNIT_CODE_CHARS, "фрагмент кода"),
+            _base_redaction_report(unit, stats),
+        )
 
     context = 3
     min_line = min(start for start, _ in unit.review_ranges)
     max_line = max(end for _, end in unit.review_ranges)
     start_idx = max(min_line - context - unit.start_line, 0)
     end_idx = min(max_line - unit.start_line + context, len(lines) - 1)
+    included_lines = {unit.start_line + idx for idx in range(start_idx, end_idx + 1)}
     snippet: list[str] = []
     for idx in range(start_idx, end_idx + 1):
         absolute_line = unit.start_line + idx
         marker = ">" if any(start <= absolute_line <= end for start, end in unit.review_ranges) else " "
-        snippet.append(f"{marker} {absolute_line:>5}: {cleaned_lines[idx]}")
-    return _truncate_text("\n".join(snippet), MAX_UNIT_CODE_CHARS, "фрагмент кода")
+        snippet.append(f"{marker} {absolute_line:>5}: {redacted_lines[idx]}")
+    return (
+        _truncate_text("\n".join(snippet), MAX_UNIT_CODE_CHARS, "фрагмент кода"),
+        _filter_redaction_report(unit, stats, included_lines),
+    )
 
 
-def _format_query_lines(unit: QueryUnit) -> str:
-    numbered = [f"{line_no:>5}: {line}" for line_no, line in unit.line_map]
-    return _truncate_text("\n".join(numbered), MAX_QUERY_TEXT_CHARS, "текст запроса")
+def _format_query_lines(unit: QueryUnit) -> tuple[str, dict]:
+    raw_lines = [line for _, line in unit.line_map]
+    redacted_lines, stats = redact_lines(raw_lines, unit.start_line)
+    numbered = [
+        f"{line_no:>5}: {line}"
+        for (line_no, _), line in zip(unit.line_map, redacted_lines)
+    ]
+    return (
+        _truncate_text("\n".join(numbered), MAX_QUERY_TEXT_CHARS, "текст запроса"),
+        _filter_redaction_report(unit, stats, {line_no for line_no, _ in unit.line_map}),
+    )
 
 
 def _strip_comments(lines: list[str]) -> list[str]:

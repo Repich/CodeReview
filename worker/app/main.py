@@ -107,6 +107,7 @@ def serialize_result(result: AnalysisResult) -> dict[str, Any]:
                 "prompt_version": log.prompt_version,
                 "unit_id": log.unit_id,
                 "unit_name": log.unit_name,
+                "redaction_report": log.redaction_report,
             }
             for log in result.llm_logs
         ],
