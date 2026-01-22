@@ -31,6 +31,38 @@ norms:
   check_type: static
   default_severity: minor
   detector_type: syntax_style
+- norm_id: TEXT_TRAILING_TABS
+  section: Тексты модулей
+  category: code_style
+  title: Лишние табуляции после операторов
+  norm_text: 'В конце строки не должно быть лишних табуляций после операторов или выражений. Убирайте
+    табуляции и пробелы после последнего значимого символа строки.
+
+    '
+  tags:
+  - code-style
+  scope: любые модули
+  code_applicability: true
+  automation_hint: code
+  check_type: static
+  default_severity: minor
+  detector_type: syntax_style
+- norm_id: TEXT_EXTRA_BLANK_LINES
+  section: Тексты модулей
+  category: code_style
+  title: Лишние пустые строки (более одной)
+  norm_text: 'Запрещено использовать более одной пустой строки подряд. Между смысловыми блоками допускается
+    одна пустая строка.
+
+    '
+  tags:
+  - code-style
+  scope: любые модули
+  code_applicability: true
+  automation_hint: code
+  check_type: static
+  default_severity: minor
+  detector_type: syntax_style
 - norm_id: TEXT_LEFT_EDGE_ELEMENTS
   section: Тексты модулей
   category: code_style

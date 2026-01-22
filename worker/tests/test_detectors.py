@@ -17,6 +17,12 @@ from worker.app.detectors.critical import (
     SessionDateUsageDetector,
     ExceptionSwallowDetector,
 )
+from worker.app.detectors.formatting import (
+    EmptyRegionDetector,
+    IndentSpacesDetector,
+    MultipleBlankLinesDetector,
+    TrailingTabsDetector,
+)
 from worker.app.detectors.ui_queries import (
     DocumentSaveModeDetector,
     FormElementNamingDetector,
@@ -349,6 +355,46 @@ def test_query_multiline_positive():
 def test_query_multiline_negative():
     content = 'Запрос.Текст = "ВЫБРАТЬ \n| Документ.Ссылка\n| ИЗ Документ.Тест";'
     assert not run(QueryMultilineDetector, content)
+
+
+def test_empty_region_detector_positive():
+    content = "#Область Тест\n#КонецОбласти"
+    assert run(EmptyRegionDetector, content)
+
+
+def test_empty_region_detector_negative_with_content():
+    content = "#Область Тест\nПроцедура Х()\nКонецПроцедуры\n#КонецОбласти"
+    assert not run(EmptyRegionDetector, content)
+
+
+def test_indent_spaces_detector_positive():
+    content = "  Процедура Х()\nКонецПроцедуры"
+    assert run(IndentSpacesDetector, content)
+
+
+def test_indent_spaces_detector_negative_with_tabs():
+    content = "\tПроцедура Х()\n\tКонецПроцедуры"
+    assert not run(IndentSpacesDetector, content)
+
+
+def test_trailing_tabs_detector_positive():
+    content = "Процедура Х()\t\t\nКонецПроцедуры"
+    assert run(TrailingTabsDetector, content)
+
+
+def test_trailing_tabs_detector_negative_without_tabs():
+    content = "Процедура Х()\nКонецПроцедуры"
+    assert not run(TrailingTabsDetector, content)
+
+
+def test_multiple_blank_lines_detector_positive():
+    content = "Процедура Х()\n\n\nКонецПроцедуры"
+    assert len(run(MultipleBlankLinesDetector, content)) == 2
+
+
+def test_multiple_blank_lines_detector_negative():
+    content = "Процедура Х()\n\nКонецПроцедуры"
+    assert not run(MultipleBlankLinesDetector, content)
 
 
 def test_session_params_cache_positive():
