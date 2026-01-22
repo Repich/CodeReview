@@ -11,6 +11,7 @@ import backend.app.api.routes.caddy_logs as caddy_logs
 import backend.app.api.routes.companies as companies
 import backend.app.api.routes.feedback as feedback
 import backend.app.api.routes.findings as findings
+import backend.app.api.routes.changelog as changelog
 import backend.app.api.routes.health as health
 import backend.app.api.routes.llm_playground as llm_playground
 import backend.app.api.routes.norms as norms
@@ -30,6 +31,7 @@ api_router.include_router(findings.router)
 api_router.include_router(feedback.router)
 api_router.include_router(audit.router)
 api_router.include_router(users.router)
+api_router.include_router(changelog.router)
 api_router.include_router(companies.router)
 api_router.include_router(wallets.router)
 api_router.include_router(access_logs.router)

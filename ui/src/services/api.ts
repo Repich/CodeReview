@@ -202,6 +202,15 @@ export interface UserProfile {
   wallet_currency?: string | null;
   company_id?: string | null;
   company_name?: string | null;
+  settings?: UserSettings | null;
+}
+
+export interface UserSettings {
+  findings_view: 'separate' | 'combined';
+}
+
+export interface UserSettingsUpdate {
+  findings_view?: 'separate' | 'combined';
 }
 
 export interface NormCatalogEntry {
@@ -413,6 +422,21 @@ export async function downloadFindingsJsonl(runId: string) {
 
 export async function fetchCurrentUser() {
   const { data } = await client.get<UserProfile>('/users/me');
+  return data;
+}
+
+export async function updateUserSettings(payload: UserSettingsUpdate) {
+  const { data } = await client.patch<UserProfile>('/users/me/settings', payload);
+  return data;
+}
+
+export interface ChangelogResponse {
+  content: string;
+  updated_at: string;
+}
+
+export async function fetchChangelog() {
+  const { data } = await client.get<ChangelogResponse>('/changelog');
   return data;
 }
 

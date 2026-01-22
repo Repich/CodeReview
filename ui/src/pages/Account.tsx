@@ -1,11 +1,15 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchCurrentUser,
+  fetchChangelog,
   fetchWallet,
   fetchWalletTransactions,
+  updateUserSettings,
 } from '../services/api';
 
 function AccountPage() {
+  const queryClient = useQueryClient();
   const userQuery = useQuery({ queryKey: ['me'], queryFn: fetchCurrentUser });
   const walletQuery = useQuery({ queryKey: ['wallet'], queryFn: fetchWallet });
   const txQuery = useQuery({
@@ -13,6 +17,25 @@ function AccountPage() {
     queryFn: fetchWalletTransactions,
     enabled: true,
   });
+  const changelogQuery = useQuery({
+    queryKey: ['changelog'],
+    queryFn: fetchChangelog,
+  });
+  const [findingsView, setFindingsView] = useState<'separate' | 'combined'>('separate');
+  const settingsMutation = useMutation({
+    mutationFn: (payload: { findings_view: 'separate' | 'combined' }) =>
+      updateUserSettings(payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['me'], data);
+    },
+  });
+
+  useEffect(() => {
+    const stored = userQuery.data?.settings?.findings_view;
+    if (stored) {
+      setFindingsView(stored);
+    }
+  }, [userQuery.data?.settings?.findings_view]);
 
   if (userQuery.isLoading || walletQuery.isLoading) {
     return <p>Загружаем профиль...</p>;
@@ -62,6 +85,33 @@ function AccountPage() {
               <dd>{userQuery.data?.company_name || '—'}</dd>
             </div>
           </dl>
+          <div style={{ marginTop: '1rem' }}>
+            <p className="muted" style={{ marginBottom: '0.35rem' }}>
+              Настройки интерфейса
+            </p>
+            <label className="muted" htmlFor="findings-view" style={{ display: 'block' }}>
+              Отображение нарушений
+            </label>
+            <select
+              id="findings-view"
+              className="input"
+              value={findingsView}
+              disabled={settingsMutation.isPending}
+              onChange={(event) => {
+                const value = event.target.value as 'separate' | 'combined';
+                setFindingsView(value);
+                settingsMutation.mutate({ findings_view: value });
+              }}
+            >
+              <option value="separate">Раздельно: нарушения и LLM</option>
+              <option value="combined">Вместе в одной вкладке</option>
+            </select>
+            {settingsMutation.isError && (
+              <p className="alert alert-error" style={{ marginTop: '0.5rem' }}>
+                Не удалось сохранить настройки.
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="card">
@@ -119,6 +169,35 @@ function AccountPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <h2 className="card-title">Что нового</h2>
+        </div>
+        {changelogQuery.isLoading && <p className="muted">Загружаем обновления...</p>}
+        {changelogQuery.error && (
+          <p className="alert alert-error">Не удалось загрузить changelog.</p>
+        )}
+        {changelogQuery.data && (
+          <>
+            <p className="muted">
+              Обновлено: {new Date(changelogQuery.data.updated_at).toLocaleString()}
+            </p>
+            <pre
+              style={{
+                whiteSpace: 'pre-wrap',
+                background: 'var(--surface)',
+                padding: '1rem',
+                borderRadius: '0.75rem',
+                maxHeight: '320px',
+                overflow: 'auto',
+              }}
+            >
+              {changelogQuery.data.content}
+            </pre>
+          </>
+        )}
       </div>
 
     </div>

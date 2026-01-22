@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend /app/backend
 COPY norms.yaml /app/norms.yaml
 COPY critical_norms.yaml /app/critical_norms.yaml
+COPY CHANGELOG.md /app/CHANGELOG.md
 COPY scripts /app/scripts
 COPY docs/teacher_guide.html /app/docs/teacher_guide.html
 

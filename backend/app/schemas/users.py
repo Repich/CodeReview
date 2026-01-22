@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field, field_validator
 
@@ -34,6 +35,15 @@ class UserRead(ORMModel):
     wallet_currency: str | None = None
     company_id: uuid.UUID | None = None
     company_name: str | None = None
+    settings: UserSettings | None = None
+
+
+class UserSettings(ORMModel):
+    findings_view: Literal["separate", "combined"] = "separate"
+
+
+class UserSettingsUpdate(ORMModel):
+    findings_view: Literal["separate", "combined"] | None = None
 
 
 class UserStatusUpdate(ORMModel):

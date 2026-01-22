@@ -15,6 +15,8 @@ from backend.app.schemas.users import (
     UserCreate,
     UserRead,
     UserRoleUpdate,
+    UserSettings,
+    UserSettingsUpdate,
     UserStatusUpdate,
 )
 
@@ -26,6 +28,7 @@ def _build_user_read(
     wallet: Wallet | None = None,
     company: Company | None = None,
 ) -> UserRead:
+    raw_settings = user.settings if isinstance(user.settings, dict) else {}
     return UserRead(
         id=user.id,
         email=user.email,
@@ -37,6 +40,7 @@ def _build_user_read(
         wallet_currency=wallet.currency if wallet else None,
         company_id=company.id if company else user.company_id,
         company_name=company.name if company else user.company_name,
+        settings=UserSettings.model_validate(raw_settings),
     )
 
 
@@ -157,4 +161,21 @@ def update_user_company(
 
 @router.get("/me", response_model=UserRead)
 def read_me(current_user: UserAccount = Depends(get_current_user)) -> UserAccount:
-    return current_user
+    return _build_user_read(current_user)
+
+
+@router.patch("/me/settings", response_model=UserRead)
+def update_my_settings(
+    payload: UserSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(get_current_user),
+) -> UserRead:
+    raw_settings = current_user.settings if isinstance(current_user.settings, dict) else {}
+    updates = payload.model_dump(exclude_unset=True)
+    if updates:
+        validated = UserSettings.model_validate({**raw_settings, **updates})
+        current_user.settings = {**raw_settings, **validated.model_dump()}
+        db.add(current_user)
+        db.commit()
+        db.refresh(current_user)
+    return _build_user_read(current_user)
