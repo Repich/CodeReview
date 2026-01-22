@@ -96,10 +96,10 @@ def create_suggested_norm(
         section=payload.section,
         severity=payload.severity,
         text_raw=payload.text,
-        status="rejected_duplicate" if llm_result.duplicate else "accepted_auto",
+        status="accepted_auto",
         llm_prompt=None,
         llm_response=llm_result.raw_response,
-        duplicate_of=llm_result.duplicate_norm_ids or None,
+        duplicate_of=None,
         generated_norm_id=llm_result.norm_id,
         generated_title=llm_result.title,
         generated_section=llm_result.section,
@@ -170,6 +170,19 @@ def vote_suggested_norm(
                 vote=payload.vote,
             )
         )
+    db.commit()
+
+
+@router.delete("/{norm_id}", status_code=204)
+def delete_suggested_norm(
+    norm_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+) -> None:
+    norm = db.query(SuggestedNorm).filter_by(id=norm_id).first()
+    if not norm:
+        raise HTTPException(status_code=404, detail="Suggested norm not found")
+    db.delete(norm)
     db.commit()
 
 

@@ -118,9 +118,8 @@ def call_llm_for_norm(
     system_prompt = (
         "Ты заполняешь карточку новой нормы код-ревью 1С. "
         "Тебе дают черновой текст нормы от пользователя. "
-        "Нужно: (1) Проверить, дубликат ли это существующей нормы (любое смысловое совпадение темы считается дубликатом, даже если формулировки различаются); "
-        "(2) Если не дубликат — оформить норму по образцу: norm_id, title, section, scope, "
-        "detector_type, check_type, default_severity, version (целое), norm_text (формализуй, но по смыслу пользователя). "
+        "Оформи норму по образцу: norm_id, title, section, scope, detector_type, check_type, "
+        "default_severity, version (целое), norm_text (формализуй, но по смыслу пользователя). "
         "Всегда отвечай строго JSON без комментариев."
     )
     user_prompt = (
@@ -131,8 +130,6 @@ def call_llm_for_norm(
         f"text={user_text}\n\n"
         "Верни JSON вида:\n"
         "{\n"
-        '  "duplicate": true/false,\n'
-        '  "duplicate_norm_ids": ["..."],\n'
         '  "norm_id": "...",\n'
         '  "title": "...",\n'
         '  "section": "...",\n'
@@ -142,8 +139,7 @@ def call_llm_for_norm(
         '  "default_severity": "...",\n'
         '  "version": 1,\n'
         '  "norm_text": "..."\n'
-        "}\n"
-        "Если это дубликат — duplicate=true и duplicate_norm_ids заполни, остальные поля можно оставить пустыми."
+        "}"
     )
 
     response = request_llm_playground(
@@ -157,8 +153,8 @@ def call_llm_for_norm(
     if not parsed:
         raise LLMPlaygroundError("Не удалось распарсить ответ LLM", None)
     return SuggestedNormLLMResult(
-        duplicate=bool(parsed.get("duplicate")),
-        duplicate_norm_ids=parsed.get("duplicate_norm_ids") or [],
+        duplicate=False,
+        duplicate_norm_ids=[],
         norm_id=parsed.get("norm_id"),
         title=parsed.get("title"),
         section=parsed.get("section"),

@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 from backend.app.api.deps import get_current_teacher, get_db
 from backend.app.models.norm import Norm
 from backend.app.schemas.norms import NormCatalogEntry, NormCreate, NormRead, NormUpdate
-from backend.app.services.norms import filter_norm_catalog_entries, load_norm_catalog_entries
+from backend.app.services.norms import (
+    filter_norm_catalog_entries,
+    load_custom_norms,
+    load_norm_catalog_entries,
+    save_custom_norms,
+)
 
 router = APIRouter(prefix="/norms", tags=["norms"])
 
@@ -54,6 +59,30 @@ def list_norm_catalog(
             entries.append(entry)
     filtered = filter_norm_catalog_entries(entries, query, limit)
     return [NormCatalogEntry(**entry) for entry in filtered]
+
+
+@router.get("/custom", response_model=list[NormCatalogEntry])
+def list_custom_norms(
+    current_user=Depends(get_current_teacher),
+) -> list[NormCatalogEntry]:
+    root_dir = Path(__file__).resolve().parents[4]
+    path = root_dir / "custom_norms.yaml"
+    entries = load_custom_norms(path)
+    return [NormCatalogEntry(**entry) for entry in entries]
+
+
+@router.delete("/custom/{norm_id}", status_code=204)
+def delete_custom_norm(
+    norm_id: str,
+    current_user=Depends(get_current_teacher),
+) -> None:
+    root_dir = Path(__file__).resolve().parents[4]
+    path = root_dir / "custom_norms.yaml"
+    entries = load_custom_norms(path)
+    filtered = [entry for entry in entries if entry.get("norm_id") != norm_id]
+    if len(filtered) == len(entries):
+        raise HTTPException(status_code=404, detail="Custom norm not found")
+    save_custom_norms(path, filtered)
 
 
 @router.post("", response_model=NormRead, status_code=201)

@@ -34,6 +34,26 @@ def load_norm_catalog_entries(path: Path) -> list[dict[str, Any]]:
     return [entry for entry in entries if entry.get("norm_id")]
 
 
+def load_custom_norms(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    entries = data.get("norms") if isinstance(data, dict) else data
+    return [entry for entry in entries or [] if isinstance(entry, dict) and entry.get("norm_id")]
+
+
+def save_custom_norms(path: Path, entries: list[dict[str, Any]]) -> None:
+    payload = {"norms": entries}
+    data = yaml.safe_dump(
+        payload,
+        allow_unicode=True,
+        sort_keys=False,
+        default_flow_style=False,
+        width=120,
+    )
+    path.write_text(data, encoding="utf-8")
+
+
 def filter_norm_catalog_entries(
     entries: Iterable[dict[str, Any]],
     query: str | None,

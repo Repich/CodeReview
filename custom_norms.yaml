@@ -17,3 +17,19 @@ norms:
   default_severity: minor
   detector_type: custom
   source_reference: Заявки норм
+- norm_id: CUSTOM_002
+  section: Архитектура/Стиль
+  category: custom
+  title: Запрет чтения реквизитов через точку от ссылки
+  norm_text: 'Запрещено читать реквизиты объекта через точку от ссылки (например: Ссылка.Код, Ссылка.Наименование,
+    Ссылка.Дата). Такое обращение приводит к загрузке объекта целиком (включая табличные части).
+    Для чтения отдельных реквизитов используйте запрос по ссылке.'
+  tags:
+  - custom
+  scope: любой модуль
+  code_applicability: true
+  automation_hint: code
+  check_type: llm
+  default_severity: major
+  detector_type: custom
+  source_reference: Заявки норм

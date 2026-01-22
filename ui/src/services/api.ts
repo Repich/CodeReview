@@ -483,6 +483,15 @@ export async function createNorm(payload: Omit<NormRecord, 'id' | 'created_at' |
   return data;
 }
 
+export async function fetchCustomNorms() {
+  const { data } = await client.get<NormCatalogEntry[]>('/norms/custom');
+  return data;
+}
+
+export async function deleteCustomNorm(normId: string) {
+  await client.delete(`/norms/custom/${normId}`);
+}
+
 // Suggested norms (teacher)
 export interface SuggestedNormCreatePayload {
   section: string;
@@ -544,6 +553,10 @@ export async function fetchSuggestedNorms(params?: { status?: string; limit?: nu
 
 export async function voteSuggestedNorm(normId: string, vote: 1 | -1) {
   await client.post(`/suggested-norms/${normId}/vote`, { vote });
+}
+
+export async function deleteSuggestedNorm(normId: string) {
+  await client.delete(`/suggested-norms/${normId}`);
 }
 
 export async function acceptSuggestedNorm(normId: string, payload?: SuggestedNormAcceptPayload) {

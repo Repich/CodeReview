@@ -12,15 +12,18 @@ import {
   fetchCompanies,
   fetchCurrentUser,
   fetchNormCatalog,
+  fetchCustomNorms,
   fetchRuns,
   fetchUsers,
   forceFailReviewRun,
   updateUserRole,
   fetchSuggestedNorms,
   voteSuggestedNorm,
+  deleteSuggestedNorm,
   acceptSuggestedNorm,
   LLMPlaygroundResponse,
   SuggestedNormAcceptPayload,
+  deleteCustomNorm,
   requeueReviewRun,
   runLLMPlayground,
   updateUserStatus,
@@ -193,6 +196,12 @@ function AdminPage() {
     enabled: canManageNorms,
   });
 
+  const customNormsQuery = useQuery({
+    queryKey: ['custom-norms'],
+    queryFn: () => fetchCustomNorms(),
+    enabled: canManageNorms,
+  });
+
   const suggestedNormsQuery = useQuery({
     queryKey: ['suggested-norms'],
     queryFn: () => fetchSuggestedNorms({ limit: 200 }),
@@ -243,6 +252,20 @@ function AdminPage() {
       voteSuggestedNorm(normId, vote),
     onSuccess: () => {
       suggestedNormsQuery.refetch();
+    },
+  });
+
+  const suggestedNormDeleteMutation = useMutation({
+    mutationFn: (normId: string) => deleteSuggestedNorm(normId),
+    onSuccess: () => {
+      suggestedNormsQuery.refetch();
+    },
+  });
+
+  const customNormDeleteMutation = useMutation({
+    mutationFn: (normId: string) => deleteCustomNorm(normId),
+    onSuccess: () => {
+      customNormsQuery.refetch();
     },
   });
 
@@ -685,6 +708,70 @@ function AdminPage() {
           </div>
           )}
 
+          {normsSubTab === 'catalog' && (
+            <div className="card" style={{ marginBottom: '1.5rem' }}>
+              <div className="card-header">
+                <div>
+                  <h2 className="card-title">Пользовательские нормы</h2>
+                  <p className="muted">Нормы, добавленные вручную. Используются в LLM‑проверках.</p>
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={() => customNormsQuery.refetch()}
+                >
+                  Обновить
+                </button>
+              </div>
+              {customNormsQuery.isLoading && <p className="muted">Загружаем пользовательские нормы...</p>}
+              {customNormsQuery.error && (
+                <p className="alert alert-error">Не удалось загрузить пользовательские нормы.</p>
+              )}
+              {customNormsQuery.data && (
+                <div className="table-container" style={{ marginTop: '1rem' }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>norm_id</th>
+                        <th>Название</th>
+                        <th>Раздел</th>
+                        <th>Severity</th>
+                        <th>Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customNormsQuery.data.map((norm) => (
+                        <tr key={norm.norm_id}>
+                          <td>{norm.norm_id}</td>
+                          <td>{norm.title || '—'}</td>
+                          <td>{norm.section || '—'}</td>
+                          <td>{norm.default_severity || '—'}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              onClick={() => customNormDeleteMutation.mutate(norm.norm_id)}
+                              disabled={customNormDeleteMutation.isPending}
+                            >
+                              Удалить
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {!customNormsQuery.data.length && (
+                        <tr>
+                          <td colSpan={5} className="muted">
+                            Пользовательских норм пока нет.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           {normsSubTab === 'requests' && (
             <div className="card" style={{ marginBottom: '1.5rem' }}>
               <div className="card-header">
@@ -802,6 +889,14 @@ function AdminPage() {
                                 disabled={disabled}
                               >
                                 Принять норму
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                onClick={() => suggestedNormDeleteMutation.mutate(item.id)}
+                                disabled={suggestedNormDeleteMutation.isPending}
+                              >
+                                Удалить
                               </button>
                             </>
                           );
