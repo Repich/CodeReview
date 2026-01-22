@@ -436,6 +436,23 @@ textarea {
   opacity: 0.6;
 }
 
+.compact-list .card.finding-card {
+  padding: 0.9rem;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+}
+
+.compact-list .card + .card {
+  margin-top: 0.75rem;
+}
+
+.compact-list .card-header {
+  margin-bottom: 0.35rem;
+}
+
+.compact-list .muted {
+  font-size: 0.82rem;
+}
+
 .finding-card details {
   margin-top: 0.5rem;
 }

@@ -111,6 +111,12 @@ function RunDetailsPage() {
   const [showDiff, setShowDiff] = useState(false);
   const [showFindingsContext, setShowFindingsContext] = useState(true);
   const [selectedAiId, setSelectedAiId] = useState<string | null>(null);
+  const [selectedFindingKey, setSelectedFindingKey] = useState<string | null>(null);
+  const [selectedFindingRange, setSelectedFindingRange] = useState<{
+    file: string;
+    lineStart: number;
+    lineEnd: number;
+  } | null>(null);
   const [aiLeftWidth, setAiLeftWidth] = useState(760);
   const [isResizingAI, setIsResizingAI] = useState(false);
   const [selectionDraft, setSelectionDraft] = useState<{
@@ -420,6 +426,9 @@ function RunDetailsPage() {
     [orderedAiFindings, selectedAiId],
   );
   const highlightedRange = useMemo(() => {
+    if (selectedFindingRange) {
+      return selectedFindingRange;
+    }
     const finding = selectedAiFinding;
     if (!finding) return null;
     const ev = (finding.evidence || []).find((item) => item.file || item.lines) || null;
@@ -439,7 +448,7 @@ function RunDetailsPage() {
       lineStart: lineStart || 0,
       lineEnd: lineEnd || lineStart || 0,
     };
-  }, [selectedAiFinding]);
+  }, [selectedAiFinding, selectedFindingRange]);
 
   useEffect(() => {
     if (!highlightedRange) return;
@@ -592,6 +601,26 @@ function RunDetailsPage() {
     }
   }, [activeTab, isCombinedView]);
 
+  const handleSelectStaticFinding = (finding: Finding, items?: Finding[]) => {
+    const pool = items && items.length ? items : [finding];
+    const candidate =
+      pool.find((entry) => entry.file_path && (entry.line_start || entry.line_end)) || finding;
+    const file = candidate.file_path;
+    const lineStart = candidate.line_start ?? candidate.line_end ?? null;
+    const lineEnd = candidate.line_end ?? lineStart ?? null;
+    setSelectedFindingKey(finding.id);
+    setSelectedFindingRange(
+      file && lineStart
+        ? {
+            file,
+            lineStart,
+            lineEnd: lineEnd ?? lineStart,
+          }
+        : null,
+    );
+    setSelectedAiId(null);
+  };
+
   const aiSection = (
     <section className="card" style={{ marginBottom: '1.5rem', overflow: 'hidden' }}>
       <div className="card-header">
@@ -630,7 +659,10 @@ function RunDetailsPage() {
             minWidth: `${aiLeftWidth + 950}px`,
           }}
         >
-          <div className="card-list" style={{ maxHeight: '78vh', overflow: 'auto' }}>
+          <div
+            className={`card-list ${isCombinedView ? 'compact-list' : ''}`}
+            style={{ maxHeight: '78vh', overflow: 'auto' }}
+          >
             {isCombinedView && (
               <>
                 <div className="chip" style={{ marginBottom: '0.5rem' }}>
@@ -645,24 +677,48 @@ function RunDetailsPage() {
                 {displayFindings.map((item) => {
                   if (item.kind === 'single') {
                     return (
-                      <FindingCard
+                      <div
                         key={`combined-${item.finding.id}`}
-                        finding={item.finding}
-                        sequence={findingOrderMap.get(item.finding.id)}
-                        showContext={false}
-                        sourceLookup={null}
-                      />
+                        onClick={() => handleSelectStaticFinding(item.finding)}
+                        style={{
+                          border:
+                            selectedFindingKey === item.finding.id
+                              ? '1px solid var(--primary)'
+                              : undefined,
+                          borderRadius: '0.75rem',
+                          padding: '0.25rem',
+                        }}
+                      >
+                        <FindingCard
+                          finding={item.finding}
+                          sequence={findingOrderMap.get(item.finding.id)}
+                          showContext={false}
+                          sourceLookup={null}
+                        />
+                      </div>
                     );
                   }
                   return (
-                    <FindingGroupCard
+                    <div
                       key={`combined-group-${item.group.base.id}`}
-                      base={item.group.base}
-                      items={item.group.items}
-                      sequence={findingOrderMap.get(item.group.base.id)}
-                      showContext={false}
-                      sourceLookup={null}
-                    />
+                      onClick={() => handleSelectStaticFinding(item.group.base, item.group.items)}
+                      style={{
+                        border:
+                          selectedFindingKey === item.group.base.id
+                            ? '1px solid var(--primary)'
+                            : undefined,
+                        borderRadius: '0.75rem',
+                        padding: '0.25rem',
+                      }}
+                    >
+                      <FindingGroupCard
+                        base={item.group.base}
+                        items={item.group.items}
+                        sequence={findingOrderMap.get(item.group.base.id)}
+                        showContext={false}
+                        sourceLookup={null}
+                      />
+                    </div>
                   );
                 })}
                 {!displayFindings.length && (
@@ -677,6 +733,8 @@ function RunDetailsPage() {
               <div
                 key={finding.id}
                 onClick={() => {
+                  setSelectedFindingKey(null);
+                  setSelectedFindingRange(null);
                   setSelectedAiId(finding.id);
                   if (finding.norm_text) {
                     setNormText(finding.norm_text);
@@ -1264,24 +1322,48 @@ function RunDetailsPage() {
                 {displayFindings.map((item) => {
                   if (item.kind === 'single') {
                     return (
-                      <FindingCard
+                      <div
                         key={item.finding.id}
-                        finding={item.finding}
-                        sequence={findingOrderMap.get(item.finding.id)}
-                        showContext={showFindingsContext}
-                        sourceLookup={showFindingsContext ? sourceLookup : null}
-                      />
+                        onClick={() => handleSelectStaticFinding(item.finding)}
+                        style={{
+                          border:
+                            selectedFindingKey === item.finding.id
+                              ? '1px solid var(--primary)'
+                              : undefined,
+                          borderRadius: '0.75rem',
+                          padding: '0.25rem',
+                        }}
+                      >
+                        <FindingCard
+                          finding={item.finding}
+                          sequence={findingOrderMap.get(item.finding.id)}
+                          showContext={showFindingsContext}
+                          sourceLookup={showFindingsContext ? sourceLookup : null}
+                        />
+                      </div>
                     );
                   }
                   return (
-                    <FindingGroupCard
+                    <div
                       key={`group-${item.group.base.id}`}
-                      base={item.group.base}
-                      items={item.group.items}
-                      sequence={findingOrderMap.get(item.group.base.id)}
-                      showContext={showFindingsContext}
-                      sourceLookup={showFindingsContext ? sourceLookup : null}
-                    />
+                      onClick={() => handleSelectStaticFinding(item.group.base, item.group.items)}
+                      style={{
+                        border:
+                          selectedFindingKey === item.group.base.id
+                            ? '1px solid var(--primary)'
+                            : undefined,
+                        borderRadius: '0.75rem',
+                        padding: '0.25rem',
+                      }}
+                    >
+                      <FindingGroupCard
+                        base={item.group.base}
+                        items={item.group.items}
+                        sequence={findingOrderMap.get(item.group.base.id)}
+                        showContext={showFindingsContext}
+                        sourceLookup={showFindingsContext ? sourceLookup : null}
+                      />
+                    </div>
                   );
                 })}
                 {!displayFindings.length && (
