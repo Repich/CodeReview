@@ -986,7 +986,7 @@ function RunDetailsPage() {
     setShowNormForm(true);
   }
 
-  const handleNormSubmit = async (event: FormEvent) => {
+  async function handleNormSubmit(event: FormEvent) {
     event.preventDefault();
     if (!canTeach) return;
     setNormMessage(null);
@@ -1020,7 +1020,7 @@ function RunDetailsPage() {
       setNormState('error');
     }
     setIsSuggesting(false);
-  };
+  }
 
   const handleDeleteRun = () => {
     if (!id || !run) return;
