@@ -73,12 +73,36 @@ def load_sources(relative_path: str) -> list[dict[str, Any]]:
     return json.loads(payload)
 
 
+def _infer_llm_stage(prompt_version: str | None) -> str:
+    if not prompt_version:
+        return "code"
+    lowered = prompt_version.lower()
+    if lowered.startswith("pattern:"):
+        return "pattern"
+    if lowered.startswith("query:"):
+        return "query"
+    return "code"
+
+
 def save_llm_log(run_id: str, index: int, payload: dict[str, Any]) -> tuple[str, int]:
     target_dir = _ensure_dir()
-    file_name = f"{run_id}_llm_{index}.json"
+    stage = _infer_llm_stage(payload.get("prompt_version"))
+    file_name = f"{run_id}_{stage}_llm_log_{index}.json"
     file_path = target_dir / file_name
     data = json.dumps(payload, ensure_ascii=False, indent=2)
     file_path.write_text(data, encoding="utf-8")
+    prompt = payload.get("prompt")
+    if isinstance(prompt, str):
+        (target_dir / f"{run_id}_{stage}_llm_log_{index}_prompt.txt").write_text(
+            prompt,
+            encoding="utf-8",
+        )
+    response = payload.get("response")
+    if isinstance(response, str):
+        (target_dir / f"{run_id}_{stage}_llm_log_{index}_response.txt").write_text(
+            response,
+            encoding="utf-8",
+        )
     return file_name, len(data.encode("utf-8"))
 
 

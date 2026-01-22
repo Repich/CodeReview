@@ -188,12 +188,13 @@ def _extract_json(text: str) -> dict[str, Any] | None:
     return None
 
 
-def append_suggested_norm_to_pattern_file(
+def append_suggested_norm_to_norms_file(
     norm_id: str,
     title: str,
     norm_text: str,
     section: str,
     scope: str,
+    default_severity: str,
 ) -> None:
     try:
         import yaml  # lazy import
@@ -201,12 +202,12 @@ def append_suggested_norm_to_pattern_file(
         raise RuntimeError("yaml not available, cannot update pattern norms file") from exc
 
     root_dir = Path(__file__).resolve().parents[3]
-    path = root_dir / "pattern_1С.yaml"
+    path = root_dir / "norms.yaml"
     existing: list[dict[str, Any]] = []
     existing_text = ""
     if path.exists():
         existing_text = path.read_text(encoding="utf-8")
-        data = yaml.safe_load(existing_text) or []
+        data = yaml.safe_load(existing_text) or {}
         if isinstance(data, dict):
             existing = data.get("norms") or []
         elif isinstance(data, list):
@@ -214,31 +215,30 @@ def append_suggested_norm_to_pattern_file(
         else:
             existing = []
     if any(entry.get("norm_id") == norm_id for entry in existing if isinstance(entry, dict)):
-        raise ValueError("norm_id already exists in pattern file")
+        raise ValueError("norm_id already exists in norms file")
 
     entry = {
         "norm_id": norm_id,
-        "title": title,
         "section": section,
         "category": "custom",
+        "title": title,
         "norm_text": norm_text,
-        "rationale": "",
-        "detection_hint": "",
+        "tags": ["custom"],
         "scope": scope,
+        "code_applicability": True,
+        "automation_hint": "code",
+        "check_type": "llm",
+        "default_severity": default_severity,
+        "detector_type": "custom",
         "source_reference": "Заявки норм",
-        "priority": 3,
-        "exceptions": "",
     }
 
-    snippet = yaml.safe_dump(
-        [entry],
+    payload = {"norms": existing + [entry]}
+    data = yaml.safe_dump(
+        payload,
         allow_unicode=True,
         sort_keys=False,
         default_flow_style=False,
         width=120,
     )
-    if existing_text.strip():
-        separator = "" if existing_text.endswith("\n") else "\n"
-        path.write_text(f"{existing_text}{separator}{snippet}", encoding="utf-8")
-    else:
-        path.write_text(snippet, encoding="utf-8")
+    path.write_text(data, encoding="utf-8")

@@ -18,7 +18,7 @@ from backend.app.services.suggested_norms import (
     build_sections_list,
     call_llm_for_norm,
     _load_catalog_norms,
-    append_suggested_norm_to_pattern_file,
+    append_suggested_norm_to_norms_file,
 )
 
 router = APIRouter(prefix="/suggested-norms", tags=["suggested_norms"])
@@ -190,15 +190,17 @@ def accept_suggested_norm(
     text_value = (payload.norm_text if payload and payload.norm_text else norm.generated_text or "").strip()
     section_value = (payload.section if payload and payload.section else norm.generated_section or norm.section or "").strip()
     scope_value = (payload.scope if payload and payload.scope else norm.generated_scope or "любой модуль").strip()
+    severity_value = (norm.generated_severity or norm.severity or "minor").strip().lower() or "minor"
     if not norm_id_value or not title_value or not text_value:
         raise HTTPException(status_code=400, detail="norm_id, title, and norm_text are required")
     try:
-        append_suggested_norm_to_pattern_file(
+        append_suggested_norm_to_norms_file(
             norm_id=norm_id_value,
             title=title_value,
             norm_text=text_value,
             section=section_value or "Прочее",
             scope=scope_value or "любой модуль",
+            default_severity=severity_value,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

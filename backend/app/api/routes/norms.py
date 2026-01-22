@@ -40,10 +40,18 @@ def list_norm_catalog(
 ) -> list[NormCatalogEntry]:
     root_dir = Path(__file__).resolve().parents[4]
     if source == "llm":
-        path = root_dir / "critical_norms.yaml"
+        paths = [root_dir / "critical_norms.yaml"]
     else:
-        path = root_dir / "norms.yaml"
-    entries = load_norm_catalog_entries(path)
+        paths = [root_dir / "norms.yaml", root_dir / "pattern_1С.yaml"]
+    entries = []
+    seen_ids: set[str] = set()
+    for path in paths:
+        for entry in load_norm_catalog_entries(path):
+            norm_id = entry.get("norm_id")
+            if not norm_id or norm_id in seen_ids:
+                continue
+            seen_ids.add(norm_id)
+            entries.append(entry)
     filtered = filter_norm_catalog_entries(entries, query, limit)
     return [NormCatalogEntry(**entry) for entry in filtered]
 
