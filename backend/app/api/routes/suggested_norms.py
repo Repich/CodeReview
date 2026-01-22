@@ -18,7 +18,7 @@ from backend.app.services.suggested_norms import (
     build_sections_list,
     call_llm_for_norm,
     _load_catalog_norms,
-    append_suggested_norm_to_norms_file,
+    append_suggested_norm_to_custom_norms_file,
 )
 
 router = APIRouter(prefix="/suggested-norms", tags=["suggested_norms"])
@@ -194,7 +194,7 @@ def accept_suggested_norm(
     if not norm_id_value or not title_value or not text_value:
         raise HTTPException(status_code=400, detail="norm_id, title, and norm_text are required")
     try:
-        append_suggested_norm_to_norms_file(
+        append_suggested_norm_to_custom_norms_file(
             norm_id=norm_id_value,
             title=title_value,
             norm_text=text_value,

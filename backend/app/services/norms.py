@@ -12,10 +12,16 @@ from backend.app.models.norm import Norm
 def _load_norm_catalog() -> dict[str, dict[str, Any]]:
     current = Path(__file__).resolve().parent
     for candidate in [current] + list(current.parents):
-        potential = candidate / "norms.yaml"
-        if potential.exists():
-            data = yaml.safe_load(potential.read_text(encoding="utf-8")) or {}
-            entries = data.get("norms", [])
+        norms_path = candidate / "norms.yaml"
+        custom_path = candidate / "custom_norms.yaml"
+        if norms_path.exists() or custom_path.exists():
+            entries: list[dict[str, Any]] = []
+            if norms_path.exists():
+                data = yaml.safe_load(norms_path.read_text(encoding="utf-8")) or {}
+                entries.extend(data.get("norms", []))
+            if custom_path.exists():
+                data = yaml.safe_load(custom_path.read_text(encoding="utf-8")) or {}
+                entries.extend(data.get("norms", []))
             return {entry.get("norm_id"): entry for entry in entries if entry.get("norm_id")}
     return {}
 

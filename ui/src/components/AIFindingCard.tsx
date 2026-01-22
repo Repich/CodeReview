@@ -1,4 +1,4 @@
-import type { AIFinding, AIFindingEvidence, AIFindingStatus } from '../services/api';
+import type { AIFinding, AIFindingStatus } from '../services/api';
 
 interface Props {
   finding: AIFinding;
@@ -21,37 +21,6 @@ const statusClassName: Record<AIFindingStatus, string> = {
   pending: 'status-pill queued',
   confirmed: 'status-pill completed',
   rejected: 'status-pill failed',
-};
-
-const parseLineRange = (value?: string | null) => {
-  if (!value) return null;
-  const match = value.match(/(\d+)(?:\s*-\s*(\d+))?/);
-  if (!match) return null;
-  const start = Number(match[1]);
-  const end = match[2] ? Number(match[2]) : start;
-  if (Number.isNaN(start) || Number.isNaN(end)) return null;
-  return { start, end };
-};
-
-const resolveEvidenceTarget = (item: AIFindingEvidence) => {
-  let file = item.file ?? '';
-  let lines = item.lines ?? '';
-  if (!file && lines.includes(':')) {
-    const parts = lines.split(':');
-    file = parts.slice(0, -1).join(':').trim();
-    lines = parts[parts.length - 1].trim();
-  }
-  return { file, range: parseLineRange(lines) };
-};
-
-const buildSnippet = (sourceLines: string[], start: number, end: number) => {
-  const safeStart = Math.max(1, start);
-  const safeEnd = Math.min(end, sourceLines.length);
-  const slice = sourceLines.slice(safeStart - 1, safeEnd);
-  return slice
-    .map((line, index) => `${safeStart + index}: ${line}`)
-    .join('\n')
-    .trimEnd();
 };
 
 function AIFindingCard({
@@ -127,31 +96,12 @@ function AIFindingCard({
         <div className="muted" style={{ marginBottom: '0.75rem' }}>
           <strong style={{ display: 'block', marginBottom: '0.25rem' }}>Контекст</strong>
           <ul style={{ margin: 0, paddingInlineStart: '1.25rem' }}>
-            {finding.evidence.map((item, index) => {
-              const { file, range } = resolveEvidenceTarget(item);
-              const sourceLines = file ? sourceLookup?.get(file) : undefined;
-              const snippet =
-                sourceLines && range ? buildSnippet(sourceLines, range.start, range.end) : null;
-
-              return (
+            {finding.evidence.map((item, index) => (
                 <li key={index}>
                   {[item.file, item.lines].filter(Boolean).join(': ')} —{' '}
                   {item.reason || 'Без описания'}
-                  {snippet && (
-                    <details style={{ marginTop: '0.35rem' }}>
-                      <summary>Фрагмент кода</summary>
-                      <pre
-                        data-source-path={file || undefined}
-                        data-line-start={range?.start ? String(range.start) : undefined}
-                        data-line-end={range?.end ? String(range.end) : undefined}
-                      >
-                        {snippet}
-                      </pre>
-                    </details>
-                  )}
                 </li>
-              );
-            })}
+              ))}
           </ul>
         </div>
       )}

@@ -12,6 +12,7 @@ from worker.app.services.norms_repo import NormCard
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 NORMS_PATH = ROOT_DIR / "critical_norms.yaml"
+CUSTOM_NORMS_PATH = ROOT_DIR / "custom_norms.yaml"
 
 CODE_NORM_IDS = [
     "CRIT_NEW_01",
@@ -48,6 +49,7 @@ CODE_NORM_IDS = [
 @dataclass
 class CriticalNormRepository:
     path: Path = NORMS_PATH
+    custom_path: Path = CUSTOM_NORMS_PATH
     norm_ids: list[str] | None = None
     cards: list[NormCard] | None = None
     entries: dict[str, dict] | None = None
@@ -66,12 +68,14 @@ class CriticalNormRepository:
         if not self.path.exists():
             return
         raw_text = self.path.read_text(encoding="utf-8")
-        version_seed = raw_text + "|" + ",".join(self.norm_ids)
+        custom_text = self.custom_path.read_text(encoding="utf-8") if self.custom_path.exists() else ""
+        version_seed = raw_text + "|" + custom_text + "|" + ",".join(self.norm_ids)
         self.version = hashlib.sha1(version_seed.encode("utf-8")).hexdigest()[:12]
         data = yaml.safe_load(raw_text) or {}
         entries = data.get("norms", [])
         norm_map = {entry.get("norm_id"): entry for entry in entries if entry.get("norm_id")}
-        for norm_id in self.norm_ids:
+        selected_ids = self.norm_ids or list(norm_map.keys())
+        for norm_id in selected_ids:
             entry = norm_map.get(norm_id)
             if not entry:
                 continue
@@ -82,6 +86,23 @@ class CriticalNormRepository:
             self.cards.append(
                 NormCard(norm_id=norm_id, body=body, tokens=tokens, checksum=checksum)
             )
+
+        if self.custom_path.exists():
+            custom_data = yaml.safe_load(custom_text) or {}
+            custom_entries = custom_data.get("norms") if isinstance(custom_data, dict) else custom_data
+            for entry in custom_entries or []:
+                if not isinstance(entry, dict):
+                    continue
+                norm_id = entry.get("norm_id")
+                if not norm_id or norm_id in self.entries:
+                    continue
+                self.entries[norm_id] = entry
+                body = _format_norm_body(entry)
+                checksum = hashlib.sha1(f"{norm_id}:{body}".encode("utf-8")).hexdigest()[:12]
+                tokens = set(_tokenize(body))
+                self.cards.append(
+                    NormCard(norm_id=norm_id, body=body, tokens=tokens, checksum=checksum)
+                )
 
 
 def _format_norm_body(entry: dict) -> str:

@@ -28,7 +28,7 @@ CANONICAL_SECTIONS: list[tuple[str, tuple[str, ...]]] = [
 
 def _load_catalog_norms() -> list[dict[str, Any]]:
     root_dir = Path(__file__).resolve().parents[3]
-    paths = [root_dir / "norms.yaml", root_dir / "critical_norms.yaml"]
+    paths = [root_dir / "norms.yaml", root_dir / "critical_norms.yaml", root_dir / "custom_norms.yaml"]
     try:
         import yaml  # lazy import
     except ImportError:
@@ -188,7 +188,7 @@ def _extract_json(text: str) -> dict[str, Any] | None:
     return None
 
 
-def append_suggested_norm_to_norms_file(
+def append_suggested_norm_to_custom_norms_file(
     norm_id: str,
     title: str,
     norm_text: str,
@@ -202,7 +202,7 @@ def append_suggested_norm_to_norms_file(
         raise RuntimeError("yaml not available, cannot update pattern norms file") from exc
 
     root_dir = Path(__file__).resolve().parents[3]
-    path = root_dir / "norms.yaml"
+    path = root_dir / "custom_norms.yaml"
     existing: list[dict[str, Any]] = []
     existing_text = ""
     if path.exists():
@@ -215,7 +215,7 @@ def append_suggested_norm_to_norms_file(
         else:
             existing = []
     if any(entry.get("norm_id") == norm_id for entry in existing if isinstance(entry, dict)):
-        raise ValueError("norm_id already exists in norms file")
+        raise ValueError("norm_id already exists in custom norms file")
 
     entry = {
         "norm_id": norm_id,

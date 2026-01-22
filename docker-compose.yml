@@ -23,6 +23,7 @@ services:
     volumes:
       - artifact_storage:/app/artifacts
       - ./pattern_1С.yaml:/app/pattern_1С.yaml
+      - ./custom_norms.yaml:/app/custom_norms.yaml
     ports:
       - "8200:8000"
 
@@ -45,6 +46,7 @@ services:
     volumes:
       - artifact_storage:/app/artifacts
       - ./pattern_1С.yaml:/app/pattern_1С.yaml
+      - ./custom_norms.yaml:/app/custom_norms.yaml
 
 volumes:
   artifact_storage:

@@ -2328,3 +2328,20 @@ norms:
     check_type: semantic
     default_severity: major
     detector_type: performance
+    tags:
+  - code-style
+    scope: любые модули
+    code_applicability: true
+    automation_hint: code
+    check_type: static
+    default_severity: minor
+    detector_type: syntax_style
+  - norm_id: CUSTOM_001
+    section: Архитектура/Стиль
+    category: custom
+    title: Для конструктора Новый не задавать больше 3 ключей структуры
+    norm_text: 'При создании структуры с помощью конструктора Новый Структура() разрешено задавать не более 3 ключей структуры.
+      При необходимости создания структуры с большим количеством ключей необходимо создавать только заготовку структура через
+      Новый Структура; , а ключи в структуру добавлять с помощью метода Вставить() структуры.
+
+      '

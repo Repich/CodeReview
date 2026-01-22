@@ -42,7 +42,7 @@ def list_norm_catalog(
     if source == "llm":
         paths = [root_dir / "critical_norms.yaml"]
     else:
-        paths = [root_dir / "norms.yaml", root_dir / "pattern_1С.yaml"]
+        paths = [root_dir / "norms.yaml", root_dir / "custom_norms.yaml", root_dir / "pattern_1С.yaml"]
     entries = []
     seen_ids: set[str] = set()
     for path in paths:
