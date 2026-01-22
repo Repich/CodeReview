@@ -284,21 +284,23 @@ def submit_results(
 
     llm_log_count = 0
     for idx, log_payload in enumerate(payload.llm_logs or []):
-        rel_path, size = artifact_service.save_llm_log(
+        artifacts = artifact_service.save_llm_log(
             str(review_run.id),
             idx,
             log_payload.model_dump(),
         )
-        io_log = IOLog(
-            review_run_id=review_run.id,
-            direction=IODirection.OUT,
-            artifact_type="llm_log.json",
-            storage_path=rel_path,
-            checksum=None,
-            size_bytes=size,
-        )
-        db.add(io_log)
-        llm_log_count += 1
+        for artifact_type, rel_path, size in artifacts:
+            io_log = IOLog(
+                review_run_id=review_run.id,
+                direction=IODirection.OUT,
+                artifact_type=artifact_type,
+                storage_path=rel_path,
+                checksum=None,
+                size_bytes=size,
+            )
+            db.add(io_log)
+            if artifact_type == "llm_log.json":
+                llm_log_count += 1
 
     db.add(
         AuditLog(

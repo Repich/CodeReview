@@ -84,26 +84,25 @@ def _infer_llm_stage(prompt_version: str | None) -> str:
     return "code"
 
 
-def save_llm_log(run_id: str, index: int, payload: dict[str, Any]) -> tuple[str, int]:
+def save_llm_log(run_id: str, index: int, payload: dict[str, Any]) -> list[tuple[str, str, int]]:
     target_dir = _ensure_dir()
     stage = _infer_llm_stage(payload.get("prompt_version"))
     file_name = f"{run_id}_{stage}_llm_log_{index}.json"
     file_path = target_dir / file_name
     data = json.dumps(payload, ensure_ascii=False, indent=2)
     file_path.write_text(data, encoding="utf-8")
+    artifacts: list[tuple[str, str, int]] = [("llm_log.json", file_name, len(data.encode("utf-8")))]
     prompt = payload.get("prompt")
     if isinstance(prompt, str):
-        (target_dir / f"{run_id}_{stage}_llm_log_{index}_prompt.txt").write_text(
-            prompt,
-            encoding="utf-8",
-        )
+        prompt_name = f"{run_id}_{stage}_llm_log_{index}_prompt.txt"
+        (target_dir / prompt_name).write_text(prompt, encoding="utf-8")
+        artifacts.append((f"{stage}_llm_prompt.txt", prompt_name, len(prompt.encode("utf-8"))))
     response = payload.get("response")
     if isinstance(response, str):
-        (target_dir / f"{run_id}_{stage}_llm_log_{index}_response.txt").write_text(
-            response,
-            encoding="utf-8",
-        )
-    return file_name, len(data.encode("utf-8"))
+        response_name = f"{run_id}_{stage}_llm_log_{index}_response.txt"
+        (target_dir / response_name).write_text(response, encoding="utf-8")
+        artifacts.append((f"{stage}_llm_response.txt", response_name, len(response.encode("utf-8"))))
+    return artifacts
 
 
 def load_json(relative_path: str) -> dict[str, Any]:
