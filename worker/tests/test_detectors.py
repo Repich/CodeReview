@@ -20,6 +20,7 @@ from worker.app.detectors.critical import (
 from worker.app.detectors.formatting import (
     EmptyRegionDetector,
     IndentSpacesDetector,
+    MaxFunctionParamsDetector,
     MultipleBlankLinesDetector,
     TrailingTabsDetector,
 )
@@ -395,6 +396,29 @@ def test_multiple_blank_lines_detector_positive():
 def test_multiple_blank_lines_detector_negative():
     content = "Процедура Х()\n\nКонецПроцедуры"
     assert not run(MultipleBlankLinesDetector, content)
+
+
+def test_max_function_params_detector_positive():
+    content = "Функция Тест(А, Б, В, Г, Д, Е)\nКонецФункции"
+    assert run(MaxFunctionParamsDetector, content)
+
+
+def test_max_function_params_detector_negative():
+    content = "Процедура Тест(А, Б, В, Г, Д)\nКонецПроцедуры"
+    assert not run(MaxFunctionParamsDetector, content)
+
+
+def test_max_function_params_detector_multiline():
+    content = """Процедура Тест(
+    А,
+    Б,
+    В,
+    Г,
+    Д,
+    Е
+)
+КонецПроцедуры"""
+    assert run(MaxFunctionParamsDetector, content)
 
 
 def test_session_params_cache_positive():

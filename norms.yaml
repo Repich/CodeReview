@@ -63,6 +63,23 @@ norms:
   check_type: static
   default_severity: minor
   detector_type: syntax_style
+- norm_id: FUNC_MAX_PARAMS_05
+  section: Читаемость и поддерживаемость
+  category: code_style
+  title: Не более 5 параметров у процедуры/функции
+  norm_text: 'Процедура или функция должна принимать не более 5 параметров. Большее количество параметров
+    усложняет чтение и сопровождение: человеку трудно удерживать в голове более пяти сущностей.
+    Если параметров больше, сгруппируйте их в структуру или объект.
+
+    '
+  tags:
+  - code-style
+  scope: любые модули
+  code_applicability: true
+  automation_hint: code
+  check_type: static
+  default_severity: minor
+  detector_type: syntax_style
 - norm_id: TEXT_LEFT_EDGE_ELEMENTS
   section: Тексты модулей
   category: code_style

@@ -10,6 +10,7 @@ from worker.app.models import DetectorFinding
 
 REGION_START = ("#область", "#region")
 REGION_END = ("#конецобласти", "#endregion")
+PROC_START_RE = re.compile(r"^\s*(Процедура|Функция)\b", re.IGNORECASE)
 
 
 @register
@@ -136,3 +137,106 @@ class MultipleBlankLinesDetector(BaseDetector):
                     )
                 )
         return findings
+
+
+@register
+class MaxFunctionParamsDetector(BaseDetector):
+    norm_id = "FUNC_MAX_PARAMS_05"
+    detector_id = "detector.max_function_params"
+    severity = "minor"
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        findings: list[DetectorFinding] = []
+        lines = ctx.source.content.splitlines()
+        in_block_comment = False
+        idx = 0
+        while idx < len(lines):
+            stripped, in_block_comment = self._strip_comments(lines[idx], in_block_comment)
+            if not PROC_START_RE.match(stripped):
+                idx += 1
+                continue
+            signature, end_idx, in_block_comment = self._collect_signature(
+                lines, idx, in_block_comment, stripped
+            )
+            param_count = self._count_params(signature)
+            if param_count > 5:
+                findings.append(
+                    self.create_finding(
+                        ctx,
+                        message=f"Слишком много параметров в сигнатуре: {param_count}",
+                        recommendation="Сократите количество параметров до 5, сгруппируйте их в структуру или объект.",
+                        line=idx + 1,
+                        extra={"signature": signature.strip()},
+                    )
+                )
+            idx = end_idx + 1
+        return findings
+
+    def _collect_signature(
+        self,
+        lines: list[str],
+        start_idx: int,
+        in_block_comment: bool,
+        first_line: str,
+    ) -> tuple[str, int, bool]:
+        parts = [first_line.strip()]
+        idx = start_idx
+        if ")" in first_line:
+            return " ".join(parts), idx, in_block_comment
+        while idx + 1 < len(lines):
+            idx += 1
+            stripped, in_block_comment = self._strip_comments(lines[idx], in_block_comment)
+            parts.append(stripped.strip())
+            if ")" in stripped:
+                break
+        return " ".join(parts), idx, in_block_comment
+
+    def _count_params(self, signature: str) -> int:
+        start = signature.find("(")
+        if start == -1:
+            return 0
+        count = 0
+        depth = 0
+        in_string = False
+        token_has_content = False
+        i = start + 1
+        while i < len(signature):
+            ch = signature[i]
+            nxt = signature[i + 1] if i + 1 < len(signature) else ""
+            if in_string:
+                if ch == '"' and nxt == '"':
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_string = False
+                    i += 1
+                    continue
+                i += 1
+                continue
+            if ch == '"':
+                in_string = True
+                i += 1
+                continue
+            if ch == "(":
+                depth += 1
+                token_has_content = True
+                i += 1
+                continue
+            if ch == ")":
+                if depth == 0:
+                    if token_has_content:
+                        count += 1
+                    break
+                depth -= 1
+                i += 1
+                continue
+            if ch == "," and depth == 0:
+                if token_has_content:
+                    count += 1
+                token_has_content = False
+                i += 1
+                continue
+            if not ch.isspace():
+                token_has_content = True
+            i += 1
+        return count

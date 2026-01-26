@@ -17,6 +17,13 @@ from worker.app.config import get_settings
 from worker.app.models import AISuggestion, AnalysisTask, DetectorFinding, LLMDiagnostic
 from worker.app.services.code_units import CodeUnit, split_source_into_units
 from worker.app.services.redaction import redact_lines, redact_text, RedactionStats
+
+
+@dataclass
+class CommentRedactionStats:
+    total_comments: int
+    lines_with_comments: list[int]
+    comments_by_line: dict[int, int]
 from worker.app.services.critical_norms import get_critical_norm_repository
 from worker.app.services.pattern_norms import get_pattern_norm_repository
 from worker.app.services.norms_repo import NormCard
@@ -734,6 +741,153 @@ def _lines_exceed_length(unit: CodeUnit, lines: str | None, limit: int) -> bool:
     return False
 
 
+def _redact_comments(lines: list[str], start_line: int) -> tuple[list[str], CommentRedactionStats]:
+    redacted: list[str] = []
+    comments_by_line: dict[int, int] = {}
+    in_block_comment = False
+    for idx, raw in enumerate(lines):
+        line_no = start_line + idx
+        i = 0
+        in_string = False
+        comment_count = 0
+        out: list[str] = []
+        while i < len(raw):
+            ch = raw[i]
+            nxt = raw[i + 1] if i + 1 < len(raw) else ""
+            if in_block_comment:
+                out.append("<REDACTED_COMMENT>")
+                comment_count += 1
+                end_idx = raw.find("*/", i)
+                if end_idx != -1:
+                    out.append("*/")
+                    i = end_idx + 2
+                    in_block_comment = False
+                    continue
+                i = len(raw)
+                continue
+            if in_string:
+                if ch == '"' and nxt == '"':
+                    out.append('"')
+                    out.append('"')
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_string = False
+                    out.append(ch)
+                    i += 1
+                    continue
+                out.append(ch)
+                i += 1
+                continue
+            if ch == "/" and nxt == "/":
+                out.append("//")
+                out.append("<REDACTED_COMMENT>")
+                comment_count += 1
+                i = len(raw)
+                continue
+            if ch == "/" and nxt == "*":
+                out.append("/*")
+                out.append("<REDACTED_COMMENT>")
+                comment_count += 1
+                end_idx = raw.find("*/", i + 2)
+                if end_idx != -1:
+                    out.append("*/")
+                    i = end_idx + 2
+                    continue
+                in_block_comment = True
+                i = len(raw)
+                continue
+            if ch == '"':
+                in_string = True
+                out.append(ch)
+                i += 1
+                continue
+            out.append(ch)
+            i += 1
+        if comment_count:
+            comments_by_line[line_no] = comment_count
+        redacted.append("".join(out))
+    return redacted, CommentRedactionStats(
+        total_comments=sum(comments_by_line.values()),
+        lines_with_comments=sorted(comments_by_line),
+        comments_by_line=comments_by_line,
+    )
+
+
+def _redact_comments_line_map(
+    line_map: list[tuple[int, str]],
+) -> tuple[list[tuple[int, str]], CommentRedactionStats]:
+    redacted_lines: list[tuple[int, str]] = []
+    comments_by_line: dict[int, int] = {}
+    in_block_comment = False
+    for line_no, raw in line_map:
+        i = 0
+        in_string = False
+        comment_count = 0
+        out: list[str] = []
+        while i < len(raw):
+            ch = raw[i]
+            nxt = raw[i + 1] if i + 1 < len(raw) else ""
+            if in_block_comment:
+                out.append("<REDACTED_COMMENT>")
+                comment_count += 1
+                end_idx = raw.find("*/", i)
+                if end_idx != -1:
+                    out.append("*/")
+                    i = end_idx + 2
+                    in_block_comment = False
+                    continue
+                i = len(raw)
+                continue
+            if in_string:
+                if ch == '"' and nxt == '"':
+                    out.append('"')
+                    out.append('"')
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_string = False
+                    out.append(ch)
+                    i += 1
+                    continue
+                out.append(ch)
+                i += 1
+                continue
+            if ch == "/" and nxt == "/":
+                out.append("//")
+                out.append("<REDACTED_COMMENT>")
+                comment_count += 1
+                i = len(raw)
+                continue
+            if ch == "/" and nxt == "*":
+                out.append("/*")
+                out.append("<REDACTED_COMMENT>")
+                comment_count += 1
+                end_idx = raw.find("*/", i + 2)
+                if end_idx != -1:
+                    out.append("*/")
+                    i = end_idx + 2
+                    continue
+                in_block_comment = True
+                i = len(raw)
+                continue
+            if ch == '"':
+                in_string = True
+                out.append(ch)
+                i += 1
+                continue
+            out.append(ch)
+            i += 1
+        if comment_count:
+            comments_by_line[line_no] = comment_count
+        redacted_lines.append((line_no, "".join(out)))
+    return redacted_lines, CommentRedactionStats(
+        total_comments=sum(comments_by_line.values()),
+        lines_with_comments=sorted(comments_by_line),
+        comments_by_line=comments_by_line,
+    )
+
+
 def _base_redaction_report(unit: CodeUnit | QueryUnit, stats: RedactionStats) -> dict:
     return {
         "source_path": unit.source_path,
@@ -765,6 +919,24 @@ def _filter_redaction_report(
     return _base_redaction_report(unit, filtered)
 
 
+def _filter_comment_stats(
+    stats: CommentRedactionStats,
+    included_lines: set[int],
+) -> CommentRedactionStats:
+    if not included_lines:
+        return stats
+    comments_by_line = {
+        line_no: count
+        for line_no, count in stats.comments_by_line.items()
+        if line_no in included_lines
+    }
+    return CommentRedactionStats(
+        total_comments=sum(comments_by_line.values()),
+        lines_with_comments=sorted(comments_by_line),
+        comments_by_line=comments_by_line,
+    )
+
+
 def _extract_lines(unit: CodeUnit, lines: str) -> list[str]:
     extracted: list[str] = []
     parts = lines.split(":")
@@ -790,15 +962,23 @@ def _extract_relevant_code(unit: CodeUnit) -> tuple[str, dict]:
     if not text:
         return "", _base_redaction_report(unit, RedactionStats(0, [], {}))
     lines = unit.text.splitlines()
-    cleaned_lines = _strip_comments(lines)
-    redacted_lines, stats = redact_lines(cleaned_lines, unit.start_line)
+    comment_redacted_lines, comment_stats = _redact_comments(lines, unit.start_line)
+    redacted_lines, stats = redact_lines(comment_redacted_lines, unit.start_line)
     if not unit.review_ranges:
         numbered = [
             f"{unit.start_line + idx:>5}: {line}" for idx, line in enumerate(redacted_lines)
         ]
+        report = _base_redaction_report(unit, stats)
+        report.update(
+            {
+                "redacted_comments": comment_stats.total_comments,
+                "comment_lines": comment_stats.lines_with_comments,
+                "comments_by_line": comment_stats.comments_by_line,
+            }
+        )
         return (
             _truncate_text("\n".join(numbered), MAX_UNIT_CODE_CHARS, "фрагмент кода"),
-            _base_redaction_report(unit, stats),
+            report,
         )
 
     context = 3
@@ -812,68 +992,39 @@ def _extract_relevant_code(unit: CodeUnit) -> tuple[str, dict]:
         absolute_line = unit.start_line + idx
         marker = ">" if any(start <= absolute_line <= end for start, end in unit.review_ranges) else " "
         snippet.append(f"{marker} {absolute_line:>5}: {redacted_lines[idx]}")
+    filtered_comment_stats = _filter_comment_stats(comment_stats, included_lines)
+    report = _filter_redaction_report(unit, stats, included_lines)
+    report.update(
+        {
+            "redacted_comments": filtered_comment_stats.total_comments,
+            "comment_lines": filtered_comment_stats.lines_with_comments,
+            "comments_by_line": filtered_comment_stats.comments_by_line,
+        }
+    )
     return (
         _truncate_text("\n".join(snippet), MAX_UNIT_CODE_CHARS, "фрагмент кода"),
-        _filter_redaction_report(unit, stats, included_lines),
+        report,
     )
 
 
 def _format_query_lines(unit: QueryUnit) -> tuple[str, dict]:
-    raw_lines = [line for _, line in unit.line_map]
-    redacted_lines, stats = redact_lines(raw_lines, unit.start_line)
+    comment_redacted, comment_stats = _redact_comments_line_map(unit.line_map)
+    redacted_lines, stats = redact_lines([line for _, line in comment_redacted], unit.start_line)
     numbered = [
         f"{line_no:>5}: {line}"
-        for (line_no, _), line in zip(unit.line_map, redacted_lines)
+        for (line_no, _), line in zip(comment_redacted, redacted_lines)
     ]
+    included_lines = {line_no for line_no, _ in unit.line_map}
+    filtered_comment_stats = _filter_comment_stats(comment_stats, included_lines)
+    report = _filter_redaction_report(unit, stats, included_lines)
+    report.update(
+        {
+            "redacted_comments": filtered_comment_stats.total_comments,
+            "comment_lines": filtered_comment_stats.lines_with_comments,
+            "comments_by_line": filtered_comment_stats.comments_by_line,
+        }
+    )
     return (
         _truncate_text("\n".join(numbered), MAX_QUERY_TEXT_CHARS, "текст запроса"),
-        _filter_redaction_report(unit, stats, {line_no for line_no, _ in unit.line_map}),
+        report,
     )
-
-
-def _strip_comments(lines: list[str]) -> list[str]:
-    cleaned: list[str] = []
-    in_block_comment = False
-    for raw in lines:
-        result_chars: list[str] = []
-        i = 0
-        in_string = False
-        while i < len(raw):
-            ch = raw[i]
-            nxt = raw[i + 1] if i + 1 < len(raw) else ""
-            if in_block_comment:
-                if ch == "*" and nxt == "/":
-                    in_block_comment = False
-                    i += 2
-                    continue
-                i += 1
-                continue
-            if in_string:
-                if ch == '"' and nxt == '"':
-                    result_chars.append('"')
-                    result_chars.append('"')
-                    i += 2
-                    continue
-                if ch == '"':
-                    in_string = False
-                    result_chars.append(ch)
-                    i += 1
-                    continue
-                result_chars.append(ch)
-                i += 1
-                continue
-            if ch == "/" and nxt == "/":
-                break
-            if ch == "/" and nxt == "*":
-                in_block_comment = True
-                i += 2
-                continue
-            if ch == '"':
-                in_string = True
-                result_chars.append(ch)
-                i += 1
-                continue
-            result_chars.append(ch)
-            i += 1
-        cleaned.append("".join(result_chars))
-    return cleaned
