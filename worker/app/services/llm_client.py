@@ -73,7 +73,7 @@ MAX_QUERY_TEXT_CHARS = 32_000
 MAX_QUERY_NORM_TEXT_CHARS = 40_000
 MAX_QUERY_UNITS_PER_RUN = 40
 MAX_PATTERN_NORM_TEXT_CHARS = 40_000
-MAX_NORM_SELECTION_CHARS = 40_000
+MAX_NORM_SELECTION_CHARS = 100_000
 QUERY_TEMPERATURE = 0.2
 
 PATTERN_SYSTEM_PROMPT = (
@@ -815,47 +815,59 @@ def _select_norm_cards(
     api_key: str,
     diagnostics: list[LLMDiagnostic],
 ) -> list[NormCard]:
-    prompt, redaction_report = _build_norm_selection_prompt(unit, norm_cards)
-    response_text = _call_deepseek(
-        prompt,
-        api_key,
-        system_prompt=SELECTION_SYSTEM_PROMPT,
-        temperature=0,
-    )
-    selected_ids = _parse_selected_norm_ids(response_text)
-    if not selected_ids:
-        logger.info("LLM norm selection returned empty for %s", unit.unit_name)
+    if not norm_cards:
+        return []
+    midpoint = (len(norm_cards) + 1) // 2
+    parts = [norm_cards[:midpoint], norm_cards[midpoint:]]
+    combined_selected: set[str] = set()
+
+    for idx, part in enumerate(parts, start=1):
+        if not part:
+            continue
+        prompt, redaction_report = _build_norm_selection_prompt(unit, part)
+        response_text = _call_deepseek(
+            prompt,
+            api_key,
+            system_prompt=SELECTION_SYSTEM_PROMPT,
+            temperature=0,
+        )
+        selected_ids = _parse_selected_norm_ids(response_text)
+        if not selected_ids:
+            logger.info("LLM norm selection returned empty for %s (part %s)", unit.unit_name, idx)
+            diagnostics.append(
+                LLMDiagnostic(
+                    prompt=prompt,
+                    response=response_text or "[]",
+                    context_files=[f"norm:{card.norm_id}" for card in part],
+                    source_paths=[unit.source_path],
+                    static_findings=[],
+                    created_at=datetime.utcnow().isoformat(),
+                    prompt_version=f"select:part{idx}",
+                    unit_id=unit.unit_id,
+                    unit_name=unit.unit_name,
+                    redaction_report=redaction_report,
+                )
+            )
+            continue
+        combined_selected.update(selected_ids)
         diagnostics.append(
             LLMDiagnostic(
                 prompt=prompt,
                 response=response_text or "[]",
-                context_files=[f"norm:{card.norm_id}" for card in norm_cards],
+                context_files=[f"norm:{card.norm_id}" for card in part],
                 source_paths=[unit.source_path],
                 static_findings=[],
                 created_at=datetime.utcnow().isoformat(),
-                prompt_version="select",
+                prompt_version=f"select:part{idx}",
                 unit_id=unit.unit_id,
                 unit_name=unit.unit_name,
                 redaction_report=redaction_report,
             )
         )
+
+    if not combined_selected:
         return []
-    selected_set = set(selected_ids)
-    selected = [card for card in norm_cards if card.norm_id in selected_set]
-    diagnostics.append(
-        LLMDiagnostic(
-            prompt=prompt,
-            response=response_text or "[]",
-            context_files=[f"norm:{card.norm_id}" for card in norm_cards],
-            source_paths=[unit.source_path],
-            static_findings=[],
-            created_at=datetime.utcnow().isoformat(),
-            prompt_version="select",
-            unit_id=unit.unit_id,
-            unit_name=unit.unit_name,
-            redaction_report=redaction_report,
-        )
-    )
+    selected = [card for card in norm_cards if card.norm_id in combined_selected]
     return selected
 
 
