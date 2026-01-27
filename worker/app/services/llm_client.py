@@ -479,8 +479,23 @@ def _build_norm_selection_prompt(
     norms_text = _truncate_text(
         _format_norm_titles(norm_cards), MAX_NORM_SELECTION_CHARS, "нормы"
     )
+    selection_prelude = (
+        "Роль: ты классификатор применимости норм к фрагменту кода 1С.\n\n"
+        "Правило применимости:\n"
+        "- Норма \"применима\" (applicable=true) ТОЛЬКО если в данном фрагменте есть явный "
+        "триггер/маркер, из-за которого эта норма может быть нарушена.\n"
+        "- Если триггер не виден в коде напрямую — applicable=false.\n"
+        "- Не угадывай контекст проекта и внешние вызовы, опирайся только на текст фрагмента.\n"
+        "- Для applicable=true обязательно укажи evidence: 1) строку(и) кода (номера), 2) "
+        "короткий маркер (1 фраза).\n\n"
+        "Выход: строго JSON-массив объектов вида:\n"
+        '[{ "norm_id": "...", "applicable": true/false, "evidence": "строки N-M: ..." }]\n\n'
+        "Порядок: верни объекты в том же порядке, в котором нормы даны во входном списке."
+    )
     prompt = textwrap.dedent(
         f"""
+        {selection_prelude}
+
         Модуль: {unit.source_path}
         Единица анализа: {unit.unit_name} ({unit.unit_type}), строки {unit.start_line}–{unit.end_line}
 
@@ -492,12 +507,7 @@ def _build_norm_selection_prompt(
         Список норм (id и название):
         {norms_text}
 
-        Инструкция:
-        - Выбери id норм, которые уместно проверять по этому фрагменту кода.
-        - Не придумывай новых норм.
-        - Если подходящих норм нет, верни [].
-
-        Ответ: строго JSON-массив строк с norm_id (например ["NORM_01","NORM_02"]).
+        Ответ: строго JSON-массив объектов по формату выше.
         """
     ).strip()
     redaction_report["phase"] = "select"
@@ -817,8 +827,9 @@ def _select_norm_cards(
 ) -> list[NormCard]:
     if not norm_cards:
         return []
-    midpoint = (len(norm_cards) + 1) // 2
-    parts = [norm_cards[:midpoint], norm_cards[midpoint:]]
+    parts_count = 10
+    part_size = max(1, (len(norm_cards) + parts_count - 1) // parts_count)
+    parts = [norm_cards[i : i + part_size] for i in range(0, len(norm_cards), part_size)]
     combined_selected: set[str] = set()
 
     for idx, part in enumerate(parts, start=1):
@@ -887,7 +898,14 @@ def _parse_selected_norm_ids(response_text: str | None) -> list[str]:
             return []
     if not isinstance(data, list):
         return []
-    return [str(item).strip() for item in data if isinstance(item, str)]
+    selected: list[str] = []
+    for item in data:
+        if isinstance(item, dict):
+            if item.get("applicable") is True and item.get("norm_id"):
+                selected.append(str(item["norm_id"]).strip())
+        elif isinstance(item, str):
+            selected.append(item.strip())
+    return selected
 
 
 def _filter_findings_for_unit(

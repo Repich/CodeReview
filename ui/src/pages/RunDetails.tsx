@@ -674,6 +674,9 @@ function RunDetailsPage() {
                 <div className="chip" style={{ marginBottom: '0.5rem' }}>
                   Статический анализ
                 </div>
+                <p className="muted" style={{ margin: '0 0 0.5rem' }}>
+                  {displayFindings.length} карточек · {filteredFindings.length} нарушений
+                </p>
                 <FindingFilters
                   severity={severity}
                   setSeverity={setSeverity}
