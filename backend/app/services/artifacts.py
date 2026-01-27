@@ -79,6 +79,12 @@ def _infer_llm_stage(prompt_version: str | None) -> str:
     lowered = prompt_version.lower()
     if lowered.startswith("select"):
         return "select"
+    if lowered.startswith("critical:"):
+        return "critical"
+    if lowered.startswith("norms:"):
+        return "norms"
+    if lowered.startswith("merge"):
+        return "merge"
     if lowered.startswith("pattern:"):
         return "pattern"
     if lowered.startswith("query:"):

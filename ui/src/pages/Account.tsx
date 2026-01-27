@@ -23,6 +23,7 @@ function AccountPage() {
   });
   const [findingsView, setFindingsView] = useState<'separate' | 'combined'>('separate');
   const [disablePatterns, setDisablePatterns] = useState(false);
+  const [useAllNorms, setUseAllNorms] = useState(false);
   const settingsMutation = useMutation({
     mutationFn: (payload: import('../services/api').UserSettingsUpdate) =>
       updateUserSettings(payload),
@@ -40,7 +41,15 @@ function AccountPage() {
     if (typeof storedDisable === 'boolean') {
       setDisablePatterns(storedDisable);
     }
-  }, [userQuery.data?.settings?.findings_view, userQuery.data?.settings?.disable_patterns]);
+    const storedAllNorms = userQuery.data?.settings?.use_all_norms;
+    if (typeof storedAllNorms === 'boolean') {
+      setUseAllNorms(storedAllNorms);
+    }
+  }, [
+    userQuery.data?.settings?.findings_view,
+    userQuery.data?.settings?.disable_patterns,
+    userQuery.data?.settings?.use_all_norms,
+  ]);
 
   if (userQuery.isLoading || walletQuery.isLoading) {
     return <p>Загружаем профиль...</p>;
@@ -133,6 +142,9 @@ function AccountPage() {
               Вместе
             </button>
           </div>
+          <p className="muted" style={{ marginTop: '0.75rem' }}>
+            Раздельно — отдельная вкладка LLM. Вместе — единый список слева от кода.
+          </p>
           <div style={{ marginTop: '1rem' }}>
             <p className="muted" style={{ marginBottom: '0.5rem' }}>
               Паттерны (LLM)
@@ -162,9 +174,35 @@ function AccountPage() {
               </button>
             </div>
           </div>
-          <p className="muted" style={{ marginTop: '0.75rem' }}>
-            Раздельно — отдельная вкладка LLM. Вместе — единый список слева от кода.
-          </p>
+          <div style={{ marginTop: '1rem' }}>
+            <p className="muted" style={{ marginBottom: '0.5rem' }}>
+              Использовать все нормы
+            </p>
+            <div className="segmented-control" role="group" aria-label="Полный набор норм">
+              <button
+                type="button"
+                className={!useAllNorms ? 'active' : ''}
+                onClick={() => {
+                  setUseAllNorms(false);
+                  settingsMutation.mutate({ use_all_norms: false });
+                }}
+                disabled={settingsMutation.isPending}
+              >
+                Выключено
+              </button>
+              <button
+                type="button"
+                className={useAllNorms ? 'active' : ''}
+                onClick={() => {
+                  setUseAllNorms(true);
+                  settingsMutation.mutate({ use_all_norms: true });
+                }}
+                disabled={settingsMutation.isPending}
+              >
+                Включено
+              </button>
+            </div>
+          </div>
           {settingsMutation.isError && (
             <p className="alert alert-error" style={{ marginTop: '0.75rem' }}>
               Не удалось сохранить настройки.

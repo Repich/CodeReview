@@ -33,6 +33,7 @@ from backend.app.schemas.tasks import (
     AnalysisTaskResponse,
     SourceUnitPayload,
 )
+from backend.app.schemas.users import UserSettings
 from backend.app.schemas.tasks import LineRangePayload
 from backend.app.schemas.llm import LLMLogEntry
 from backend.app.services import artifacts as artifact_service, billing
@@ -220,7 +221,7 @@ def fetch_next_task(response: Response, db: Session = Depends(get_db)):
         if review_run.user_id:
             user = db.get(UserAccount, review_run.user_id)
             if user and isinstance(user.settings, dict):
-                settings_payload = user.settings
+                settings_payload = UserSettings.model_validate(user.settings).model_dump()
         return AnalysisTaskResponse(
             review_run_id=review_run.id,
             sources=[SourceUnitPayload(**source) for source in sources],

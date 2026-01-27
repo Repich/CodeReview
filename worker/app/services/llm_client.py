@@ -4,10 +4,10 @@ import json
 import logging
 import os
 import textwrap
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Any
 import re
 from datetime import datetime
 
@@ -25,6 +25,7 @@ class CommentRedactionStats:
     lines_with_comments: list[int]
     comments_by_line: dict[int, int]
 from worker.app.services.critical_norms import get_critical_norm_repository
+from worker.app.services.general_norms import get_general_norm_repository
 from worker.app.services.pattern_norms import get_pattern_norm_repository
 from worker.app.services.norms_repo import NormCard
 from worker.app.services.query_norms import get_query_norm_repository
@@ -94,6 +95,15 @@ SELECTION_SYSTEM_PROMPT = (
     "Если подходящих норм нет — верни пустой массив."
 )
 
+MERGE_SYSTEM_PROMPT = (
+    "Ты — ведущий архитектор и ревьюер 1С:Предприятие (BSL) с опытом промышленной "
+    "эксплуатации и high-load. Твоя задача — объединить список нарушений, удалить дубли "
+    "и вернуть единый итоговый массив. "
+    "Используй только переданные данные, не придумывай новые нарушения. "
+    "Если элементы дублируются, оставь наиболее подробный (с большим числом evidence). "
+    "Ответ: строго JSON-массив."
+)
+
 
 @dataclass
 class LLMResult:
@@ -111,6 +121,9 @@ def generate_ai_suggestions(
         return None
 
     norm_repo = get_critical_norm_repository()
+    use_all_norms = bool(task.settings and task.settings.get("use_all_norms"))
+    disable_patterns = bool(task.settings and task.settings.get("disable_patterns"))
+    general_repo = get_general_norm_repository() if use_all_norms else None
     units: list[CodeUnit] = []
     for source in task.sources:
         units.extend(split_source_into_units(source))
@@ -134,69 +147,31 @@ def generate_ai_suggestions(
     )
 
     all_suggestions: list[AISuggestion] = []
+    critical_suggestions: list[AISuggestion] = []
+    general_suggestions: list[AISuggestion] = []
+    pattern_suggestions: list[AISuggestion] = []
+    query_suggestions: list[AISuggestion] = []
     diagnostics: list[LLMDiagnostic] = []
     prompt_versions: list[str] = []
     findings_list = list(findings)
+    selected_by_unit: dict[str, list[NormCard]] = {}
+
     if units:
-        if not norm_repo.cards:
-            logger.warning("Norm repository is empty; skipping LLM stage for code units")
+        selection_pool: list[NormCard] = []
+        if norm_repo.cards:
+            selection_pool.extend(norm_repo.cards)
+        if general_repo and general_repo.cards:
+            selection_pool.extend(general_repo.cards)
+        if not selection_pool:
+            logger.warning("Norm repository is empty; skipping LLM selection stage")
         else:
-            prompt_versions.append(norm_repo.version)
             for unit in units:
-                unit_findings = _filter_findings_for_unit(findings_list, unit)
-                norm_cards = _select_norm_cards(unit, norm_repo.cards, api_key, diagnostics)
-                if not norm_cards:
-                    logger.info("LLM unit %s: no selected norms for code stage", unit.unit_name)
-                    continue
-                allowed_norm_ids = {card.norm_id for card in norm_cards}
-                # debug: logger.info(
-                #     "LLM unit %s (%s lines %s-%s): norms=%s findings=%s",
-                #     unit.unit_name,
-                #     unit.unit_type,
-                #     unit.start_line,
-                #     unit_end_line,
-                #     len(norm_cards),
-                #     len(unit_findings),
-                # )
-                prompt, redaction_report = _build_unit_prompt(unit, unit_findings, norm_cards)
-                response_text = _call_deepseek(prompt, api_key)
-                if not response_text:
-                    logger.warning("LLM unit %s: no response", unit.unit_name)
-                    continue
-                unit_suggestions = _parse_response(
-                    response_text,
-                    unit_findings,
-                    unit,
-                    allowed_norm_ids,
-                    norm_lookup=norm_repo.entries,
-                )
-                if unit_suggestions:
-                    logger.info(
-                        "LLM unit %s: received %s suggestions",
-                        unit.unit_name,
-                        len(unit_suggestions),
-                    )
-                    all_suggestions.extend(unit_suggestions)
-                else:
-                    logger.info("LLM unit %s: no additional suggestions", unit.unit_name)
-                diagnostics.append(
-                    LLMDiagnostic(
-                        prompt=prompt,
-                        response=response_text,
-                        context_files=[f"norm:{card.norm_id}" for card in norm_cards],
-                        source_paths=[unit.source_path],
-                        static_findings=json.loads(_serialize_findings(unit_findings)[0]),
-                        created_at=datetime.utcnow().isoformat(),
-                        prompt_version=norm_repo.version,
-                        unit_id=unit.unit_id,
-                        unit_name=unit.unit_name,
-                        redaction_report=redaction_report,
-                    )
+                selected_by_unit[unit.unit_id] = _select_norm_cards(
+                    unit, selection_pool, api_key, diagnostics
                 )
 
     # Паттерны (отдельный проход)
     pattern_repo = get_pattern_norm_repository()
-    disable_patterns = bool(task.settings and task.settings.get("disable_patterns"))
     if units and pattern_repo.cards and not disable_patterns:
         pattern_norm_ids = set(pattern_repo.norm_ids)
         prompt_versions.append(f"pattern:{pattern_repo.version}")
@@ -225,7 +200,7 @@ def generate_ai_suggestions(
                     unit.unit_name,
                     len(unit_suggestions),
                 )
-                all_suggestions.extend(unit_suggestions)
+                pattern_suggestions.extend(unit_suggestions)
             diagnostics.append(
                 LLMDiagnostic(
                     prompt=prompt,
@@ -240,6 +215,54 @@ def generate_ai_suggestions(
                     redaction_report=redaction_report,
                 )
             )
+
+    # Критические нормы (код)
+    if units and norm_repo.cards:
+        prompt_versions.append(f"critical:{norm_repo.version}")
+        critical_ids = set(norm_repo.entries.keys())
+        for unit in units:
+            unit_findings = _filter_findings_for_unit(findings_list, unit)
+            selected_cards = selected_by_unit.get(unit.unit_id, [])
+            critical_cards = [card for card in selected_cards if card.norm_id in critical_ids]
+            if not critical_cards:
+                logger.info("LLM unit %s: no selected critical norms", unit.unit_name)
+                continue
+            unit_suggestions = _run_code_pass(
+                unit=unit,
+                unit_findings=unit_findings,
+                norm_cards=critical_cards,
+                norm_lookup=norm_repo.entries,
+                api_key=api_key,
+                diagnostics=diagnostics,
+                prompt_version=f"critical:{norm_repo.version}",
+                context_prefix="norm",
+            )
+            if unit_suggestions:
+                critical_suggestions.extend(unit_suggestions)
+
+    # Остальные нормы (norms.yaml) — только если включено
+    if units and general_repo and general_repo.cards:
+        prompt_versions.append(f"norms:{general_repo.version}")
+        general_ids = set(general_repo.entries.keys())
+        for unit in units:
+            unit_findings = _filter_findings_for_unit(findings_list, unit)
+            selected_cards = selected_by_unit.get(unit.unit_id, [])
+            general_cards = [card for card in selected_cards if card.norm_id in general_ids]
+            if not general_cards:
+                logger.info("LLM unit %s: no selected general norms", unit.unit_name)
+                continue
+            unit_suggestions = _run_code_pass(
+                unit=unit,
+                unit_findings=unit_findings,
+                norm_cards=general_cards,
+                norm_lookup=general_repo.entries,
+                api_key=api_key,
+                diagnostics=diagnostics,
+                prompt_version=f"norms:{general_repo.version}",
+                context_prefix="norms",
+            )
+            if unit_suggestions:
+                general_suggestions.extend(unit_suggestions)
 
     query_units: list[QueryUnit] = []
     for source in task.sources:
@@ -300,7 +323,7 @@ def generate_ai_suggestions(
                         unit.unit_name,
                         len(unit_suggestions),
                     )
-                    all_suggestions.extend(unit_suggestions)
+                    query_suggestions.extend(unit_suggestions)
                 else:
                     logger.info("LLM query %s: no additional suggestions", unit.unit_name)
                 diagnostics.append(
@@ -309,14 +332,26 @@ def generate_ai_suggestions(
                         response=response_text,
                         context_files=[f"norm:{card.norm_id}" for card in query_norm_repo.cards],
                         source_paths=[unit.source_path],
-                        static_findings=json.loads(_serialize_findings(unit_findings)[0]),
-                        created_at=datetime.utcnow().isoformat(),
-                        prompt_version=query_norm_repo.version,
-                        unit_id=unit.unit_id,
-                        unit_name=unit.unit_name,
-                        redaction_report=redaction_report,
-                    )
+                    static_findings=json.loads(_serialize_findings(unit_findings)[0]),
+                    created_at=datetime.utcnow().isoformat(),
+                    prompt_version=f"query:{query_norm_repo.version}",
+                    unit_id=unit.unit_id,
+                    unit_name=unit.unit_name,
+                    redaction_report=redaction_report,
                 )
+            )
+
+    merged_suggestions = _merge_suggestions(
+        critical_suggestions=critical_suggestions,
+        general_suggestions=general_suggestions,
+        pattern_suggestions=pattern_suggestions,
+        api_key=api_key,
+        diagnostics=diagnostics,
+        prompt_versions=prompt_versions,
+    )
+    all_suggestions.extend(merged_suggestions)
+    if query_suggestions:
+        all_suggestions.extend(query_suggestions)
 
     if not all_suggestions:
         logger.info("Run %s: LLM produced zero suggestions", task.review_run_id)
@@ -519,6 +554,65 @@ def _build_query_prompt(
     return prompt, redaction_report
 
 
+def _build_merge_prompt(
+    critical_suggestions: list[AISuggestion],
+    general_suggestions: list[AISuggestion],
+    pattern_suggestions: list[AISuggestion],
+) -> str:
+    payload = {
+        "critical": _suggestions_to_payload(critical_suggestions),
+        "norms": _suggestions_to_payload(general_suggestions),
+        "patterns": _suggestions_to_payload(pattern_suggestions),
+    }
+    prompt = textwrap.dedent(
+        f"""
+        Ниже три списка найденных нарушений. Объедини их в один итоговый список,
+        удалив дубликаты. Если записи совпадают по norm_id и пересекающимся линиям,
+        оставь наиболее подробную (с большим числом evidence или более точной reason).
+
+        Входные данные (JSON):
+        {json.dumps(payload, ensure_ascii=False, indent=2)}
+
+        Ответ: строго JSON-массив объектов с полями
+        norm_id, section, category, norm_text, source_reference, severity (optional),
+        evidence (массив объектов с file, lines, reason).
+        """
+    ).strip()
+    return prompt
+
+
+def _suggestions_to_payload(suggestions: list[AISuggestion]) -> list[dict[str, Any]]:
+    return [asdict(item) for item in suggestions]
+
+
+def _parse_merge_response(response_text: str) -> list[AISuggestion]:
+    try:
+        payload = json.loads(response_text)
+    except json.JSONDecodeError:
+        logger.warning("LLM merge response is not valid JSON")
+        return []
+    if not isinstance(payload, list):
+        logger.warning("LLM merge response is not a list")
+        return []
+    merged: list[AISuggestion] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        merged.append(
+            AISuggestion(
+                norm_id=item.get("norm_id"),
+                section=item.get("section"),
+                category=item.get("category"),
+                severity=item.get("severity"),
+                norm_text=item.get("norm_text") or "",
+                source_reference=item.get("source_reference"),
+                evidence=item.get("evidence"),
+                llm_raw_response=None,
+            )
+        )
+    return merged
+
+
 def _build_pattern_prompt(
     unit: CodeUnit,
     findings: list[DetectorFinding],
@@ -591,6 +685,109 @@ def _serialize_findings(findings: Iterable[DetectorFinding]) -> tuple[str, int]:
             }
         )
     return json.dumps(payload, ensure_ascii=False, indent=2), redaction_count
+
+
+def _run_code_pass(
+    unit: CodeUnit,
+    unit_findings: list[DetectorFinding],
+    norm_cards: list[NormCard],
+    norm_lookup: dict[str, dict],
+    api_key: str,
+    diagnostics: list[LLMDiagnostic],
+    prompt_version: str,
+    context_prefix: str,
+) -> list[AISuggestion]:
+    allowed_norm_ids = {card.norm_id for card in norm_cards}
+    prompt, redaction_report = _build_unit_prompt(unit, unit_findings, norm_cards)
+    response_text = _call_deepseek(prompt, api_key)
+    if not response_text:
+        logger.warning("LLM unit %s: no response", unit.unit_name)
+        return []
+    unit_suggestions = _parse_response(
+        response_text,
+        unit_findings,
+        unit,
+        allowed_norm_ids,
+        norm_lookup=norm_lookup,
+    )
+    if unit_suggestions:
+        logger.info(
+            "LLM unit %s: received %s suggestions",
+            unit.unit_name,
+            len(unit_suggestions),
+        )
+    else:
+        logger.info("LLM unit %s: no additional suggestions", unit.unit_name)
+    diagnostics.append(
+        LLMDiagnostic(
+            prompt=prompt,
+            response=response_text,
+            context_files=[f"{context_prefix}:{card.norm_id}" for card in norm_cards],
+            source_paths=[unit.source_path],
+            static_findings=json.loads(_serialize_findings(unit_findings)[0]),
+            created_at=datetime.utcnow().isoformat(),
+            prompt_version=prompt_version,
+            unit_id=unit.unit_id,
+            unit_name=unit.unit_name,
+            redaction_report=redaction_report,
+        )
+    )
+    return unit_suggestions
+
+
+def _merge_suggestions(
+    critical_suggestions: list[AISuggestion],
+    general_suggestions: list[AISuggestion],
+    pattern_suggestions: list[AISuggestion],
+    api_key: str,
+    diagnostics: list[LLMDiagnostic],
+    prompt_versions: list[str],
+) -> list[AISuggestion]:
+    non_empty = [
+        item
+        for item in (critical_suggestions, general_suggestions, pattern_suggestions)
+        if item
+    ]
+    if len(non_empty) <= 1:
+        merged = []
+        merged.extend(critical_suggestions)
+        merged.extend(general_suggestions)
+        merged.extend(pattern_suggestions)
+        return merged
+
+    prompt = _build_merge_prompt(
+        critical_suggestions=critical_suggestions,
+        general_suggestions=general_suggestions,
+        pattern_suggestions=pattern_suggestions,
+    )
+    response_text = _call_deepseek(prompt, api_key, system_prompt=MERGE_SYSTEM_PROMPT, temperature=0)
+    if not response_text:
+        logger.warning("LLM merge: no response, keeping raw suggestions")
+        merged = []
+        merged.extend(critical_suggestions)
+        merged.extend(general_suggestions)
+        merged.extend(pattern_suggestions)
+        return merged
+    merged = _parse_merge_response(response_text)
+    if not merged:
+        logger.warning("LLM merge returned empty; keeping raw suggestions")
+        merged = []
+        merged.extend(critical_suggestions)
+        merged.extend(general_suggestions)
+        merged.extend(pattern_suggestions)
+    diagnostics.append(
+        LLMDiagnostic(
+            prompt=prompt,
+            response=response_text,
+            context_files=["merge:critical", "merge:norms", "merge:pattern"],
+            source_paths=[],
+            static_findings=[],
+            created_at=datetime.utcnow().isoformat(),
+            prompt_version="merge",
+        )
+    )
+    prompt_versions.append("merge")
+    return merged
 
 
 def _format_norm_titles(norm_cards: list[NormCard]) -> str:

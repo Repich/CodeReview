@@ -18,10 +18,10 @@ def _load_norm_catalog() -> dict[str, dict[str, Any]]:
             entries: list[dict[str, Any]] = []
             if norms_path.exists():
                 data = yaml.safe_load(norms_path.read_text(encoding="utf-8")) or {}
-                entries.extend(data.get("norms", []))
+                entries.extend(_extract_norm_entries(data))
             if custom_path.exists():
                 data = yaml.safe_load(custom_path.read_text(encoding="utf-8")) or {}
-                entries.extend(data.get("norms", []))
+                entries.extend(_extract_norm_entries(data))
             return {entry.get("norm_id"): entry for entry in entries if entry.get("norm_id")}
     return {}
 
@@ -30,7 +30,7 @@ def load_norm_catalog_entries(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    entries = data.get("norms", [])
+    entries = _extract_norm_entries(data)
     return [entry for entry in entries if entry.get("norm_id")]
 
 
@@ -38,8 +38,8 @@ def load_custom_norms(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    entries = data.get("norms") if isinstance(data, dict) else data
-    return [entry for entry in entries or [] if isinstance(entry, dict) and entry.get("norm_id")]
+    entries = _extract_norm_entries(data)
+    return [entry for entry in entries if entry.get("norm_id")]
 
 
 def save_custom_norms(path: Path, entries: list[dict[str, Any]]) -> None:
@@ -52,6 +52,16 @@ def save_custom_norms(path: Path, entries: list[dict[str, Any]]) -> None:
         width=120,
     )
     path.write_text(data, encoding="utf-8")
+
+
+def _extract_norm_entries(data: Any) -> list[dict[str, Any]]:
+    if isinstance(data, dict):
+        entries = data.get("norms", [])
+    elif isinstance(data, list):
+        entries = data
+    else:
+        entries = []
+    return [entry for entry in entries if isinstance(entry, dict)]
 
 
 def filter_norm_catalog_entries(
