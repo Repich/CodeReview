@@ -596,10 +596,20 @@ def _serialize_findings(findings: Iterable[DetectorFinding]) -> tuple[str, int]:
 def _format_norm_titles(norm_cards: list[NormCard]) -> str:
     lines = []
     for card in norm_cards:
-        title = card.title or card.norm_id
-        section = f" [{card.section}]" if getattr(card, "section", None) else ""
+        title = getattr(card, "title", None) or _extract_body_field(card.body, "Название") or card.norm_id
+        section_value = getattr(card, "section", None) or _extract_body_field(card.body, "Раздел")
+        section = f" [{section_value}]" if section_value else ""
         lines.append(f"- {card.norm_id}: {title}{section}")
     return "\n".join(lines)
+
+
+def _extract_body_field(body: str, label: str) -> str | None:
+    prefix = f"{label}:"
+    for line in body.splitlines():
+        if line.startswith(prefix):
+            value = line.split(":", 1)[1].strip()
+            return value or None
+    return None
 
 
 def _select_norm_cards(
