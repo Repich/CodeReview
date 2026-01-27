@@ -57509,6 +57509,23 @@ norms:
   check_type: semantic
   default_severity: major
   detector_type: manual_review
+- norm_id: FORM_SERVER_CONTEXT_NO_USAGE
+  section: Модули форм
+  category: performance
+  title: Вызов обработки клиентского контекста на сервере без необходимости
+  norm_text: 'Процедура или функция в модуле управляемой формы не должна иметь директиву &НаСервере, если внутри нет обращений
+    к реквизитам или элементам формы (Объект., ЭтаФорма., ЭтотОбъект.). В таких случаях используйте &НаСервереБезКонтекста.
+
+    '
+  tags:
+  - performance
+  - ui
+  scope: модули форм
+  code_applicability: true
+  automation_hint: code
+  check_type: static
+  default_severity: minor
+  detector_type: performance
 - norm_id: FORM_SERVER_VAR_NO_PERSIST
   section: Модули форм
   category: correctness

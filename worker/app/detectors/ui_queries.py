@@ -45,6 +45,78 @@ def _is_form_module(ctx: DetectorContext) -> bool:
 
 
 @register
+class FormServerContextWithoutUsageDetector(BaseDetector):
+    norm_id = "FORM_SERVER_CONTEXT_NO_USAGE"
+    detector_id = "detector.form_server_context_no_usage"
+    severity = "minor"
+
+    directive_server = re.compile(r"&\s*НаСервере\b", re.IGNORECASE)
+    directive_no_context = re.compile(r"&\s*НаСервереБезКонтекста\b", re.IGNORECASE)
+    proc_re = re.compile(r"^\s*(Процедура|Функция)\b", re.IGNORECASE)
+    end_proc_re = re.compile(r"^\s*КонецПроцедуры\b", re.IGNORECASE)
+    end_func_re = re.compile(r"^\s*КонецФункции\b", re.IGNORECASE)
+    context_re = re.compile(r"\b(Объект|ЭтаФорма|ЭтотОбъект)\s*\.", re.IGNORECASE)
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        if not _is_form_module(ctx):
+            return []
+        findings: list[DetectorFinding] = []
+        pending_directive_line: int | None = None
+        in_block = False
+        has_context = False
+        directive_line: int | None = None
+        end_re: re.Pattern[str] | None = None
+
+        for line_no, line in self.iter_lines(ctx.source.content):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("//"):
+                continue
+            if stripped.startswith("&"):
+                if self.directive_server.search(stripped) and not self.directive_no_context.search(stripped):
+                    pending_directive_line = line_no
+                else:
+                    pending_directive_line = None
+                continue
+            if self.proc_re.match(stripped):
+                if pending_directive_line is not None:
+                    in_block = True
+                    has_context = False
+                    directive_line = pending_directive_line
+                    pending_directive_line = None
+                    end_re = self.end_func_re if stripped.lower().startswith("функция") else self.end_proc_re
+                else:
+                    in_block = False
+                    directive_line = None
+                    end_re = None
+                continue
+
+            if not in_block:
+                continue
+
+            if self.context_re.search(line):
+                has_context = True
+
+            if end_re and end_re.match(stripped):
+                if not has_context:
+                    findings.append(
+                        self.create_finding(
+                            ctx,
+                            message="Вызов обработки клиентского контекста на сервере без необходимости",
+                            recommendation="Замените директиву на &НаСервереБезКонтекста, если форма и объект не используются.",
+                            line=directive_line or line_no,
+                            extra={"directive_line": directive_line, "procedure_end": line_no},
+                        )
+                    )
+                in_block = False
+                has_context = False
+                directive_line = None
+                end_re = None
+        return findings
+
+
+@register
 class MetadataReservedWordsDetector(BaseDetector):
     norm_id = "NAME_NO_QUERY_TABLE_WORDS"
     detector_id = "detector.metadata_reserved_words"
