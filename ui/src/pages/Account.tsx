@@ -24,7 +24,7 @@ function AccountPage() {
   const [findingsView, setFindingsView] = useState<'separate' | 'combined'>('separate');
   const [disablePatterns, setDisablePatterns] = useState(false);
   const settingsMutation = useMutation({
-    mutationFn: (payload: { findings_view: 'separate' | 'combined' }) =>
+    mutationFn: (payload: import('../services/api').UserSettingsUpdate) =>
       updateUserSettings(payload),
     onSuccess: (data) => {
       queryClient.setQueryData(['me'], data);
