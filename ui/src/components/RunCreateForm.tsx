@@ -21,6 +21,19 @@ const defaultModule: SourceUnitPayload = {
   content: '',
 };
 
+const MODULE_TYPE_OPTIONS = [
+  { value: 'CommonModule', label: 'Общий модуль' },
+  { value: 'FormModule', label: 'Модуль формы' },
+  { value: 'ObjectModule', label: 'Модуль объекта' },
+  { value: 'ManagerModule', label: 'Модуль менеджера' },
+  { value: 'DocumentModule', label: 'Модуль документа' },
+  { value: 'RecordSetModule', label: 'Модуль набора записей' },
+  { value: 'CommandModule', label: 'Модуль команд' },
+  { value: 'SessionModule', label: 'Модуль сеанса' },
+  { value: 'HTTPServiceModule', label: 'Модуль HTTP-сервиса' },
+  { value: 'Other', label: 'Другое' },
+];
+
 function RunCreateForm({ onCreated, availablePoints, runCost }: Props) {
   const [projectId, setProjectId] = useState('demo');
   const [externalRef, setExternalRef] = useState('');
@@ -159,7 +172,16 @@ function RunCreateForm({ onCreated, availablePoints, runCost }: Props) {
               </div>
               <div className="field">
                 <label>Тип модуля</label>
-                <input value={module.module_type} onChange={(event) => updateModule(index, { module_type: event.target.value })} />
+                <select
+                  value={module.module_type}
+                  onChange={(event) => updateModule(index, { module_type: event.target.value })}
+                >
+                  {MODULE_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="field">

@@ -117,6 +117,102 @@ class FormServerContextWithoutUsageDetector(BaseDetector):
 
 
 @register
+class FormServerMessageOutputDetector(BaseDetector):
+    norm_id = "FORM_SERVER_MESSAGE_OUTPUT"
+    detector_id = "detector.form_server_message_output"
+    severity = "major"
+
+    directive_server = re.compile(r"&\s*НаСервере\b", re.IGNORECASE)
+    directive_no_context = re.compile(r"&\s*НаСервереБезКонтекста\b", re.IGNORECASE)
+    proc_re = re.compile(r"^\s*(Процедура|Функция)\s+([A-Za-zА-Яа-я0-9_]+)", re.IGNORECASE)
+    end_proc_re = re.compile(r"^\s*КонецПроцедуры\b", re.IGNORECASE)
+    end_func_re = re.compile(r"^\s*КонецФункции\b", re.IGNORECASE)
+    message_re = re.compile(r"\bСообщить\s*\(", re.IGNORECASE)
+    user_message_re = re.compile(
+        r"\bОбщегоНазначенияКлиентСервер\.СообщитьПользователю\s*\(",
+        re.IGNORECASE,
+    )
+    excluded_handlers = {
+        "ПередЗаписью",
+        "ПриЗаписи",
+        "ПроверкаЗаполнения",
+        "ОбработкаПроведения",
+        "ОбработкаОтменыПроведения",
+    }
+
+    def detect(self, ctx: DetectorContext) -> Iterable[DetectorFinding]:
+        if not _is_form_module(ctx):
+            return []
+        findings: list[DetectorFinding] = []
+        pending_directive_line: int | None = None
+        in_block = False
+        has_message_call = False
+        directive_line: int | None = None
+        end_re: re.Pattern[str] | None = None
+        handler_name: str | None = None
+
+        for line_no, line in self.iter_lines(ctx.source.content):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("//"):
+                continue
+            if stripped.startswith("&"):
+                if self.directive_server.search(stripped) and not self.directive_no_context.search(stripped):
+                    pending_directive_line = line_no
+                else:
+                    pending_directive_line = None
+                continue
+            proc_match = self.proc_re.match(stripped)
+            if proc_match:
+                if pending_directive_line is not None:
+                    handler_name = proc_match.group(2)
+                    if handler_name in self.excluded_handlers:
+                        in_block = False
+                        pending_directive_line = None
+                        handler_name = None
+                        end_re = None
+                        continue
+                    in_block = True
+                    has_message_call = False
+                    directive_line = pending_directive_line
+                    pending_directive_line = None
+                    end_re = self.end_func_re if proc_match.group(1).lower().startswith("функция") else self.end_proc_re
+                else:
+                    in_block = False
+                    handler_name = None
+                    directive_line = None
+                    end_re = None
+                continue
+
+            if not in_block:
+                continue
+
+            if self.message_re.search(line) or self.user_message_re.search(line):
+                has_message_call = True
+
+            if end_re and end_re.match(stripped):
+                if has_message_call:
+                    findings.append(
+                        self.create_finding(
+                            ctx,
+                            message="Сообщение пользователю в серверной процедуре формы",
+                            recommendation=(
+                                "Перенесите вывод сообщений (Сообщить/СообщитьПользователю) в вызывающий "
+                                "клиентский метод. Для фоновых сценариев пишите в журнал регистрации или регистр логов."
+                            ),
+                            line=directive_line or line_no,
+                            extra={"directive_line": directive_line, "procedure_end": line_no},
+                        )
+                    )
+                in_block = False
+                has_message_call = False
+                directive_line = None
+                end_re = None
+        return findings
+
+
+@register
 class MetadataReservedWordsDetector(BaseDetector):
     norm_id = "NAME_NO_QUERY_TABLE_WORDS"
     detector_id = "detector.metadata_reserved_words"

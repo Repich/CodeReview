@@ -57526,6 +57526,26 @@ norms:
   check_type: static
   default_severity: minor
   detector_type: performance
+- norm_id: FORM_SERVER_MESSAGE_OUTPUT
+  section: Модули форм
+  category: performance
+  title: Не выводить сообщения пользователю в серверных методах формы
+  norm_text: 'Если перед процедурой или функцией стоит директива &НаСервере, то внутри не следует вызывать Сообщить() или
+    ОбщегоНазначенияКлиентСервер.СообщитьПользователю(). Исключение: серверные обработчики событий объекта
+    ПередЗаписью, ПриЗаписи, ПроверкаЗаполнения, ОбработкаПроведения, ОбработкаОтменыПроведения.
+    Вывод сообщений переносите в вызывающие клиентские методы. Для фоновых сценариев используйте журнал регистрации
+    или регистр сведений для логов.
+
+    '
+  tags:
+  - performance
+  - ui
+  scope: модули форм
+  code_applicability: true
+  automation_hint: code
+  check_type: static
+  default_severity: major
+  detector_type: performance
 - norm_id: FORM_SERVER_VAR_NO_PERSIST
   section: Модули форм
   category: correctness
