@@ -77,6 +77,8 @@ def _infer_llm_stage(prompt_version: str | None) -> str:
     if not prompt_version:
         return "code"
     lowered = prompt_version.lower()
+    if lowered.startswith("select"):
+        return "select"
     if lowered.startswith("pattern:"):
         return "pattern"
     if lowered.startswith("query:"):

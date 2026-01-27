@@ -72,6 +72,7 @@ MAX_QUERY_TEXT_CHARS = 32_000
 MAX_QUERY_NORM_TEXT_CHARS = 40_000
 MAX_QUERY_UNITS_PER_RUN = 40
 MAX_PATTERN_NORM_TEXT_CHARS = 40_000
+MAX_NORM_SELECTION_CHARS = 40_000
 QUERY_TEMPERATURE = 0.2
 
 PATTERN_SYSTEM_PROMPT = (
@@ -83,6 +84,14 @@ PATTERN_SYSTEM_PROMPT = (
     "Repository, Unit of Work, устойчивость интеграций (идемпотентность, Circuit Breaker, "
     "retry/backoff, Bulkhead, Adapter) и другие из списка. Не дублируй статические находки. "
     "Возвращай только предполагаемые нарушения паттернов."
+)
+
+SELECTION_SYSTEM_PROMPT = (
+    "Ты — ведущий архитектор и ревьюер 1С:Предприятие (BSL) с опытом промышленной "
+    "эксплуатации и high-load. Твоя задача — выбрать из списка норм только те, которые "
+    "можно проверить по данному фрагменту кода. "
+    "Используй только предоставленный список норм. "
+    "Если подходящих норм нет — верни пустой массив."
 )
 
 
@@ -133,10 +142,13 @@ def generate_ai_suggestions(
             logger.warning("Norm repository is empty; skipping LLM stage for code units")
         else:
             prompt_versions.append(norm_repo.version)
-            allowed_norm_ids = {card.norm_id for card in norm_repo.cards}
             for unit in units:
                 unit_findings = _filter_findings_for_unit(findings_list, unit)
-                norm_cards = norm_repo.cards
+                norm_cards = _select_norm_cards(unit, norm_repo.cards, api_key, diagnostics)
+                if not norm_cards:
+                    logger.info("LLM unit %s: no selected norms for code stage", unit.unit_name)
+                    continue
+                allowed_norm_ids = {card.norm_id for card in norm_cards}
                 # debug: logger.info(
                 #     "LLM unit %s (%s lines %s-%s): norms=%s findings=%s",
                 #     unit.unit_name,
@@ -424,6 +436,39 @@ def _build_unit_prompt(
     return prompt, redaction_report
 
 
+def _build_norm_selection_prompt(
+    unit: CodeUnit,
+    norm_cards: list[NormCard],
+) -> tuple[str, dict]:
+    code_block, redaction_report = _extract_relevant_code(unit)
+    norms_text = _truncate_text(
+        _format_norm_titles(norm_cards), MAX_NORM_SELECTION_CHARS, "нормы"
+    )
+    prompt = textwrap.dedent(
+        f"""
+        Модуль: {unit.source_path}
+        Единица анализа: {unit.unit_name} ({unit.unit_type}), строки {unit.start_line}–{unit.end_line}
+
+        Код:
+        ```
+        {code_block}
+        ```
+
+        Список норм (id и название):
+        {norms_text}
+
+        Инструкция:
+        - Выбери id норм, которые уместно проверять по этому фрагменту кода.
+        - Не придумывай новых норм.
+        - Если подходящих норм нет, верни [].
+
+        Ответ: строго JSON-массив строк с norm_id (например ["NORM_01","NORM_02"]).
+        """
+    ).strip()
+    redaction_report["phase"] = "select"
+    return prompt, redaction_report
+
+
 def _build_query_prompt(
     unit: QueryUnit,
     findings: list[DetectorFinding],
@@ -546,6 +591,84 @@ def _serialize_findings(findings: Iterable[DetectorFinding]) -> tuple[str, int]:
             }
         )
     return json.dumps(payload, ensure_ascii=False, indent=2), redaction_count
+
+
+def _format_norm_titles(norm_cards: list[NormCard]) -> str:
+    lines = []
+    for card in norm_cards:
+        title = card.title or card.norm_id
+        section = f" [{card.section}]" if getattr(card, "section", None) else ""
+        lines.append(f"- {card.norm_id}: {title}{section}")
+    return "\n".join(lines)
+
+
+def _select_norm_cards(
+    unit: CodeUnit,
+    norm_cards: list[NormCard],
+    api_key: str,
+    diagnostics: list[LLMDiagnostic],
+) -> list[NormCard]:
+    prompt, redaction_report = _build_norm_selection_prompt(unit, norm_cards)
+    response_text = _call_deepseek(
+        prompt,
+        api_key,
+        system_prompt=SELECTION_SYSTEM_PROMPT,
+        temperature=0,
+    )
+    selected_ids = _parse_selected_norm_ids(response_text)
+    if not selected_ids:
+        logger.info("LLM norm selection returned empty for %s", unit.unit_name)
+        diagnostics.append(
+            LLMDiagnostic(
+                prompt=prompt,
+                response=response_text or "[]",
+                context_files=[f"norm:{card.norm_id}" for card in norm_cards],
+                source_paths=[unit.source_path],
+                static_findings=[],
+                created_at=datetime.utcnow().isoformat(),
+                prompt_version="select",
+                unit_id=unit.unit_id,
+                unit_name=unit.unit_name,
+                redaction_report=redaction_report,
+            )
+        )
+        return []
+    selected_set = set(selected_ids)
+    selected = [card for card in norm_cards if card.norm_id in selected_set]
+    diagnostics.append(
+        LLMDiagnostic(
+            prompt=prompt,
+            response=response_text or "[]",
+            context_files=[f"norm:{card.norm_id}" for card in norm_cards],
+            source_paths=[unit.source_path],
+            static_findings=[],
+            created_at=datetime.utcnow().isoformat(),
+            prompt_version="select",
+            unit_id=unit.unit_id,
+            unit_name=unit.unit_name,
+            redaction_report=redaction_report,
+        )
+    )
+    return selected
+
+
+def _parse_selected_norm_ids(response_text: str | None) -> list[str]:
+    if not response_text:
+        return []
+    text = response_text.strip()
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"\[[\s\S]*\]", text)
+        if not match:
+            return []
+        try:
+            data = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(data, list):
+        return []
+    return [str(item).strip() for item in data if isinstance(item, str)]
 
 
 def _filter_findings_for_unit(
