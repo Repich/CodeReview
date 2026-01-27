@@ -245,6 +245,44 @@ textarea {
   color: #a78bfa;
 }
 
+.raw-sources-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 60vh;
+}
+
+.raw-sources-list {
+  border-right: 1px solid var(--border);
+  padding: 1rem;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.raw-source-item {
+  border: 1px solid transparent;
+  background: #f8fafc;
+  color: #0f172a;
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.raw-source-item.active {
+  border-color: var(--primary);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.raw-sources-content {
+  padding: 1rem 1.25rem;
+  overflow: auto;
+}
+
 .card + .card {
   margin-top: 1.25rem;
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -496,6 +497,40 @@ def get_review_run_sources(
     return enriched
 
 
+@router.get("/{review_run_id}/sources-raw")
+def list_review_run_sources_raw(
+    review_run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(get_current_user),
+):
+    ensure_run_access(db, review_run_id, current_user)
+    artifact_path = _get_sources_raw_path(db, review_run_id)
+    with zipfile.ZipFile(artifact_path) as archive:
+        entries = []
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            entries.append({"path": info.filename, "size": info.file_size})
+    return sorted(entries, key=lambda item: item["path"])
+
+
+@router.get("/{review_run_id}/sources-raw/file")
+def get_review_run_sources_raw_file(
+    review_run_id: uuid.UUID,
+    path: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(get_current_user),
+):
+    ensure_run_access(db, review_run_id, current_user)
+    artifact_path = _get_sources_raw_path(db, review_run_id)
+    with zipfile.ZipFile(artifact_path) as archive:
+        names = set(archive.namelist())
+        if path not in names:
+            raise HTTPException(status_code=404, detail="Source not found in archive")
+        content = archive.read(path).decode("utf-8", errors="replace")
+    return {"path": path, "content": content}
+
+
 def _build_change_map(
     sources: list[SourceUnitPayload], extra_changes: list[SourceChangePayload]
 ) -> dict[str, list[dict[str, int]]]:
@@ -517,6 +552,26 @@ def _build_change_map(
         merged = merge_change_ranges([(item["start"], item["end"]) for item in existing if item])
         change_map[change.path] = [{"start": start, "end": end} for start, end in merged]
     return change_map
+
+
+def _get_sources_raw_path(db: Session, review_run_id: uuid.UUID) -> Path:
+    record = (
+        db.query(IOLog)
+        .filter(
+            IOLog.review_run_id == review_run_id,
+            IOLog.artifact_type == "sources_raw.zip",
+            IOLog.direction == IODirection.IN,
+        )
+        .order_by(IOLog.created_at.desc())
+        .first()
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Raw sources artifact not found")
+    settings = get_settings()
+    artifact_path = Path(settings.artifact_dir) / record.storage_path
+    if not artifact_path.exists():
+        raise HTTPException(status_code=404, detail="Raw sources artifact file missing")
+    return artifact_path
 
 
 def _get_range_tuple(range_item: LineRangePayload | dict | tuple | list) -> tuple[int, int]:

@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
-import { getStoredAuthToken } from '../services/api';
-import type { IOLogEntry } from '../services/api';
+import {
+  fetchRawSourceContent,
+  fetchRawSourcesIndex,
+  getStoredAuthToken,
+} from '../services/api';
+import type { IOLogEntry, RawSourceEntry } from '../services/api';
 
 interface Props {
   artifacts: IOLogEntry[];
@@ -25,6 +29,13 @@ function ArtifactsTable({ artifacts, artifactBaseUrl }: Props) {
   const [previewKind, setPreviewKind] = useState<'text' | 'json'>('text');
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [sourcesList, setSourcesList] = useState<RawSourceEntry[]>([]);
+  const [sourcesLoading, setSourcesLoading] = useState(false);
+  const [sourcesError, setSourcesError] = useState<string | null>(null);
+  const [sourceContent, setSourceContent] = useState('');
+  const [sourcePath, setSourcePath] = useState<string | null>(null);
+  const [sourceLoading, setSourceLoading] = useState(false);
 
   const buildUrl = (artifact: IOLogEntry) => {
     const base = artifactBaseUrl || (import.meta.env.VITE_API_BASE || 'http://localhost:8000/api');
@@ -39,6 +50,41 @@ function ArtifactsTable({ artifacts, artifactBaseUrl }: Props) {
   const isPreviewable = (artifact: IOLogEntry) => {
     const path = artifact.storage_path.toLowerCase();
     return path.endsWith('.txt') || path.endsWith('.json');
+  };
+
+  const isRawSources = (artifact: IOLogEntry) => artifact.artifact_type === 'sources_raw.zip';
+
+  const handleOpenRawSources = async (artifact: IOLogEntry) => {
+    setSourcesError(null);
+    setSourcesLoading(true);
+    setSourcesOpen(true);
+    setSourcesList([]);
+    setSourceContent('');
+    setSourcePath(null);
+    try {
+      const data = await fetchRawSourcesIndex(artifact.review_run_id);
+      setSourcesList(data);
+    } catch (error) {
+      console.error('Failed to load raw sources index', error);
+      setSourcesError('Не удалось загрузить список исходников.');
+    } finally {
+      setSourcesLoading(false);
+    }
+  };
+
+  const handleSelectRawSource = async (artifact: IOLogEntry, path: string) => {
+    setSourcePath(path);
+    setSourceLoading(true);
+    setSourceContent('');
+    try {
+      const data = await fetchRawSourceContent(artifact.review_run_id, path);
+      setSourceContent(data.content || '');
+    } catch (error) {
+      console.error('Failed to load raw source', error);
+      setSourcesError('Не удалось загрузить исходник.');
+    } finally {
+      setSourceLoading(false);
+    }
   };
 
   const handlePreview = async (artifact: IOLogEntry) => {
@@ -107,6 +153,15 @@ function ArtifactsTable({ artifacts, artifactBaseUrl }: Props) {
                         Просмотр
                       </button>
                     )}
+                    {isRawSources(artifact) && (
+                      <button
+                        type="button"
+                        className="link-button"
+                        onClick={() => handleOpenRawSources(artifact)}
+                      >
+                        Просмотр
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -122,6 +177,24 @@ function ArtifactsTable({ artifacts, artifactBaseUrl }: Props) {
           loading={previewLoading}
           error={previewError}
           onClose={() => setPreviewOpen(false)}
+        />
+      )}
+      {sourcesOpen && (
+        <RawSourcesModal
+          title="Исходный код (sources_raw.zip)"
+          sources={sourcesList}
+          loading={sourcesLoading}
+          error={sourcesError}
+          selectedPath={sourcePath}
+          content={sourceContent}
+          loadingContent={sourceLoading}
+          onSelect={(path) => {
+            const artifact = artifacts.find((item) => isRawSources(item));
+            if (artifact) {
+              handleSelectRawSource(artifact, path);
+            }
+          }}
+          onClose={() => setSourcesOpen(false)}
         />
       )}
     </>
@@ -184,6 +257,77 @@ function ArtifactPreviewModal({
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function RawSourcesModal({
+  title,
+  sources,
+  loading,
+  error,
+  selectedPath,
+  content,
+  loadingContent,
+  onSelect,
+  onClose,
+}: {
+  title: string;
+  sources: RawSourceEntry[];
+  loading: boolean;
+  error: string | null;
+  selectedPath: string | null;
+  content: string;
+  loadingContent: boolean;
+  onSelect: (path: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <strong>{title}</strong>
+            <p className="muted" style={{ margin: 0 }}>
+              {sources.length} файлов
+            </p>
+          </div>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Закрыть
+          </button>
+        </div>
+        <div className="raw-sources-layout">
+          <aside className="raw-sources-list">
+            {loading && <p className="muted">Загружаем список...</p>}
+            {error && <p className="alert alert-error">{error}</p>}
+            {!loading &&
+              !error &&
+              sources.map((item) => (
+                <button
+                  key={item.path}
+                  type="button"
+                  className={`raw-source-item ${selectedPath === item.path ? 'active' : ''}`}
+                  onClick={() => onSelect(item.path)}
+                >
+                  <span>{item.path}</span>
+                  <span className="muted">{(item.size / 1024).toFixed(1)} KB</span>
+                </button>
+              ))}
+            {!loading && !error && !sources.length && (
+              <div className="empty-state">Файлы не найдены.</div>
+            )}
+          </aside>
+          <section className="raw-sources-content">
+            {loadingContent && <p className="muted">Загружаем файл...</p>}
+            {!loadingContent && selectedPath && (
+              <pre className="text-preview">{content || 'Пустой файл.'}</pre>
+            )}
+            {!loadingContent && !selectedPath && (
+              <div className="empty-state">Выберите файл слева.</div>
+            )}
+          </section>
+        </div>
       </div>
     </div>
   );

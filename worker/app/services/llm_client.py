@@ -827,9 +827,8 @@ def _select_norm_cards(
 ) -> list[NormCard]:
     if not norm_cards:
         return []
-    parts_count = 10
-    part_size = max(1, (len(norm_cards) + parts_count - 1) // parts_count)
-    parts = [norm_cards[i : i + part_size] for i in range(0, len(norm_cards), part_size)]
+    midpoint = (len(norm_cards) + 1) // 2
+    parts = [norm_cards[:midpoint], norm_cards[midpoint:]]
     combined_selected: set[str] = set()
 
     for idx, part in enumerate(parts, start=1):
@@ -898,14 +897,7 @@ def _parse_selected_norm_ids(response_text: str | None) -> list[str]:
             return []
     if not isinstance(data, list):
         return []
-    selected: list[str] = []
-    for item in data:
-        if isinstance(item, dict):
-            if item.get("applicable") is True and item.get("norm_id"):
-                selected.append(str(item["norm_id"]).strip())
-        elif isinstance(item, str):
-            selected.append(item.strip())
-    return selected
+    return [str(item).strip() for item in data if isinstance(item, str)]
 
 
 def _filter_findings_for_unit(

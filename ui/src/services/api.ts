@@ -328,6 +328,11 @@ export interface RunSource {
   change_ranges?: { start: number; end: number }[] | null;
 }
 
+export interface RawSourceEntry {
+  path: string;
+  size: number;
+}
+
 export async function fetchRuns(params?: { skip?: number; limit?: number; user_id?: string }) {
   const { data } = await client.get<ReviewRun[]>('/review-runs', { params });
   return data;
@@ -414,6 +419,19 @@ export async function fetchIOLogs(runId: string) {
 
 export async function fetchRunSources(runId: string) {
   const { data } = await client.get<RunSource[]>(`/review-runs/${runId}/sources`);
+  return data;
+}
+
+export async function fetchRawSourcesIndex(runId: string) {
+  const { data } = await client.get<RawSourceEntry[]>(`/review-runs/${runId}/sources-raw`);
+  return data;
+}
+
+export async function fetchRawSourceContent(runId: string, path: string) {
+  const { data } = await client.get<{ path: string; content: string }>(
+    `/review-runs/${runId}/sources-raw/file`,
+    { params: { path } },
+  );
   return data;
 }
 
