@@ -34,6 +34,7 @@ def load_task_from_json(path: Path) -> AnalysisTask:
     return AnalysisTask(
         review_run_id=uuid.UUID(data.get("review_run_id", str(uuid.uuid4()))),
         sources=sources,
+        settings=data.get("settings"),
     )
 
 
@@ -55,6 +56,7 @@ def sample_task() -> AnalysisTask:
                 module_type="CommonModule",
             )
         ],
+        settings={},
     )
 
 

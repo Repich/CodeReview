@@ -207,10 +207,12 @@ export interface UserProfile {
 
 export interface UserSettings {
   findings_view: 'separate' | 'combined';
+  disable_patterns: boolean;
 }
 
 export interface UserSettingsUpdate {
   findings_view?: 'separate' | 'combined';
+  disable_patterns?: boolean;
 }
 
 export interface NormCatalogEntry {

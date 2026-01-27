@@ -40,10 +40,12 @@ class UserRead(ORMModel):
 
 class UserSettings(ORMModel):
     findings_view: Literal["separate", "combined"] = "separate"
+    disable_patterns: bool = False
 
 
 class UserSettingsUpdate(ORMModel):
     findings_view: Literal["separate", "combined"] | None = None
+    disable_patterns: bool | None = None
 
 
 class UserStatusUpdate(ORMModel):

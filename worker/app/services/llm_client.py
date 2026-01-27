@@ -184,7 +184,8 @@ def generate_ai_suggestions(
 
     # Паттерны (отдельный проход)
     pattern_repo = get_pattern_norm_repository()
-    if units and pattern_repo.cards:
+    disable_patterns = bool(task.settings and task.settings.get("disable_patterns"))
+    if units and pattern_repo.cards and not disable_patterns:
         pattern_norm_ids = set(pattern_repo.norm_ids)
         prompt_versions.append(f"pattern:{pattern_repo.version}")
         for unit in units:

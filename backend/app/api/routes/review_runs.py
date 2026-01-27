@@ -14,6 +14,7 @@ from backend.app.models.audit import AuditLog, IOLog
 from backend.app.models.finding import Finding
 from backend.app.models.review_run import ReviewRun
 from backend.app.models.user import UserAccount
+from backend.app.models.user import UserAccount
 from backend.app.models.enums import (
     AIFindingStatus,
     AuditEventType,
@@ -215,9 +216,15 @@ def fetch_next_task(response: Response, db: Session = Depends(get_db)):
             )
         )
         db.commit()
+        settings_payload: dict | None = None
+        if review_run.user_id:
+            user = db.get(UserAccount, review_run.user_id)
+            if user and isinstance(user.settings, dict):
+                settings_payload = user.settings
         return AnalysisTaskResponse(
             review_run_id=review_run.id,
             sources=[SourceUnitPayload(**source) for source in sources],
+            settings=settings_payload,
         )
 
 

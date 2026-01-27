@@ -33,3 +33,69 @@ norms:
   default_severity: major
   detector_type: custom
   source_reference: Заявки норм
+- norm_id: CUSTOM_003
+  section: Безопасность/Файлы
+  category: custom
+  title: Нормализация расширения файла обязательна
+  norm_text: 'Запрещено формировать расширение файла путем конкатенации с произвольными строками (например, "/" или именем).
+    Расширение должно быть нормализовано: без точек, слешей, пробелов и спецсимволов. Если расширение приходит из данных
+    (например, из структуры), его нужно валидировать и чистить (white‑list допустимых символов).
+    Иначе возможны path traversal и некорректные пути.'
+  tags:
+  - custom
+  scope: любой модуль
+  code_applicability: true
+  automation_hint: code
+  check_type: llm
+  default_severity: critical
+  detector_type: custom
+  source_reference: Ручной аудит
+- norm_id: CUSTOM_004
+  section: Надежность/Коллекции
+  category: custom
+  title: Уникальность ключа при Вставить() в цикле
+  norm_text: 'Если Вставить() выполняется в цикле по коллекции, ключ должен быть гарантированно уникальным.
+    Запрещено использовать потенциально неуникальные ключи (адрес, ссылка, строка) без проверки,
+    иначе предыдущие значения будут молча перезаписаны. При сомнениях используйте составной ключ
+    (адрес + индекс) или храните значения в массиве.'
+  tags:
+  - custom
+  scope: любой модуль
+  code_applicability: true
+  automation_hint: code
+  check_type: llm
+  default_severity: critical
+  detector_type: custom
+  source_reference: Ручной аудит
+- norm_id: CUSTOM_005
+  section: Надежность/Проверки
+  category: custom
+  title: Проверка обязательных полей структуры перед доступом
+  norm_text: 'Перед чтением полей структуры необходимо проверить наличие ключа и заполненность значения
+    (Свойство/ЗначениеЗаполнено). Доступ к несуществующим полям или пустым значениям приводит к
+    исключениям и нарушению обработки.'
+  tags:
+  - custom
+  scope: любой модуль
+  code_applicability: true
+  automation_hint: code
+  check_type: llm
+  default_severity: major
+  detector_type: custom
+  source_reference: Ручной аудит
+- norm_id: CUSTOM_006
+  section: Надежность/Файлы
+  category: custom
+  title: Запрет фиксированного префикса в именах файлов
+  norm_text: 'Запрещено использовать фиксированный префикс/суффикс при формировании имени файла без уникальности
+    (например, "/1.расширение"). Это приводит к перезаписи файлов и потере данных. Используйте уникальный
+    идентификатор (GUID, хэш, индекс в цикле).'
+  tags:
+  - custom
+  scope: любой модуль
+  code_applicability: true
+  automation_hint: code
+  check_type: llm
+  default_severity: major
+  detector_type: custom
+  source_reference: Ручной аудит

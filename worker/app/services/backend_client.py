@@ -37,6 +37,7 @@ class BackendClient:
         return AnalysisTask(
             review_run_id=uuid.UUID(payload["review_run_id"]),
             sources=sources,
+            settings=payload.get("settings"),
         )
 
     def submit_results(self, run_id: uuid.UUID, data: dict[str, Any]) -> None:

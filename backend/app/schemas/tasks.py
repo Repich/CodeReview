@@ -26,6 +26,7 @@ class SourceUnitPayload(BaseModel):
 class AnalysisTaskResponse(BaseModel):
     review_run_id: uuid.UUID
     sources: list[SourceUnitPayload]
+    settings: dict | None = None
 
 
 class AnalysisFindingPayload(BaseModel):

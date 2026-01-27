@@ -39,6 +39,7 @@ class AnalysisTask:
     review_run_id: uuid.UUID
     sources: list[SourceUnit]
     created_at: datetime = field(default_factory=datetime.utcnow)
+    settings: dict[str, Any] | None = None
 
 
 @dataclass

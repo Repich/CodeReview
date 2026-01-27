@@ -22,6 +22,7 @@ function AccountPage() {
     queryFn: fetchChangelog,
   });
   const [findingsView, setFindingsView] = useState<'separate' | 'combined'>('separate');
+  const [disablePatterns, setDisablePatterns] = useState(false);
   const settingsMutation = useMutation({
     mutationFn: (payload: { findings_view: 'separate' | 'combined' }) =>
       updateUserSettings(payload),
@@ -35,7 +36,11 @@ function AccountPage() {
     if (stored) {
       setFindingsView(stored);
     }
-  }, [userQuery.data?.settings?.findings_view]);
+    const storedDisable = userQuery.data?.settings?.disable_patterns;
+    if (typeof storedDisable === 'boolean') {
+      setDisablePatterns(storedDisable);
+    }
+  }, [userQuery.data?.settings?.findings_view, userQuery.data?.settings?.disable_patterns]);
 
   if (userQuery.isLoading || walletQuery.isLoading) {
     return <p>Загружаем профиль...</p>;
@@ -127,6 +132,35 @@ function AccountPage() {
             >
               Вместе
             </button>
+          </div>
+          <div style={{ marginTop: '1rem' }}>
+            <p className="muted" style={{ marginBottom: '0.5rem' }}>
+              Паттерны (LLM)
+            </p>
+            <div className="segmented-control" role="group" aria-label="Проверка паттернов">
+              <button
+                type="button"
+                className={!disablePatterns ? 'active' : ''}
+                onClick={() => {
+                  setDisablePatterns(false);
+                  settingsMutation.mutate({ disable_patterns: false });
+                }}
+                disabled={settingsMutation.isPending}
+              >
+                Включена
+              </button>
+              <button
+                type="button"
+                className={disablePatterns ? 'active' : ''}
+                onClick={() => {
+                  setDisablePatterns(true);
+                  settingsMutation.mutate({ disable_patterns: true });
+                }}
+                disabled={settingsMutation.isPending}
+              >
+                Выключена
+              </button>
+            </div>
           </div>
           <p className="muted" style={{ marginTop: '0.75rem' }}>
             Раздельно — отдельная вкладка LLM. Вместе — единый список слева от кода.
