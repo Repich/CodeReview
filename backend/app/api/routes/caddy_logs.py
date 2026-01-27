@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from starlette.requests import ClientDisconnect
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_admin, get_db
@@ -26,7 +27,10 @@ async def ingest_caddy_logs(request: Request, db: Session = Depends(get_db)) -> 
     token = _extract_token(request)
     if token != expected_token:
         raise HTTPException(status_code=401, detail="Invalid ingest token")
-    body = await request.body()
+    try:
+        body = await request.body()
+    except ClientDisconnect:
+        return Response(status_code=204)
     entries = _parse_entries(body)
     if not entries:
         return Response(status_code=204)
