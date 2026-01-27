@@ -461,6 +461,11 @@ function RunDetailsPage() {
     }
   }, [highlightedRange, runSourcesQuery.data]);
   const totalFindings = findingsQuery.data?.total ?? 0;
+  const combinedFindingsCount = useMemo(
+    () => totalFindings + aiFindings.length,
+    [totalFindings, aiFindings.length],
+  );
+  const displayFindingsCount = isCombinedView ? combinedFindingsCount : totalFindings;
   const severityCounts = useMemo(() => {
     const counts: Record<string, number> = {
       critical: 0,
@@ -565,7 +570,7 @@ function RunDetailsPage() {
   const aiCountDisplay = aiFindingsQuery.isLoading ? '…' : String(aiFindings.length);
   const tabs = useMemo(() => {
     const items: { id: string; label: string; count: number | string; adminOnly?: boolean }[] = [
-      { id: 'findings', label: 'Найденные нарушения', count: totalFindings },
+      { id: 'findings', label: 'Найденные нарушения', count: displayFindingsCount },
       { id: 'ai', label: 'Предложения LLM', count: aiCountDisplay },
       {
         id: 'complexity',
@@ -586,6 +591,7 @@ function RunDetailsPage() {
       .filter((item) => (isCombinedView ? item.id !== 'ai' : true));
   }, [
     totalFindings,
+    displayFindingsCount,
     aiCountDisplay,
     complexityMetrics,
     llmLogsQuery.data,
@@ -1231,7 +1237,7 @@ function RunDetailsPage() {
         <div className="section-grid">
           <div>
             <p className="muted">Нарушения</p>
-            <strong>{totalFindings}</strong>
+            <strong>{displayFindingsCount}</strong>
             <div className="pill-row">
               {(['critical', 'major', 'minor', 'warning', 'info'] as const)
                 .filter((level) => severityCounts[level] > 0)
@@ -1240,7 +1246,7 @@ function RunDetailsPage() {
                     {level}: {severityCounts[level]}
                   </span>
                 ))}
-              {!totalFindings && <span className="muted">Пока нет</span>}
+              {!displayFindingsCount && <span className="muted">Пока нет</span>}
             </div>
           </div>
           <div>

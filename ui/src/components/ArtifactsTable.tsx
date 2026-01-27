@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { getStoredAuthToken } from '../services/api';
 import type { IOLogEntry } from '../services/api';
 
@@ -18,6 +19,13 @@ function ArtifactsTable({ artifacts, artifactBaseUrl }: Props) {
     return <p className="muted">Артефактов пока нет.</p>;
   }
 
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewTitle, setPreviewTitle] = useState('');
+  const [previewContent, setPreviewContent] = useState('');
+  const [previewKind, setPreviewKind] = useState<'text' | 'json'>('text');
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   const buildUrl = (artifact: IOLogEntry) => {
     const base = artifactBaseUrl || (import.meta.env.VITE_API_BASE || 'http://localhost:8000/api');
     const url = new URL(`${base}/audit/io/${artifact.id}/download`);
@@ -28,40 +36,191 @@ function ArtifactsTable({ artifacts, artifactBaseUrl }: Props) {
     return url.toString();
   };
 
+  const isPreviewable = (artifact: IOLogEntry) => {
+    const path = artifact.storage_path.toLowerCase();
+    return path.endsWith('.txt') || path.endsWith('.json');
+  };
+
+  const handlePreview = async (artifact: IOLogEntry) => {
+    setPreviewError(null);
+    setPreviewLoading(true);
+    setPreviewOpen(true);
+    setPreviewTitle(artifact.storage_path);
+    const url = buildUrl(artifact);
+    try {
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const text = await response.text();
+      const lower = artifact.storage_path.toLowerCase();
+      if (lower.endsWith('.json')) {
+        setPreviewKind('json');
+        setPreviewContent(text);
+      } else {
+        setPreviewKind('text');
+        setPreviewContent(text);
+      }
+    } catch (error) {
+      console.error('Failed to load artifact', error);
+      setPreviewError('Не удалось загрузить артефакт для просмотра.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   return (
-    <div className="table-container">
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Тип</th>
-            <th>Направление</th>
-            <th>Размер</th>
-            <th>SHA256</th>
-            <th>Создан</th>
-            <th>Действие</th>
-          </tr>
-        </thead>
-        <tbody>
-          {artifacts.map((artifact) => (
-            <tr key={artifact.id}>
-              <td>{artifact.artifact_type}</td>
-              <td>{artifact.direction}</td>
-              <td>{humanSize(artifact.size_bytes ?? undefined)}</td>
-              <td>
-                <code>{artifact.checksum ?? '—'}</code>
-              </td>
-              <td>{new Date(artifact.created_at).toLocaleString()}</td>
-              <td>
-                <a href={buildUrl(artifact)} target="_blank" rel="noreferrer">
-                  Скачать
-                </a>
-              </td>
+    <>
+      <div className="table-container">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Тип</th>
+              <th>Направление</th>
+              <th>Размер</th>
+              <th>SHA256</th>
+              <th>Создан</th>
+              <th>Действие</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {artifacts.map((artifact) => (
+              <tr key={artifact.id}>
+                <td>{artifact.artifact_type}</td>
+                <td>{artifact.direction}</td>
+                <td>{humanSize(artifact.size_bytes ?? undefined)}</td>
+                <td>
+                  <code>{artifact.checksum ?? '—'}</code>
+                </td>
+                <td>{new Date(artifact.created_at).toLocaleString()}</td>
+                <td>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <a href={buildUrl(artifact)} target="_blank" rel="noreferrer">
+                      Скачать
+                    </a>
+                    {isPreviewable(artifact) && (
+                      <button
+                        type="button"
+                        className="link-button"
+                        onClick={() => handlePreview(artifact)}
+                      >
+                        Просмотр
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {previewOpen && (
+        <ArtifactPreviewModal
+          title={previewTitle}
+          content={previewContent}
+          kind={previewKind}
+          loading={previewLoading}
+          error={previewError}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
+    </>
   );
 }
 
 export default ArtifactsTable;
+
+function ArtifactPreviewModal({
+  title,
+  content,
+  kind,
+  loading,
+  error,
+  onClose,
+}: {
+  title: string;
+  content: string;
+  kind: 'text' | 'json';
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+}) {
+  const formattedJson = useMemo(() => {
+    if (kind !== 'json') return '';
+    try {
+      const parsed = JSON.parse(content);
+      const pretty = JSON.stringify(parsed, null, 2);
+      return highlightJson(pretty);
+    } catch (err) {
+      return highlightJson(content);
+    }
+  }, [content, kind]);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <strong>Просмотр артефакта</strong>
+            <p className="muted" style={{ margin: 0 }}>
+              {title}
+            </p>
+          </div>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Закрыть
+          </button>
+        </div>
+        {loading && <p className="muted">Загружаем...</p>}
+        {error && <p className="alert alert-error">{error}</p>}
+        {!loading && !error && (
+          <div className="preview-body">
+            {kind === 'json' ? (
+              <pre
+                className="json-preview"
+                dangerouslySetInnerHTML={{ __html: formattedJson }}
+              />
+            ) : (
+              <pre className="text-preview">{content}</pre>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const JSON_TOKEN_RE =
+  /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g;
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function highlightJson(value: string) {
+  let result = '';
+  let lastIndex = 0;
+  for (const match of value.matchAll(JSON_TOKEN_RE)) {
+    const index = match.index ?? 0;
+    if (index > lastIndex) {
+      result += escapeHtml(value.slice(lastIndex, index));
+    }
+    const token = match[0];
+    let cls = 'json-number';
+    if (token.startsWith('"')) {
+      cls = token.endsWith(':') ? 'json-key' : 'json-string';
+    } else if (token === 'true' || token === 'false') {
+      cls = 'json-boolean';
+    } else if (token === 'null') {
+      cls = 'json-null';
+    }
+    result += `<span class="${cls}">${escapeHtml(token)}</span>`;
+    lastIndex = index + token.length;
+  }
+  if (lastIndex < value.length) {
+    result += escapeHtml(value.slice(lastIndex));
+  }
+  return result;
+}
