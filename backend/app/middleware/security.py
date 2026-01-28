@@ -6,6 +6,8 @@ from ipaddress import ip_network, IPv4Address, IPv6Address
 from typing import Iterable, Optional
 
 from fastapi import Request
+from sqlalchemy import inspect
+from sqlalchemy.orm.exc import DetachedInstanceError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
@@ -101,7 +103,21 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
     def _resolve_user_id(self, request: Request):
         user = getattr(request.state, "current_user", None)
-        return getattr(user, "id", None)
+        if not user:
+            return None
+        try:
+            return getattr(user, "id", None)
+        except DetachedInstanceError:
+            try:
+                state = inspect(user)
+                if state.identity:
+                    if len(state.identity) == 1:
+                        return state.identity[0]
+                    return state.identity
+            except Exception:
+                return None
+        except Exception:
+            return None
 
     def _lookup_country(self, ip_obj: Optional[IPv4Address | IPv6Address]) -> Optional[str]:
         if not ip_obj or not self.geo_reader:
