@@ -121,6 +121,15 @@ def save_llm_log(run_id: str, index: int, payload: dict[str, Any]) -> list[tuple
     return artifacts
 
 
+def save_evaluation_report(run_id: str, payload: dict[str, Any]) -> tuple[str, int]:
+    target_dir = _ensure_dir()
+    file_name = f"{run_id}_evaluation_report.json"
+    file_path = target_dir / file_name
+    data = json.dumps(payload, ensure_ascii=False, indent=2)
+    file_path.write_text(data, encoding="utf-8")
+    return file_name, len(data.encode("utf-8"))
+
+
 def load_json(relative_path: str) -> dict[str, Any]:
     target_dir = _ensure_dir()
     payload = (target_dir / relative_path).read_text(encoding="utf-8")

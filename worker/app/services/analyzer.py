@@ -50,6 +50,7 @@ class Analyzer:
             ai_suggestions=llm_result.suggestions if llm_result else [],
             llm_prompt_version=llm_result.prompt_version if llm_result else None,
             llm_logs=llm_result.log_entries if llm_result else [],
+            evaluation_report=llm_result.evaluation_report if llm_result else None,
         )
 
     @staticmethod

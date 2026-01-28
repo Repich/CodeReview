@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_db, get_current_user
+from backend.app.api.deps import get_db, get_current_user, get_current_admin
 from backend.app.api.utils import ensure_run_access
 from backend.app.models.ai_finding import AIFinding
 from backend.app.models.audit import AuditLog, IOLog
@@ -27,6 +27,7 @@ from backend.app.schemas.review_runs import (
     ReviewRunCreate,
     ReviewRunRead,
     ReviewRunUpdate,
+    ReviewRunEvaluationRequest,
     SourceChangePayload,
 )
 from backend.app.schemas.tasks import (
@@ -227,6 +228,7 @@ def fetch_next_task(response: Response, db: Session = Depends(get_db)):
             review_run_id=review_run.id,
             sources=[SourceUnitPayload(**source) for source in sources],
             settings=settings_payload,
+            context=review_run.context,
         )
 
 
@@ -310,6 +312,21 @@ def submit_results(
             db.add(io_log)
             if artifact_type == "llm_log.json":
                 llm_log_count += 1
+
+    if payload.evaluation_report:
+        report_path, report_size = artifact_service.save_evaluation_report(
+            str(review_run.id), payload.evaluation_report
+        )
+        db.add(
+            IOLog(
+                review_run_id=review_run.id,
+                direction=IODirection.OUT,
+                artifact_type="evaluation_report.json",
+                storage_path=report_path,
+                checksum=None,
+                size_bytes=report_size,
+            )
+        )
 
     db.add(
         AuditLog(
@@ -495,6 +512,78 @@ def get_review_run_sources(
             }
         )
     return enriched
+
+
+@router.post("/{review_run_id}/evaluation", response_model=ReviewRunRead, status_code=201)
+def create_review_run_evaluation(
+    review_run_id: uuid.UUID,
+    payload: ReviewRunEvaluationRequest,
+    db: Session = Depends(get_db),
+    current_admin: UserAccount = Depends(get_current_admin),
+) -> ReviewRun:
+    review_run = db.get(ReviewRun, review_run_id)
+    if not review_run:
+        raise HTTPException(status_code=404, detail="Review run not found")
+    ctx = review_run.context or {}
+    artifact_path = ctx.get("source_artifact")
+    if not artifact_path:
+        raise HTTPException(status_code=404, detail="Sources are not available for this run")
+    eval_ctx = {
+        "source_artifact": artifact_path,
+        "evaluation_of": str(review_run_id),
+        "evaluation_config": {"selection_runs": payload.selection_runs},
+    }
+    eval_run = ReviewRun(
+        id=uuid.uuid4(),
+        user_id=current_admin.id,
+        project_id=review_run.project_id,
+        external_ref=f"eval:{review_run_id}",
+        status=ReviewStatus.QUEUED,
+        cost_points=0,
+        context=eval_ctx,
+    )
+    db.add(eval_run)
+    db.add(
+        AuditLog(
+            review_run_id=eval_run.id,
+            event_type=AuditEventType.RUN_CREATED,
+            payload={"evaluation_of": str(review_run_id), "selection_runs": payload.selection_runs},
+        )
+    )
+    db.commit()
+    db.refresh(eval_run)
+    return ReviewRunRead.model_validate(eval_run)
+
+
+@router.get("/{review_run_id}/evaluation")
+def get_review_run_evaluation(
+    review_run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_admin: UserAccount = Depends(get_current_admin),
+):
+    _ = current_admin  # ensure admin access
+    eval_run = (
+        db.query(ReviewRun)
+        .filter(ReviewRun.context["evaluation_of"].astext == str(review_run_id))
+        .order_by(ReviewRun.queued_at.desc())
+        .first()
+    )
+    if not eval_run:
+        return {"evaluation_run_id": None, "report": None, "status": None}
+    report_log = (
+        db.query(IOLog)
+        .filter(
+            IOLog.review_run_id == eval_run.id,
+            IOLog.artifact_type == "evaluation_report.json",
+            IOLog.direction == IODirection.OUT,
+        )
+        .order_by(IOLog.created_at.desc())
+        .first()
+    )
+    report = None
+    if report_log:
+        report = artifact_service.load_json(report_log.storage_path)
+    return {"evaluation_run_id": str(eval_run.id), "report": report, "status": eval_run.status}
 
 
 @router.get("/{review_run_id}/sources-raw")

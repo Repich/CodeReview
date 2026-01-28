@@ -422,6 +422,22 @@ export async function fetchRunSources(runId: string) {
   return data;
 }
 
+export async function startRunEvaluation(runId: string, selectionRuns: number) {
+  const { data } = await client.post<ReviewRun>(`/review-runs/${runId}/evaluation`, {
+    selection_runs: selectionRuns,
+  });
+  return data;
+}
+
+export async function fetchRunEvaluation(runId: string) {
+  const { data } = await client.get<{
+    evaluation_run_id: string | null;
+    report: Record<string, unknown> | null;
+    status: string | null;
+  }>(`/review-runs/${runId}/evaluation`);
+  return data;
+}
+
 export async function fetchRawSourcesIndex(runId: string) {
   const { data } = await client.get<RawSourceEntry[]>(`/review-runs/${runId}/sources-raw`);
   return data;

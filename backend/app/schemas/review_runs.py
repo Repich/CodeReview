@@ -41,6 +41,10 @@ class ReviewRunUpdate(ORMModel):
     context: dict | None = None
 
 
+class ReviewRunEvaluationRequest(ORMModel):
+    selection_runs: int = Field(default=5, ge=2, le=20)
+
+
 class ReviewRunRead(ReviewRunBase):
     id: uuid.UUID
     user_id: uuid.UUID | None = None

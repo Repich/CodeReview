@@ -27,6 +27,7 @@ class AnalysisTaskResponse(BaseModel):
     review_run_id: uuid.UUID
     sources: list[SourceUnitPayload]
     settings: dict | None = None
+    context: dict | None = None
 
 
 class AnalysisFindingPayload(BaseModel):
@@ -65,6 +66,7 @@ class AnalysisResultPayload(BaseModel):
     llm_prompt_version: str | None = None
     llm_logs: list["LLMDiagnosticPayload"] | None = None
     metrics: dict[str, Any] | None = None
+    evaluation_report: dict[str, Any] | None = None
 
 
 class LLMDiagnosticPayload(BaseModel):

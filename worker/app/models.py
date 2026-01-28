@@ -40,6 +40,7 @@ class AnalysisTask:
     sources: list[SourceUnit]
     created_at: datetime = field(default_factory=datetime.utcnow)
     settings: dict[str, Any] | None = None
+    context: dict[str, Any] | None = None
 
 
 @dataclass
@@ -67,6 +68,7 @@ class AnalysisResult:
     ai_suggestions: list["AISuggestion"] = field(default_factory=list)
     llm_prompt_version: str | None = None
     llm_logs: list["LLMDiagnostic"] = field(default_factory=list)
+    evaluation_report: dict[str, Any] | None = None
 
 
 @dataclass

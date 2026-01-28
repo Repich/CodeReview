@@ -110,6 +110,7 @@ class LLMResult:
     suggestions: list[AISuggestion]
     prompt_version: str | None
     log_entries: list[LLMDiagnostic]
+    evaluation_report: dict[str, Any] | None = None
 
 
 def generate_ai_suggestions(
@@ -124,6 +125,7 @@ def generate_ai_suggestions(
     use_all_norms = bool(task.settings and task.settings.get("use_all_norms"))
     disable_patterns = bool(task.settings and task.settings.get("disable_patterns"))
     general_repo = get_general_norm_repository() if use_all_norms else None
+    evaluation_config = (task.context or {}).get("evaluation_config") if task.context else None
     units: list[CodeUnit] = []
     for source in task.sources:
         units.extend(split_source_into_units(source))
@@ -165,6 +167,21 @@ def generate_ai_suggestions(
         if not selection_pool:
             logger.warning("Norm repository is empty; skipping LLM selection stage")
         else:
+            if evaluation_config:
+                report = _evaluate_selection_stability(
+                    units=units,
+                    norm_cards=selection_pool,
+                    api_key=api_key,
+                    diagnostics=diagnostics,
+                    selection_runs=_extract_selection_runs(evaluation_config),
+                )
+                prompt_versions.append("evaluation")
+                return LLMResult(
+                    suggestions=[],
+                    prompt_version="evaluation",
+                    log_entries=diagnostics,
+                    evaluation_report=report,
+                )
             for unit in units:
                 selected_by_unit[unit.unit_id] = _select_norm_cards(
                     unit, selection_pool, api_key, diagnostics
@@ -879,6 +896,71 @@ def _select_norm_cards(
         return []
     selected = [card for card in norm_cards if card.norm_id in combined_selected]
     return selected
+
+
+def _extract_selection_runs(config: dict) -> int:
+    try:
+        value = int(config.get("selection_runs", 5))
+    except (TypeError, ValueError):
+        value = 5
+    return max(2, min(20, value))
+
+
+def _evaluate_selection_stability(
+    units: list[CodeUnit],
+    norm_cards: list[NormCard],
+    api_key: str,
+    diagnostics: list[LLMDiagnostic],
+    selection_runs: int,
+) -> dict[str, Any]:
+    unit_reports: list[dict[str, Any]] = []
+    jaccards: list[float] = []
+    for unit in units:
+        sets: list[set[str]] = []
+        for _ in range(selection_runs):
+            selected = _select_norm_cards(unit, norm_cards, api_key, diagnostics)
+            sets.append(set(card.norm_id for card in selected))
+        avg_jaccard = _average_pairwise_jaccard(sets)
+        union_all = set().union(*sets) if sets else set()
+        intersection_all = set(sets[0]) if sets else set()
+        for s in sets[1:]:
+            intersection_all &= s
+        unit_reports.append(
+            {
+                "unit_id": unit.unit_id,
+                "unit_name": unit.unit_name,
+                "runs": [sorted(list(s)) for s in sets],
+                "avg_jaccard": avg_jaccard,
+                "union_size": len(union_all),
+                "intersection_size": len(intersection_all),
+                "counts": [len(s) for s in sets],
+            }
+        )
+        jaccards.append(avg_jaccard)
+    overall = {
+        "avg_jaccard": sum(jaccards) / len(jaccards) if jaccards else 1.0,
+        "units": len(units),
+        "selection_runs": selection_runs,
+    }
+    return {"overall": overall, "units": unit_reports}
+
+
+def _average_pairwise_jaccard(sets: list[set[str]]) -> float:
+    if len(sets) <= 1:
+        return 1.0
+    total = 0.0
+    count = 0
+    for i in range(len(sets)):
+        for j in range(i + 1, len(sets)):
+            a, b = sets[i], sets[j]
+            union = a | b
+            if not union:
+                score = 1.0
+            else:
+                score = len(a & b) / len(union)
+            total += score
+            count += 1
+    return total / count if count else 1.0
 
 
 def _parse_selected_norm_ids(response_text: str | None) -> list[str]:

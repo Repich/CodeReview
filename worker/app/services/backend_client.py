@@ -38,6 +38,7 @@ class BackendClient:
             review_run_id=uuid.UUID(payload["review_run_id"]),
             sources=sources,
             settings=payload.get("settings"),
+            context=payload.get("context"),
         )
 
     def submit_results(self, run_id: uuid.UUID, data: dict[str, Any]) -> None:

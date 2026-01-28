@@ -17,6 +17,8 @@ import {
   fetchRunSources,
   createSuggestedNorm,
   fetchSuggestedNormSections,
+  fetchRunEvaluation,
+  startRunEvaluation,
 } from '../services/api';
 import type {
   Finding,
@@ -131,6 +133,7 @@ function RunDetailsPage() {
   const [normText, setNormText] = useState('');
   const [normMessage, setNormMessage] = useState<string | null>(null);
   const [normState, setNormState] = useState<'idle' | 'success' | 'error'>('idle');
+  const [selectionRuns, setSelectionRuns] = useState(5);
 
   const runQuery = useQuery({
     queryKey: ['run', id],
@@ -197,6 +200,23 @@ function RunDetailsPage() {
     queryKey: ['llm-logs', id],
     queryFn: () => fetchLLMLogs(id!),
     enabled: Boolean(id) && isAdmin,
+  });
+
+  const evaluationQuery = useQuery({
+    queryKey: ['run-evaluation', id],
+    queryFn: () => fetchRunEvaluation(id!),
+    enabled: Boolean(id) && isAdmin,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === 'queued' || status === 'running' ? 4000 : false;
+    },
+  });
+
+  const evaluationMutation = useMutation({
+    mutationFn: () => startRunEvaluation(id!, selectionRuns),
+    onSuccess: () => {
+      evaluationQuery.refetch();
+    },
   });
 
   const runSourcesQuery = useQuery({
@@ -568,6 +588,11 @@ function RunDetailsPage() {
   const changeRangeCount = changeRangeMap ? Object.keys(changeRangeMap).length : 0;
   const hasChangeRanges = changeRangeCount > 0;
   const aiCountDisplay = aiFindingsQuery.isLoading ? '…' : String(aiFindings.length);
+  const evaluationCountDisplay = evaluationQuery.isLoading
+    ? '…'
+    : evaluationQuery.data?.report
+      ? '1'
+      : '0';
   const tabs = useMemo(() => {
     const items: { id: string; label: string; count: number | string; adminOnly?: boolean }[] = [
       { id: 'findings', label: 'Найденные нарушения', count: displayFindingsCount },
@@ -583,6 +608,12 @@ function RunDetailsPage() {
         count: llmLogsQuery.data?.length ?? 0,
         adminOnly: true,
       },
+      {
+        id: 'evaluation',
+        label: 'Проверка детерминизма',
+        count: evaluationCountDisplay,
+        adminOnly: true,
+      },
       { id: 'audit', label: 'Журнал событий', count: auditQuery.data?.length ?? 0 },
       { id: 'artifacts', label: 'Артефакты', count: artifactsQuery.data?.length ?? 0 },
     ];
@@ -593,6 +624,7 @@ function RunDetailsPage() {
     totalFindings,
     displayFindingsCount,
     aiCountDisplay,
+    evaluationCountDisplay,
     complexityMetrics,
     llmLogsQuery.data,
     auditQuery.data,
@@ -1508,6 +1540,62 @@ function RunDetailsPage() {
               <div className="empty-state">Логи LLM отсутствуют.</div>
             )}
           </div>
+        </section>
+      )}
+
+      {activeTab === 'evaluation' && isAdmin && (
+        <section className="card" style={{ marginBottom: '1.5rem' }}>
+          <div className="card-header">
+            <div>
+              <h2 className="card-title">Проверка детерминизма</h2>
+              <p className="muted">
+                Отдельный режим для администратора: повторяемость выбора норм на одном и том же коде.
+              </p>
+            </div>
+          </div>
+          <div className="section-grid" style={{ marginBottom: '1rem' }}>
+            <label className="field">
+              <span>Количество прогонов (2–20)</span>
+              <input
+                type="number"
+                min={2}
+                max={20}
+                value={selectionRuns}
+                onChange={(event) => setSelectionRuns(Number(event.target.value || 2))}
+              />
+            </label>
+            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => evaluationMutation.mutate()}
+                disabled={evaluationMutation.isPending || !id}
+              >
+                {evaluationMutation.isPending ? 'Запускаем...' : 'Запустить проверку'}
+              </button>
+            </div>
+          </div>
+          {evaluationQuery.isLoading && <p className="muted">Загружаем результаты...</p>}
+          {evaluationQuery.error && (
+            <p className="alert alert-error">Не удалось загрузить отчет проверки.</p>
+          )}
+          {evaluationQuery.data?.status && (
+            <p className="muted">
+              Статус последнего прогона: <strong>{evaluationQuery.data.status}</strong>
+            </p>
+          )}
+          {evaluationQuery.data?.evaluation_run_id && (
+            <p className="muted">ID запуска проверки: {evaluationQuery.data.evaluation_run_id}</p>
+          )}
+          {evaluationQuery.data?.report ? (
+            <pre className="json-preview" style={{ marginTop: '1rem' }}>
+              {JSON.stringify(evaluationQuery.data.report, null, 2)}
+            </pre>
+          ) : (
+            !evaluationQuery.isLoading && (
+              <div className="empty-state">Отчет пока не сформирован.</div>
+            )
+          )}
         </section>
       )}
 
