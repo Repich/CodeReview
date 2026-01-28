@@ -15,6 +15,7 @@
 - Исправлено падение access-log middleware при detached user (без сессии).
 - Исправлена запись audit_log для evaluation-запуска (flush перед вставкой).
 - В payload результата воркера добавлен evaluation_report.
+- Парсер selection теперь понимает формат с applicable/evidence (объекты), а не только список norm_id.
 
 ## 2026-01-22
 - Добавлены настройки интерфейса (раздельно/вместе).

@@ -979,7 +979,19 @@ def _parse_selected_norm_ids(response_text: str | None) -> list[str]:
             return []
     if not isinstance(data, list):
         return []
-    return [str(item).strip() for item in data if isinstance(item, str)]
+    results: list[str] = []
+    for item in data:
+        if isinstance(item, str):
+            value = item.strip()
+            if value:
+                results.append(value)
+            continue
+        if isinstance(item, dict):
+            norm_id = item.get("norm_id")
+            applicable = item.get("applicable")
+            if applicable is True and isinstance(norm_id, str) and norm_id.strip():
+                results.append(norm_id.strip())
+    return results
 
 
 def _filter_findings_for_unit(
