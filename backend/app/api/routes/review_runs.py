@@ -543,6 +543,7 @@ def create_review_run_evaluation(
         context=eval_ctx,
     )
     db.add(eval_run)
+    db.flush()
     db.add(
         AuditLog(
             review_run_id=eval_run.id,
