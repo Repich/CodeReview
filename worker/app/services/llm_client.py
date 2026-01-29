@@ -434,8 +434,9 @@ def _call_llm(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
-        "temperature": temperature,
     }
+    if provider != "openai":
+        payload["temperature"] = temperature
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
