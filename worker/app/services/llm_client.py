@@ -823,7 +823,13 @@ def _format_norm_titles(norm_cards: list[NormCard]) -> str:
         title = getattr(card, "title", None) or _extract_body_field(card.body, "Название") or card.norm_id
         section_value = getattr(card, "section", None) or _extract_body_field(card.body, "Раздел")
         section = f" [{section_value}]" if section_value else ""
-        lines.append(f"- {card.norm_id}: {title}{section}")
+        hint = _extract_body_field(card.body, "Подсказка детекта") or _extract_body_field(
+            card.body, "Подсказка"
+        )
+        hint_text = ""
+        if hint and hint != "—":
+            hint_text = f" | маркеры: {hint}"
+        lines.append(f"- {card.norm_id}: {title}{section}{hint_text}")
     return "\n".join(lines)
 
 
