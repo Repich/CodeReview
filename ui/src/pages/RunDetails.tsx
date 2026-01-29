@@ -147,6 +147,10 @@ function RunDetailsPage() {
   });
 
   const isActiveRun = ['queued', 'running'].includes(runQuery.data?.status ?? '');
+  const evaluationOf = (runQuery.data?.context as Record<string, unknown> | undefined)?.evaluation_of as
+    | string
+    | undefined;
+  const isEvaluationRun = Boolean(evaluationOf);
 
   const findingsQuery = useQuery({
     queryKey: ['findings', id],
@@ -285,8 +289,12 @@ function RunDetailsPage() {
   });
 
   const rerunMutation = useMutation({
-    mutationFn: () => rerunReviewRun(id!),
-    onSuccess: () => {
+    mutationFn: (runId: string) => rerunReviewRun(runId),
+    onSuccess: (_data, runId) => {
+      if (runId && runId !== id) {
+        navigate(`/runs/${runId}`);
+        return;
+      }
       runQuery.refetch();
       findingsQuery.refetch();
       aiFindingsQuery.refetch();
@@ -1211,12 +1219,15 @@ function RunDetailsPage() {
     if (!canEditRun) {
       return;
     }
+    const targetId = isEvaluationRun && evaluationOf ? evaluationOf : id;
     if (
       window.confirm(
-        'Перезапустить запуск? Текущие findings, логи и артефакты будут очищены.',
+        isEvaluationRun
+          ? 'Перезапустить базовый запуск? Текущие findings, логи и артефакты будут очищены.'
+          : 'Перезапустить запуск? Текущие findings, логи и артефакты будут очищены.',
       )
     ) {
-      rerunMutation.mutate();
+      rerunMutation.mutate(targetId);
     }
   };
 
@@ -1242,7 +1253,11 @@ function RunDetailsPage() {
             }
             onClick={handleRerun}
           >
-            {rerunMutation.isPending ? 'Перезапускаем…' : 'Перезапустить'}
+            {rerunMutation.isPending
+              ? 'Перезапускаем…'
+              : isEvaluationRun
+                ? 'Перезапустить базовый запуск'
+                : 'Перезапустить'}
           </button>
           {rerunMutation.isError && (
             <span className="alert alert-error" style={{ marginTop: '0.25rem' }}>
