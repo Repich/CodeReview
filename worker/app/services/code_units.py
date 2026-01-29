@@ -19,6 +19,7 @@ TAG_KEYWORDS = {
 }
 MAX_UNIT_LINES = 200
 OVERLAP_LINES = 20
+MIN_UNIT_LINES = 100
 
 
 @dataclass
@@ -40,6 +41,8 @@ def split_source_into_units(source: SourceUnit) -> list[CodeUnit]:
         return []
 
     boundaries = _find_boundaries(lines)
+    if boundaries:
+        boundaries = _merge_short_boundaries(boundaries, min_lines=MIN_UNIT_LINES)
     units: list[CodeUnit] = []
     for idx, boundary in enumerate(boundaries):
         start = boundary.start_line
@@ -239,3 +242,40 @@ def _find_boundaries(lines: list[str]) -> list[_Boundary]:
     if boundaries:
         boundaries[-1].end_line = len(lines)
     return boundaries
+
+
+def _merge_short_boundaries(boundaries: list[_Boundary], min_lines: int) -> list[_Boundary]:
+    if not boundaries or min_lines <= 0:
+        return boundaries
+    merged: list[_Boundary] = []
+    current = _Boundary(
+        name=boundaries[0].name,
+        kind=boundaries[0].kind,
+        start_line=boundaries[0].start_line,
+        end_line=boundaries[0].end_line,
+    )
+    for boundary in boundaries[1:]:
+        if current.end_line is None:
+            current.end_line = boundary.end_line
+        current_len = (current.end_line or current.start_line) - current.start_line + 1
+        if current_len < min_lines:
+            current.name = _merge_boundary_names(current.name, boundary.name)
+            current.end_line = boundary.end_line
+            continue
+        merged.append(current)
+        current = _Boundary(
+            name=boundary.name,
+            kind=boundary.kind,
+            start_line=boundary.start_line,
+            end_line=boundary.end_line,
+        )
+    if current:
+        merged.append(current)
+    return merged
+
+
+def _merge_boundary_names(left: str, right: str) -> str:
+    if left == right:
+        return left
+    base = left.split("..", 1)[0]
+    return f"{base}..{right}"

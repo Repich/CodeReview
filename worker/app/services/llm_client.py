@@ -189,9 +189,13 @@ def generate_ai_suggestions(
                     evaluation_report=report,
                 )
             for unit in units:
+                candidate_pool = _prefilter_norm_cards(unit, selection_pool)
+                if not candidate_pool:
+                    selected_by_unit[unit.unit_id] = []
+                    continue
                 selected_by_unit[unit.unit_id] = _select_norm_cards(
                     unit,
-                    selection_pool,
+                    candidate_pool,
                     api_key,
                     diagnostics,
                     llm_provider=llm_provider,
