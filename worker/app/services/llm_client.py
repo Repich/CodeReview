@@ -178,6 +178,8 @@ def generate_ai_suggestions(
                     api_key=api_key,
                     diagnostics=diagnostics,
                     selection_runs=_extract_selection_runs(evaluation_config),
+                    llm_provider=llm_provider,
+                    llm_model=llm_model,
                 )
                 prompt_versions.append("evaluation")
                 return LLMResult(
@@ -188,7 +190,12 @@ def generate_ai_suggestions(
                 )
             for unit in units:
                 selected_by_unit[unit.unit_id] = _select_norm_cards(
-                    unit, selection_pool, api_key, diagnostics
+                    unit,
+                    selection_pool,
+                    api_key,
+                    diagnostics,
+                    llm_provider=llm_provider,
+                    llm_model=llm_model,
                 )
 
     # Паттерны (отдельный проход)
@@ -876,6 +883,8 @@ def _select_norm_cards(
     norm_cards: list[NormCard],
     api_key: str,
     diagnostics: list[LLMDiagnostic],
+    llm_provider: str,
+    llm_model: str,
 ) -> list[NormCard]:
     if not norm_cards:
         return []
@@ -949,6 +958,8 @@ def _evaluate_selection_stability(
     api_key: str,
     diagnostics: list[LLMDiagnostic],
     selection_runs: int,
+    llm_provider: str,
+    llm_model: str,
     *,
     label: str,
     prefilter: bool = False,
@@ -969,7 +980,14 @@ def _evaluate_selection_stability(
             if not candidate_cards:
                 selected = []
             else:
-                selected = _select_norm_cards(unit, candidate_cards, api_key, diagnostics)
+                selected = _select_norm_cards(
+                    unit,
+                    candidate_cards,
+                    api_key,
+                    diagnostics,
+                    llm_provider=llm_provider,
+                    llm_model=llm_model,
+                )
             sets.append(set(card.norm_id for card in selected))
         avg_jaccard = _average_pairwise_jaccard(sets)
         union_all = set().union(*sets) if sets else set()
@@ -1003,6 +1021,8 @@ def _evaluate_selection_compare(
     api_key: str,
     diagnostics: list[LLMDiagnostic],
     selection_runs: int,
+    llm_provider: str,
+    llm_model: str,
 ) -> dict[str, Any]:
     baseline = _evaluate_selection_stability(
         units=units,
@@ -1010,6 +1030,8 @@ def _evaluate_selection_compare(
         api_key=api_key,
         diagnostics=diagnostics,
         selection_runs=selection_runs,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
         label="baseline",
         prefilter=False,
     )
@@ -1019,6 +1041,8 @@ def _evaluate_selection_compare(
         api_key=api_key,
         diagnostics=diagnostics,
         selection_runs=selection_runs,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
         label="prefiltered",
         prefilter=True,
     )
