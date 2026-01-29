@@ -172,6 +172,9 @@ def update_my_settings(
 ) -> UserRead:
     raw_settings = current_user.settings if isinstance(current_user.settings, dict) else {}
     updates = payload.model_dump(exclude_unset=True)
+    if current_user.role != UserRole.ADMIN:
+        updates.pop("llm_provider", None)
+        updates.pop("llm_model", None)
     if updates:
         validated = UserSettings.model_validate({**raw_settings, **updates})
         current_user.settings = {**raw_settings, **validated.model_dump()}

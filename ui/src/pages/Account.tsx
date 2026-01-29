@@ -24,6 +24,8 @@ function AccountPage() {
   const [findingsView, setFindingsView] = useState<'separate' | 'combined'>('separate');
   const [disablePatterns, setDisablePatterns] = useState(false);
   const [useAllNorms, setUseAllNorms] = useState(false);
+  const [llmProvider, setLlmProvider] = useState('deepseek');
+  const [llmModel, setLlmModel] = useState('deepseek-chat');
   const settingsMutation = useMutation({
     mutationFn: (payload: import('../services/api').UserSettingsUpdate) =>
       updateUserSettings(payload),
@@ -45,10 +47,20 @@ function AccountPage() {
     if (typeof storedAllNorms === 'boolean') {
       setUseAllNorms(storedAllNorms);
     }
+    const storedProvider = userQuery.data?.settings?.llm_provider;
+    if (storedProvider) {
+      setLlmProvider(storedProvider);
+    }
+    const storedModel = userQuery.data?.settings?.llm_model;
+    if (storedModel) {
+      setLlmModel(storedModel);
+    }
   }, [
     userQuery.data?.settings?.findings_view,
     userQuery.data?.settings?.disable_patterns,
     userQuery.data?.settings?.use_all_norms,
+    userQuery.data?.settings?.llm_provider,
+    userQuery.data?.settings?.llm_model,
   ]);
 
   if (userQuery.isLoading || walletQuery.isLoading) {
@@ -203,6 +215,66 @@ function AccountPage() {
               </button>
             </div>
           </div>
+          {userQuery.data?.role === 'admin' && (
+            <div style={{ marginTop: '1rem' }}>
+              <p className="muted" style={{ marginBottom: '0.5rem' }}>
+                LLM провайдер
+              </p>
+              <div className="segmented-control" role="group" aria-label="LLM провайдер">
+                <button
+                  type="button"
+                  className={llmProvider === 'deepseek' ? 'active' : ''}
+                  onClick={() => {
+                    setLlmProvider('deepseek');
+                    if (llmModel === 'gpt-5-mini') {
+                      setLlmModel('deepseek-chat');
+                    }
+                    settingsMutation.mutate({
+                      llm_provider: 'deepseek',
+                      llm_model: llmModel === 'gpt-5-mini' ? 'deepseek-chat' : llmModel,
+                    });
+                  }}
+                  disabled={settingsMutation.isPending}
+                >
+                  DeepSeek
+                </button>
+                <button
+                  type="button"
+                  className={llmProvider === 'openai' ? 'active' : ''}
+                  onClick={() => {
+                    setLlmProvider('openai');
+                    if (llmModel === 'deepseek-chat') {
+                      setLlmModel('gpt-5-mini');
+                    }
+                    settingsMutation.mutate({
+                      llm_provider: 'openai',
+                      llm_model: llmModel === 'deepseek-chat' ? 'gpt-5-mini' : llmModel,
+                    });
+                  }}
+                  disabled={settingsMutation.isPending}
+                >
+                  OpenAI
+                </button>
+              </div>
+              <div style={{ marginTop: '0.75rem' }}>
+                <label className="field" style={{ display: 'grid', gap: '0.35rem' }}>
+                  <span className="muted">Модель</span>
+                  <input
+                    type="text"
+                    value={llmModel}
+                    onChange={(event) => setLlmModel(event.target.value)}
+                    onBlur={() => {
+                      settingsMutation.mutate({ llm_model: llmModel });
+                    }}
+                    disabled={settingsMutation.isPending}
+                  />
+                </label>
+                <p className="muted" style={{ marginTop: '0.5rem' }}>
+                  Примеры: deepseek-chat, gpt-5-mini
+                </p>
+              </div>
+            </div>
+          )}
           {settingsMutation.isError && (
             <p className="alert alert-error" style={{ marginTop: '0.75rem' }}>
               Не удалось сохранить настройки.

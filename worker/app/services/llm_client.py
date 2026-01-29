@@ -117,12 +117,15 @@ class LLMResult:
 def generate_ai_suggestions(
     task: AnalysisTask, findings: Iterable[DetectorFinding]
 ) -> LLMResult | None:
-    api_key = _load_api_key()
+    settings = get_settings()
+    api_key = _load_api_key(settings.llm_provider)
     if not api_key:
-        logger.debug("DEEPSEEK_API_KEY is not configured; skipping LLM stage")
+        logger.debug("LLM API key is not configured; skipping LLM stage")
         return None
 
     norm_repo = get_critical_norm_repository()
+    llm_provider = (task.settings or {}).get("llm_provider") or settings.llm_provider
+    llm_model = (task.settings or {}).get("llm_model") or settings.llm_model
     use_all_norms = bool(task.settings and task.settings.get("use_all_norms"))
     disable_patterns = bool(task.settings and task.settings.get("disable_patterns"))
     general_repo = get_general_norm_repository() if use_all_norms else None
@@ -196,11 +199,13 @@ def generate_ai_suggestions(
         for unit in units:
             unit_findings = _filter_findings_for_unit(findings_list, unit)
             prompt, redaction_report = _build_pattern_prompt(unit, unit_findings, pattern_repo.cards)
-            response_text = _call_deepseek(
+            response_text = _call_llm(
                 prompt,
                 api_key,
                 system_prompt=PATTERN_SYSTEM_PROMPT,
                 temperature=0,
+                provider=llm_provider,
+                model=llm_model,
             )
             if not response_text:
                 logger.warning("LLM patterns %s: no response", unit.unit_name)
@@ -254,6 +259,8 @@ def generate_ai_suggestions(
                 diagnostics=diagnostics,
                 prompt_version=f"critical:{norm_repo.version}",
                 context_prefix="norm",
+                llm_provider=llm_provider,
+                llm_model=llm_model,
             )
             if unit_suggestions:
                 critical_suggestions.extend(unit_suggestions)
@@ -278,6 +285,8 @@ def generate_ai_suggestions(
                 diagnostics=diagnostics,
                 prompt_version=f"norms:{general_repo.version}",
                 context_prefix="norms",
+                llm_provider=llm_provider,
+                llm_model=llm_model,
             )
             if unit_suggestions:
                 general_suggestions.extend(unit_suggestions)
@@ -319,11 +328,13 @@ def generate_ai_suggestions(
                     len(unit_findings),
                 )
                 prompt, redaction_report = _build_query_prompt(unit, unit_findings, query_norm_repo.cards)
-                response_text = _call_deepseek(
+                response_text = _call_llm(
                     prompt,
                     api_key,
                     system_prompt=QUERY_SYSTEM_PROMPT,
                     temperature=QUERY_TEMPERATURE,
+                    provider=llm_provider,
+                    model=llm_model,
                 )
                 if not response_text:
                     logger.warning("LLM query %s: no response", unit.unit_name)
@@ -395,16 +406,23 @@ def generate_ai_suggestions(
     )
 
 
-def _call_deepseek(
+def _call_llm(
     prompt: str,
     api_key: str,
     system_prompt: str = SYSTEM_PROMPT,
     temperature: float = 0,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
 ) -> str | None:
     settings = get_settings()
-    url = settings.llm_api_base.rstrip("/") + "/v1/chat/completions"
+    provider = (provider or settings.llm_provider or "deepseek").lower()
+    base_url = settings.llm_api_base
+    if provider == "openai" and "deepseek" in base_url:
+        base_url = "https://api.openai.com"
+    url = base_url.rstrip("/") + "/v1/chat/completions"
     payload = {
-        "model": settings.llm_model,
+        "model": model or settings.llm_model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
@@ -424,13 +442,14 @@ def _call_deepseek(
     except httpx.HTTPStatusError as exc:
         body = exc.response.text
         logger.warning(
-            "LLM request failed (%s): %s",
+            "LLM request failed (%s, %s): %s",
+            provider,
             exc.response.status_code,
             body[:500] if body else "<empty>",
         )
         return None
     except (httpx.HTTPError, KeyError, ValueError) as exc:
-        logger.warning("LLM request failed: %s", exc)
+        logger.warning("LLM request failed (%s): %s", provider, exc)
         return None
 
 
@@ -724,10 +743,12 @@ def _run_code_pass(
     diagnostics: list[LLMDiagnostic],
     prompt_version: str,
     context_prefix: str,
+    llm_provider: str,
+    llm_model: str,
 ) -> list[AISuggestion]:
     allowed_norm_ids = {card.norm_id for card in norm_cards}
     prompt, redaction_report = _build_unit_prompt(unit, unit_findings, norm_cards)
-    response_text = _call_deepseek(prompt, api_key)
+    response_text = _call_llm(prompt, api_key, provider=llm_provider, model=llm_model)
     if not response_text:
         logger.warning("LLM unit %s: no response", unit.unit_name)
         return []
@@ -788,7 +809,14 @@ def _merge_suggestions(
         general_suggestions=general_suggestions,
         pattern_suggestions=pattern_suggestions,
     )
-    response_text = _call_deepseek(prompt, api_key, system_prompt=MERGE_SYSTEM_PROMPT, temperature=0)
+    response_text = _call_llm(
+        prompt,
+        api_key,
+        system_prompt=MERGE_SYSTEM_PROMPT,
+        temperature=0,
+        provider=llm_provider,
+        model=llm_model,
+    )
     if not response_text:
         logger.warning("LLM merge: no response, keeping raw suggestions")
         merged = []
@@ -859,11 +887,13 @@ def _select_norm_cards(
         if not part:
             continue
         prompt, redaction_report = _build_norm_selection_prompt(unit, part)
-        response_text = _call_deepseek(
+        response_text = _call_llm(
             prompt,
             api_key,
             system_prompt=SELECTION_SYSTEM_PROMPT,
             temperature=0,
+            provider=llm_provider,
+            model=llm_model,
         )
         selected_ids = _parse_selected_norm_ids(response_text)
         if not selected_ids:
@@ -1189,10 +1219,16 @@ def _load_json_array(raw_text: str) -> list[dict] | None:
     return None
 
 @lru_cache(maxsize=1)
-def _load_api_key() -> str | None:
-    key = os.getenv("DEEPSEEK_API_KEY")
-    if key:
-        return key
+def _load_api_key(provider: str) -> str | None:
+    provider = (provider or "deepseek").lower()
+    if provider == "openai":
+        key = os.getenv("OPENAI_APIKEY") or os.getenv("OPENAI_API_KEY")
+        if key:
+            return key
+    else:
+        key = os.getenv("DEEPSEEK_API_KEY")
+        if key:
+            return key
     env_path = ROOT_DIR / ".env"
     if not env_path.exists():
         return None
@@ -1203,7 +1239,12 @@ def _load_api_key() -> str | None:
             if "=" not in line:
                 continue
             name, value = line.split("=", 1)
-            if name.strip() == "DEEPSEEK_API_KEY":
+            name = name.strip()
+            if provider == "openai" and name in {"OPENAI_APIKEY", "OPENAI_API_KEY"}:
+                key = value.strip()
+                os.environ[name] = key
+                return key
+            if provider != "openai" and name == "DEEPSEEK_API_KEY":
                 key = value.strip()
                 os.environ["DEEPSEEK_API_KEY"] = key
                 return key

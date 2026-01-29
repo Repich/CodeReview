@@ -42,12 +42,16 @@ class UserSettings(ORMModel):
     findings_view: Literal["separate", "combined"] = "separate"
     disable_patterns: bool = False
     use_all_norms: bool = False
+    llm_provider: str = "deepseek"
+    llm_model: str = "deepseek-chat"
 
 
 class UserSettingsUpdate(ORMModel):
     findings_view: Literal["separate", "combined"] | None = None
     disable_patterns: bool | None = None
     use_all_norms: bool | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
 
 
 class UserStatusUpdate(ORMModel):

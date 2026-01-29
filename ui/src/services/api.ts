@@ -209,12 +209,16 @@ export interface UserSettings {
   findings_view: 'separate' | 'combined';
   disable_patterns: boolean;
   use_all_norms: boolean;
+  llm_provider: string;
+  llm_model: string;
 }
 
 export interface UserSettingsUpdate {
   findings_view?: 'separate' | 'combined';
   disable_patterns?: boolean;
   use_all_norms?: boolean;
+  llm_provider?: string;
+  llm_model?: string;
 }
 
 export interface NormCatalogEntry {

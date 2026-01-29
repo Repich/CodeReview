@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     engine_version: str = "0.1.0"
     detectors_version: str = "dev"
     norms_version: str = "n/a"
+    llm_provider: str = "deepseek"
     llm_api_base: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-chat"
     llm_timeout_seconds: int = 60
