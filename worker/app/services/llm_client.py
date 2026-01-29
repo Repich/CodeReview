@@ -118,14 +118,14 @@ def generate_ai_suggestions(
     task: AnalysisTask, findings: Iterable[DetectorFinding]
 ) -> LLMResult | None:
     settings = get_settings()
-    api_key = _load_api_key(settings.llm_provider)
+    llm_provider = (task.settings or {}).get("llm_provider") or settings.llm_provider
+    llm_model = (task.settings or {}).get("llm_model") or settings.llm_model
+    api_key = _load_api_key(llm_provider)
     if not api_key:
         logger.debug("LLM API key is not configured; skipping LLM stage")
         return None
 
     norm_repo = get_critical_norm_repository()
-    llm_provider = (task.settings or {}).get("llm_provider") or settings.llm_provider
-    llm_model = (task.settings or {}).get("llm_model") or settings.llm_model
     use_all_norms = bool(task.settings and task.settings.get("use_all_norms"))
     disable_patterns = bool(task.settings and task.settings.get("disable_patterns"))
     general_repo = get_general_norm_repository() if use_all_norms else None
