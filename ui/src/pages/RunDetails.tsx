@@ -219,6 +219,29 @@ function RunDetailsPage() {
     },
   });
 
+  const evaluationComparison = useMemo(() => {
+    const report = evaluationQuery.data?.report as
+      | {
+          baseline?: { overall?: { avg_jaccard?: number } };
+          prefiltered?: { overall?: { avg_jaccard?: number } };
+        }
+      | undefined;
+    const baseline = report?.baseline?.overall?.avg_jaccard;
+    const prefiltered = report?.prefiltered?.overall?.avg_jaccard;
+    if (typeof baseline !== 'number' || typeof prefiltered !== 'number') {
+      return null;
+    }
+    const delta = prefiltered - baseline;
+    const threshold = 0.02;
+    let verdict = 'Без заметных изменений';
+    if (delta > threshold) {
+      verdict = 'Стало лучше';
+    } else if (delta < -threshold) {
+      verdict = 'Стало хуже';
+    }
+    return { baseline, prefiltered, delta, verdict };
+  }, [evaluationQuery.data?.report]);
+
   const runSourcesQuery = useQuery({
     queryKey: ['run-sources', id],
     queryFn: () => fetchRunSources(id!),
@@ -1586,6 +1609,22 @@ function RunDetailsPage() {
           )}
           {evaluationQuery.data?.evaluation_run_id && (
             <p className="muted">ID запуска проверки: {evaluationQuery.data.evaluation_run_id}</p>
+          )}
+          {evaluationComparison && (
+            <div className="section-grid" style={{ marginTop: '0.75rem' }}>
+              <div>
+                <p className="muted">Baseline Jaccard</p>
+                <strong>{evaluationComparison.baseline.toFixed(3)}</strong>
+              </div>
+              <div>
+                <p className="muted">Prefiltered Jaccard</p>
+                <strong>{evaluationComparison.prefiltered.toFixed(3)}</strong>
+              </div>
+              <div>
+                <p className="muted">Итог</p>
+                <strong>{evaluationComparison.verdict}</strong>
+              </div>
+            </div>
           )}
           {evaluationQuery.data?.report ? (
             <pre className="json-preview" style={{ marginTop: '1rem' }}>

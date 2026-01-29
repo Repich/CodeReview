@@ -218,6 +218,7 @@ function ArtifactPreviewModal({
   error: string | null;
   onClose: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
   const formattedJson = useMemo(() => {
     if (kind !== 'json') return '';
     try {
@@ -229,6 +230,16 @@ function ArtifactPreviewModal({
     }
   }, [content, kind]);
 
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch (copyError) {
+      console.error('Failed to copy artifact content', copyError);
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(event) => event.stopPropagation()}>
@@ -239,9 +250,19 @@ function ArtifactPreviewModal({
               {title}
             </p>
           </div>
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Закрыть
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleCopy}
+              disabled={loading || Boolean(error) || !content}
+            >
+              {copied ? 'Скопировано' : 'Копировать'}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
+              Закрыть
+            </button>
+          </div>
         </div>
         {loading && <p className="muted">Загружаем...</p>}
         {error && <p className="alert alert-error">{error}</p>}
@@ -283,6 +304,19 @@ function RawSourcesModal({
   onSelect: (path: string) => void;
   onClose: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!content) return;
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch (copyError) {
+      console.error('Failed to copy raw source content', copyError);
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(event) => event.stopPropagation()}>
@@ -293,9 +327,19 @@ function RawSourcesModal({
               {sources.length} файлов
             </p>
           </div>
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Закрыть
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleCopy}
+              disabled={loadingContent || !content}
+            >
+              {copied ? 'Скопировано' : 'Копировать'}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
+              Закрыть
+            </button>
+          </div>
         </div>
         <div className="raw-sources-layout">
           <aside className="raw-sources-list">

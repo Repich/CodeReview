@@ -75,6 +75,7 @@ MAX_QUERY_UNITS_PER_RUN = 40
 MAX_PATTERN_NORM_TEXT_CHARS = 40_000
 MAX_NORM_SELECTION_CHARS = 100_000
 QUERY_TEMPERATURE = 0.2
+PREFILTER_MAX_CARDS = 60
 
 PATTERN_SYSTEM_PROMPT = (
     "Ты — ведущий архитектор и ревьюер 1С:Предприятие (BSL) с опытом промышленной "
@@ -168,7 +169,7 @@ def generate_ai_suggestions(
             logger.warning("Norm repository is empty; skipping LLM selection stage")
         else:
             if evaluation_config:
-                report = _evaluate_selection_stability(
+                report = _evaluate_selection_compare(
                     units=units,
                     norm_cards=selection_pool,
                     api_key=api_key,
@@ -918,37 +919,80 @@ def _evaluate_selection_stability(
     api_key: str,
     diagnostics: list[LLMDiagnostic],
     selection_runs: int,
+    *,
+    label: str,
+    prefilter: bool = False,
 ) -> dict[str, Any]:
     unit_reports: list[dict[str, Any]] = []
     jaccards: list[float] = []
     for unit in units:
         sets: list[set[str]] = []
+        candidate_cards = norm_cards
+        prefilter_stats = None
+        if prefilter:
+            candidate_cards = _prefilter_norm_cards(unit, norm_cards)
+            prefilter_stats = {
+                "candidate_count": len(norm_cards),
+                "filtered_count": len(candidate_cards),
+            }
         for _ in range(selection_runs):
-            selected = _select_norm_cards(unit, norm_cards, api_key, diagnostics)
+            if not candidate_cards:
+                selected = []
+            else:
+                selected = _select_norm_cards(unit, candidate_cards, api_key, diagnostics)
             sets.append(set(card.norm_id for card in selected))
         avg_jaccard = _average_pairwise_jaccard(sets)
         union_all = set().union(*sets) if sets else set()
         intersection_all = set(sets[0]) if sets else set()
         for s in sets[1:]:
             intersection_all &= s
-        unit_reports.append(
-            {
-                "unit_id": unit.unit_id,
-                "unit_name": unit.unit_name,
-                "runs": [sorted(list(s)) for s in sets],
-                "avg_jaccard": avg_jaccard,
-                "union_size": len(union_all),
-                "intersection_size": len(intersection_all),
-                "counts": [len(s) for s in sets],
-            }
-        )
+        report_entry = {
+            "unit_id": unit.unit_id,
+            "unit_name": unit.unit_name,
+            "runs": [sorted(list(s)) for s in sets],
+            "avg_jaccard": avg_jaccard,
+            "union_size": len(union_all),
+            "intersection_size": len(intersection_all),
+            "counts": [len(s) for s in sets],
+        }
+        if prefilter_stats:
+            report_entry["prefilter"] = prefilter_stats
+        unit_reports.append(report_entry)
         jaccards.append(avg_jaccard)
     overall = {
         "avg_jaccard": sum(jaccards) / len(jaccards) if jaccards else 1.0,
         "units": len(units),
         "selection_runs": selection_runs,
     }
-    return {"overall": overall, "units": unit_reports}
+    return {"label": label, "overall": overall, "units": unit_reports}
+
+
+def _evaluate_selection_compare(
+    units: list[CodeUnit],
+    norm_cards: list[NormCard],
+    api_key: str,
+    diagnostics: list[LLMDiagnostic],
+    selection_runs: int,
+) -> dict[str, Any]:
+    baseline = _evaluate_selection_stability(
+        units=units,
+        norm_cards=norm_cards,
+        api_key=api_key,
+        diagnostics=diagnostics,
+        selection_runs=selection_runs,
+        label="baseline",
+        prefilter=False,
+    )
+    prefiltered = _evaluate_selection_stability(
+        units=units,
+        norm_cards=norm_cards,
+        api_key=api_key,
+        diagnostics=diagnostics,
+        selection_runs=selection_runs,
+        label="prefiltered",
+        prefilter=True,
+    )
+    return {"baseline": baseline, "prefiltered": prefiltered}
 
 
 def _average_pairwise_jaccard(sets: list[set[str]]) -> float:
@@ -998,6 +1042,32 @@ def _parse_selected_norm_ids(response_text: str | None) -> list[str]:
             if applicable is True and isinstance(norm_id, str) and norm_id.strip():
                 results.append(norm_id.strip())
     return results
+
+
+def _prefilter_norm_cards(unit: CodeUnit, norm_cards: list[NormCard]) -> list[NormCard]:
+    if not norm_cards:
+        return []
+    code_tokens = set(_tokenize_text(unit.text))
+    scored: list[tuple[tuple[int, int], NormCard]] = []
+    for card in norm_cards:
+        hint_tokens = _extract_detection_hint_tokens(card.body)
+        hint_match = any(token in code_tokens for token in hint_tokens)
+        overlap = len(card.tokens & code_tokens) if card.tokens else 0
+        if not hint_match and overlap == 0:
+            continue
+        score = (2 if hint_match else 0, overlap)
+        scored.append((score, card))
+    if not scored:
+        return []
+    scored.sort(key=lambda item: (-item[0][0], -item[0][1], item[1].norm_id))
+    return [card for _, card in scored[:PREFILTER_MAX_CARDS]]
+
+
+def _extract_detection_hint_tokens(body: str) -> list[str]:
+    hint = _extract_body_field(body, "Подсказка детекта") or _extract_body_field(body, "Подсказка")
+    if not hint:
+        return []
+    return _tokenize_text(hint)
 
 
 def _filter_findings_for_unit(
