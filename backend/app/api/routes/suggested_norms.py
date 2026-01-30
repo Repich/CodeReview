@@ -66,9 +66,9 @@ def list_sections(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_teacher),
 ) -> list[str]:
-    db_norms = db.query(Norm).all()
+    db_sections = [row[0] for row in db.query(Norm.section).distinct().all()]
     catalog_norms = _load_catalog_norms()
-    return build_sections_list(db_norms, catalog_norms)
+    return build_sections_list(db_sections, catalog_norms)
 
 
 @router.post("", response_model=SuggestedNormRead, status_code=201)

@@ -5,8 +5,31 @@ from typing import Any, Iterable
 
 import yaml
 from sqlalchemy.orm import Session
+from functools import lru_cache
 
 from backend.app.models.norm import Norm
+
+
+def _catalog_cache_key(paths: list[Path]) -> tuple[tuple[str, int, int], ...]:
+    key: list[tuple[str, int, int]] = []
+    for path in paths:
+        if path.exists():
+            stat = path.stat()
+            key.append((path.name, stat.st_mtime_ns, stat.st_size))
+        else:
+            key.append((path.name, 0, 0))
+    return tuple(key)
+
+
+@lru_cache(maxsize=4)
+def _load_norm_catalog_cached(key: tuple[tuple[str, int, int], ...], paths: tuple[Path, ...]) -> dict[str, dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for path in paths:
+        if not path.exists():
+            continue
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        entries.extend(_extract_norm_entries(data))
+    return {entry.get("norm_id"): entry for entry in entries if entry.get("norm_id")}
 
 
 def _load_norm_catalog() -> dict[str, dict[str, Any]]:
@@ -15,14 +38,9 @@ def _load_norm_catalog() -> dict[str, dict[str, Any]]:
         norms_path = candidate / "norms.yaml"
         custom_path = candidate / "custom_norms.yaml"
         if norms_path.exists() or custom_path.exists():
-            entries: list[dict[str, Any]] = []
-            if norms_path.exists():
-                data = yaml.safe_load(norms_path.read_text(encoding="utf-8")) or {}
-                entries.extend(_extract_norm_entries(data))
-            if custom_path.exists():
-                data = yaml.safe_load(custom_path.read_text(encoding="utf-8")) or {}
-                entries.extend(_extract_norm_entries(data))
-            return {entry.get("norm_id"): entry for entry in entries if entry.get("norm_id")}
+            paths = (norms_path, custom_path)
+            key = _catalog_cache_key(list(paths))
+            return _load_norm_catalog_cached(key, paths)
     return {}
 
 

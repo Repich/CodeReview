@@ -4,6 +4,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+from functools import lru_cache
 
 from backend.app.models.norm import Norm
 from backend.app.schemas.suggested_norms import SuggestedNormLLMResult
@@ -26,9 +27,21 @@ CANONICAL_SECTIONS: list[tuple[str, tuple[str, ...]]] = [
 ]
 
 
-def _load_catalog_norms() -> list[dict[str, Any]]:
-    root_dir = Path(__file__).resolve().parents[3]
-    paths = [root_dir / "norms.yaml", root_dir / "critical_norms.yaml", root_dir / "custom_norms.yaml"]
+def _catalog_cache_key(paths: list[Path]) -> tuple[tuple[str, int, int], ...]:
+    key: list[tuple[str, int, int]] = []
+    for path in paths:
+        if path.exists():
+            stat = path.stat()
+            key.append((path.name, stat.st_mtime_ns, stat.st_size))
+        else:
+            key.append((path.name, 0, 0))
+    return tuple(key)
+
+
+@lru_cache(maxsize=4)
+def _load_catalog_norms_cached(
+    key: tuple[tuple[str, int, int], ...], paths: tuple[Path, ...]
+) -> list[dict[str, Any]]:
     try:
         import yaml  # lazy import
     except ImportError:
@@ -56,6 +69,13 @@ def _load_catalog_norms() -> list[dict[str, Any]]:
     return results
 
 
+def _load_catalog_norms() -> list[dict[str, Any]]:
+    root_dir = Path(__file__).resolve().parents[3]
+    paths = (root_dir / "norms.yaml", root_dir / "critical_norms.yaml", root_dir / "custom_norms.yaml")
+    key = _catalog_cache_key(list(paths))
+    return _load_catalog_norms_cached(key, paths)
+
+
 def _truncate_norm(entry: dict[str, Any]) -> dict[str, Any]:
     return {
         "norm_id": entry.get("norm_id"),
@@ -66,10 +86,14 @@ def _truncate_norm(entry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_sections_list(db_norms: list[Norm], catalog_norms: list[dict[str, Any]]) -> list[str]:
+def build_sections_list(db_norms: list[Norm] | list[str], catalog_norms: list[dict[str, Any]]) -> list[str]:
     sections = set()
     for norm in db_norms:
-        sections.add(map_section_name(norm.section))
+        if isinstance(norm, str):
+            section_value = norm
+        else:
+            section_value = norm.section
+        sections.add(map_section_name(section_value))
     for entry in catalog_norms:
         if isinstance(entry, dict) and entry.get("section"):
             sections.add(map_section_name(entry["section"]))
