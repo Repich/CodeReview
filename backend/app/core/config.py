@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     blocked_cidrs: list[str] = []
     blocked_countries: list[str] = []
     geoip_db_path: str | None = None
+    db_pool_size: int = 15
+    db_max_overflow: int = 30
+    db_pool_timeout_seconds: int = 30
     llm_api_base: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-chat"
     llm_reasoning_model: str = "deepseek-reasoner"

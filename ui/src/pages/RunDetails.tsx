@@ -511,12 +511,17 @@ function RunDetailsPage() {
       target.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
   }, [highlightedRange, runSourcesQuery.data]);
+  const findingsLoading = findingsQuery.isLoading || findingsQuery.isFetching;
   const totalFindings = findingsQuery.data?.total ?? 0;
   const combinedFindingsCount = useMemo(
     () => totalFindings + aiFindings.length,
     [totalFindings, aiFindings.length],
   );
-  const displayFindingsCount = isCombinedView ? combinedFindingsCount : totalFindings;
+  const displayFindingsCount: number | string = findingsLoading
+    ? '…'
+    : isCombinedView
+      ? combinedFindingsCount
+      : totalFindings;
   const severityCounts = useMemo(() => {
     const counts: Record<string, number> = {
       critical: 0,
@@ -626,7 +631,11 @@ function RunDetailsPage() {
       : '0';
   const tabs = useMemo(() => {
     const items: { id: string; label: string; count: number | string; adminOnly?: boolean }[] = [
-      { id: 'findings', label: 'Найденные нарушения', count: displayFindingsCount },
+      {
+        id: 'findings',
+        label: 'Найденные нарушения',
+        count: findingsLoading ? '…' : displayFindingsCount,
+      },
       { id: 'ai', label: 'Предложения LLM', count: aiCountDisplay },
       {
         id: 'complexity',
@@ -654,6 +663,7 @@ function RunDetailsPage() {
   }, [
     totalFindings,
     displayFindingsCount,
+    findingsLoading,
     aiCountDisplay,
     evaluationCountDisplay,
     complexityMetrics,
@@ -738,7 +748,9 @@ function RunDetailsPage() {
                   Статический анализ
                 </div>
                 <p className="muted" style={{ margin: '0 0 0.5rem' }}>
-                  {displayFindings.length} карточек · {filteredFindings.length} нарушений
+                  {findingsLoading
+                    ? 'Загружаем нарушения…'
+                    : `${displayFindings.length} карточек · ${filteredFindings.length} нарушений`}
                 </p>
                 <FindingFilters
                   severity={severity}
@@ -746,54 +758,55 @@ function RunDetailsPage() {
                   query={query}
                   setQuery={setQuery}
                 />
-                {displayFindings.map((item) => {
-                  if (item.kind === 'single') {
+                {!findingsLoading &&
+                  displayFindings.map((item) => {
+                    if (item.kind === 'single') {
+                      return (
+                        <div
+                          key={`combined-${item.finding.id}`}
+                          onClick={() => handleSelectStaticFinding(item.finding)}
+                          style={{
+                            border:
+                              selectedFindingKey === item.finding.id
+                                ? '1px solid var(--primary)'
+                                : undefined,
+                            borderRadius: '0.75rem',
+                            padding: '0.25rem',
+                          }}
+                        >
+                          <FindingCard
+                            finding={item.finding}
+                            sequence={findingOrderMap.get(item.finding.id)}
+                            showContext={false}
+                            sourceLookup={null}
+                          />
+                        </div>
+                      );
+                    }
                     return (
                       <div
-                        key={`combined-${item.finding.id}`}
-                        onClick={() => handleSelectStaticFinding(item.finding)}
+                        key={`combined-group-${item.group.base.id}`}
+                        onClick={() => handleSelectStaticFinding(item.group.base, item.group.items)}
                         style={{
                           border:
-                            selectedFindingKey === item.finding.id
+                            selectedFindingKey === item.group.base.id
                               ? '1px solid var(--primary)'
                               : undefined,
                           borderRadius: '0.75rem',
                           padding: '0.25rem',
                         }}
                       >
-                        <FindingCard
-                          finding={item.finding}
-                          sequence={findingOrderMap.get(item.finding.id)}
+                        <FindingGroupCard
+                          base={item.group.base}
+                          items={item.group.items}
+                          sequence={findingOrderMap.get(item.group.base.id)}
                           showContext={false}
                           sourceLookup={null}
                         />
                       </div>
                     );
-                  }
-                  return (
-                    <div
-                      key={`combined-group-${item.group.base.id}`}
-                      onClick={() => handleSelectStaticFinding(item.group.base, item.group.items)}
-                      style={{
-                        border:
-                          selectedFindingKey === item.group.base.id
-                            ? '1px solid var(--primary)'
-                            : undefined,
-                        borderRadius: '0.75rem',
-                        padding: '0.25rem',
-                      }}
-                    >
-                      <FindingGroupCard
-                        base={item.group.base}
-                        items={item.group.items}
-                        sequence={findingOrderMap.get(item.group.base.id)}
-                        showContext={false}
-                        sourceLookup={null}
-                      />
-                    </div>
-                  );
-                })}
-                {!displayFindings.length && (
+                  })}
+                {!findingsLoading && !displayFindings.length && (
                   <div className="empty-state">Статических нарушений не найдено.</div>
                 )}
                 <div className="chip" style={{ margin: '0.75rem 0 0.5rem' }}>
@@ -1380,7 +1393,9 @@ function RunDetailsPage() {
                 <div>
                   <h2 className="card-title">Найденные нарушения</h2>
                   <p className="muted">
-                    {displayFindings.length} карточек · {filteredFindings.length} нарушений
+                    {findingsLoading
+                      ? 'Загружаем нарушения…'
+                      : `${displayFindings.length} карточек · ${filteredFindings.length} нарушений`}
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -1398,54 +1413,55 @@ function RunDetailsPage() {
               </div>
               <FindingFilters severity={severity} setSeverity={setSeverity} query={query} setQuery={setQuery} />
               <div className="card-list">
-                {displayFindings.map((item) => {
-                  if (item.kind === 'single') {
+                {!findingsLoading &&
+                  displayFindings.map((item) => {
+                    if (item.kind === 'single') {
+                      return (
+                        <div
+                          key={item.finding.id}
+                          onClick={() => handleSelectStaticFinding(item.finding)}
+                          style={{
+                            border:
+                              selectedFindingKey === item.finding.id
+                                ? '1px solid var(--primary)'
+                                : undefined,
+                            borderRadius: '0.75rem',
+                            padding: '0.25rem',
+                          }}
+                        >
+                          <FindingCard
+                            finding={item.finding}
+                            sequence={findingOrderMap.get(item.finding.id)}
+                            showContext={showFindingsContext}
+                            sourceLookup={showFindingsContext ? sourceLookup : null}
+                          />
+                        </div>
+                      );
+                    }
                     return (
                       <div
-                        key={item.finding.id}
-                        onClick={() => handleSelectStaticFinding(item.finding)}
+                        key={`group-${item.group.base.id}`}
+                        onClick={() => handleSelectStaticFinding(item.group.base, item.group.items)}
                         style={{
                           border:
-                            selectedFindingKey === item.finding.id
+                            selectedFindingKey === item.group.base.id
                               ? '1px solid var(--primary)'
                               : undefined,
                           borderRadius: '0.75rem',
                           padding: '0.25rem',
                         }}
                       >
-                        <FindingCard
-                          finding={item.finding}
-                          sequence={findingOrderMap.get(item.finding.id)}
+                        <FindingGroupCard
+                          base={item.group.base}
+                          items={item.group.items}
+                          sequence={findingOrderMap.get(item.group.base.id)}
                           showContext={showFindingsContext}
                           sourceLookup={showFindingsContext ? sourceLookup : null}
                         />
                       </div>
                     );
-                  }
-                  return (
-                    <div
-                      key={`group-${item.group.base.id}`}
-                      onClick={() => handleSelectStaticFinding(item.group.base, item.group.items)}
-                      style={{
-                        border:
-                          selectedFindingKey === item.group.base.id
-                            ? '1px solid var(--primary)'
-                            : undefined,
-                        borderRadius: '0.75rem',
-                        padding: '0.25rem',
-                      }}
-                    >
-                      <FindingGroupCard
-                        base={item.group.base}
-                        items={item.group.items}
-                        sequence={findingOrderMap.get(item.group.base.id)}
-                        showContext={showFindingsContext}
-                        sourceLookup={showFindingsContext ? sourceLookup : null}
-                      />
-                    </div>
-                  );
-                })}
-                {!displayFindings.length && (
+                  })}
+                {!findingsLoading && !displayFindings.length && (
                   <div className="empty-state">Нет нарушений под текущий фильтр.</div>
                 )}
               </div>
