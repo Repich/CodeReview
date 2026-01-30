@@ -959,9 +959,17 @@ function RunDetailsPage() {
                 {selectionDraft && (
                   <div style={{ marginBottom: '0.75rem' }}>
                     <p className="muted" style={{ marginBottom: '0.35rem' }}>
-                      Пример/контекст:
+                      Выбранный фрагмент (можно отредактировать):
                     </p>
-                    <pre>{selectionDraft.text}</pre>
+                    <textarea
+                      rows={6}
+                      value={selectionDraft.text}
+                      onChange={(event) =>
+                        setSelectionDraft((prev) =>
+                          prev ? { ...prev, text: event.target.value } : prev,
+                        )
+                      }
+                    />
                   </div>
                 )}
                 <form onSubmit={handleNormSubmit} className="form-grid" style={{ gap: '1rem' }}>
@@ -1163,7 +1171,12 @@ function RunDetailsPage() {
       : lineEndAttr
       ? Number(lineEndAttr)
       : null;
-    const text = rawText.length > 4000 ? `${rawText.slice(0, 4000)}…` : rawText;
+    const normalized = rawText
+      .split('\n')
+      .map((line) => line.replace(/^\s*\d+\s*:\s?/, ''))
+      .join('\n')
+      .trimEnd();
+    const text = normalized.length > 4000 ? `${normalized.slice(0, 4000)}…` : normalized;
     const draft = { text, file, lineStart, lineEnd };
     setSelectionDraft(draft);
     setNormMessage(null);
