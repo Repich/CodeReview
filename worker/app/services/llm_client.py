@@ -388,6 +388,8 @@ def generate_ai_suggestions(
         api_key=api_key,
         diagnostics=diagnostics,
         prompt_versions=prompt_versions,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
     )
     all_suggestions.extend(merged_suggestions)
     if query_suggestions:
@@ -803,6 +805,8 @@ def _merge_suggestions(
     api_key: str,
     diagnostics: list[LLMDiagnostic],
     prompt_versions: list[str],
+    llm_provider: str,
+    llm_model: str,
 ) -> list[AISuggestion]:
     non_empty = [
         item
