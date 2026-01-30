@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 
 import yaml
@@ -138,6 +137,22 @@ def _tokenize(text: str) -> list[str]:
     return [token for token in tokens if len(token) > 2]
 
 
-@lru_cache(maxsize=1)
+_CRITICAL_NORMS_CACHE: CriticalNormRepository | None = None
+_CRITICAL_NORMS_MTIMES: tuple[float | None, float | None] | None = None
+
+
+def _get_mtime(path: Path) -> float | None:
+    try:
+        return path.stat().st_mtime
+    except FileNotFoundError:
+        return None
+
+
 def get_critical_norm_repository() -> CriticalNormRepository:
-    return CriticalNormRepository()
+    global _CRITICAL_NORMS_CACHE
+    global _CRITICAL_NORMS_MTIMES
+    current_mtimes = (_get_mtime(NORMS_PATH), _get_mtime(CUSTOM_NORMS_PATH))
+    if _CRITICAL_NORMS_CACHE is None or _CRITICAL_NORMS_MTIMES != current_mtimes:
+        _CRITICAL_NORMS_CACHE = CriticalNormRepository()
+        _CRITICAL_NORMS_MTIMES = current_mtimes
+    return _CRITICAL_NORMS_CACHE
