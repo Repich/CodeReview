@@ -1107,14 +1107,18 @@ def _prefilter_norm_cards(unit: CodeUnit, norm_cards: list[NormCard]) -> list[No
     if not norm_cards:
         return []
     code_tokens = set(_tokenize_text(unit.text))
+    query_markers = {"выбрать", "запрос", "поместить", "выборка", "выполнить"}
+    allow_query_section = bool(code_tokens & query_markers)
     scored: list[tuple[tuple[int, int], NormCard]] = []
     for card in norm_cards:
+        section_value = _extract_body_field(card.body, "Раздел") or ""
+        is_query_section = allow_query_section and ("запрос" in section_value.lower() or "sql" in section_value.lower())
         hint_tokens = _extract_detection_hint_tokens(card.body)
         hint_match = any(token in code_tokens for token in hint_tokens)
         overlap = len(card.tokens & code_tokens) if card.tokens else 0
-        if not hint_match and overlap == 0:
+        if not hint_match and overlap == 0 and not is_query_section:
             continue
-        score = (2 if hint_match else 0, overlap)
+        score = (2 if hint_match else 1 if is_query_section else 0, overlap)
         scored.append((score, card))
     if not scored:
         return []
