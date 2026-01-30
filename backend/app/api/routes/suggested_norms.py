@@ -110,6 +110,26 @@ def create_suggested_norm(
         generated_version=llm_result.version,
         generated_text=llm_result.norm_text,
     )
+    norm_id_value = (llm_result.norm_id or "").strip()
+    title_value = (llm_result.title or "").strip()
+    text_value = (llm_result.norm_text or "").strip()
+    section_value = (llm_result.section or payload.section or "Прочее").strip()
+    scope_value = (llm_result.scope or "любой модуль").strip()
+    severity_value = (llm_result.default_severity or payload.severity or "minor").strip().lower() or "minor"
+    if norm_id_value and title_value and text_value:
+        try:
+            append_suggested_norm_to_custom_norms_file(
+                norm_id=norm_id_value,
+                title=title_value,
+                norm_text=text_value,
+                section=section_value,
+                scope=scope_value,
+                default_severity=severity_value,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
     db.add(norm)
     db.commit()
     db.refresh(norm)
