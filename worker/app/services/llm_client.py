@@ -97,6 +97,12 @@ FORCED_NORM_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
 )
 
+FORCED_REASON_MESSAGES: dict[str, str] = {
+    "bool_compare_eq_true": "Булево выражение сравнивается с Истина; используйте само выражение без сравнения.",
+    "bool_compare_neq_false": "Булево выражение сравнивается с Ложь; используйте само выражение без сравнения.",
+    "bool_compare_eq_false": "Булево выражение сравнивается с Ложь; используйте оператор НЕ вместо сравнения.",
+}
+
 PATTERN_SYSTEM_PROMPT = (
     "Ты — ведущий архитектор и ревьюер 1С:Предприятие (BSL) с опытом промышленной "
     "эксплуатации и high-load. Задача: делать практическое код-ревью предоставленного "
@@ -450,6 +456,22 @@ def generate_ai_suggestions(
         llm_model=llm_model,
     )
     all_suggestions.extend(merged_suggestions)
+    forced_fallback_suggestions = _build_forced_fallback_suggestions(
+        units=units,
+        selected_by_unit=selected_by_unit,
+        existing_suggestions=all_suggestions,
+        norm_lookup={
+            **norm_repo.entries,
+            **(general_repo.entries if general_repo else {}),
+        },
+    )
+    if forced_fallback_suggestions:
+        logger.info(
+            "Run %s: added %s forced fallback suggestions",
+            task.review_run_id,
+            len(forced_fallback_suggestions),
+        )
+        all_suggestions.extend(forced_fallback_suggestions)
     if query_suggestions:
         all_suggestions.extend(query_suggestions)
 
@@ -1274,6 +1296,121 @@ def _detect_forced_norm_matches(unit_text: str) -> dict[str, str]:
         if pattern.search(unit_text):
             reasons[norm_id] = reason
     return reasons
+
+
+def _build_forced_fallback_suggestions(
+    units: list[CodeUnit],
+    selected_by_unit: dict[str, list[NormCard]],
+    existing_suggestions: list[AISuggestion],
+    norm_lookup: dict[str, dict[str, Any]],
+) -> list[AISuggestion]:
+    if not units or not selected_by_unit or not norm_lookup:
+        return []
+
+    existing_keys = _collect_suggestion_keys(existing_suggestions)
+    forced_suggestions: list[AISuggestion] = []
+
+    for unit in units:
+        selected_ids = {card.norm_id for card in selected_by_unit.get(unit.unit_id, [])}
+        if not selected_ids:
+            continue
+        forced_norms = _detect_forced_norm_matches(unit.text)
+        if not forced_norms:
+            continue
+
+        for norm_id, reason_key in forced_norms.items():
+            if norm_id not in selected_ids:
+                continue
+            meta = norm_lookup.get(norm_id)
+            if not meta:
+                continue
+            norm_text = str(meta.get("norm_text") or "").strip()
+            if not norm_text:
+                continue
+
+            evidence = _extract_forced_norm_evidence(unit, norm_id)
+            if not evidence:
+                line_ref = f"{unit.source_path}:{unit.start_line}-{unit.start_line}"
+                evidence = [
+                    {
+                        "file": unit.source_path,
+                        "lines": line_ref,
+                        "reason": FORCED_REASON_MESSAGES.get(
+                            reason_key, "Обнаружен триггер нормы в условии."
+                        ),
+                    }
+                ]
+
+            candidate_keys = {
+                (norm_id, str(ev.get("file") or ""), str(ev.get("lines") or "")) for ev in evidence
+            }
+            if candidate_keys and candidate_keys.issubset(existing_keys):
+                continue
+
+            forced_suggestions.append(
+                AISuggestion(
+                    norm_id=norm_id,
+                    section=meta.get("section"),
+                    category=meta.get("category"),
+                    norm_text=norm_text,
+                    source_reference=meta.get("source_reference") or meta.get("source_standard"),
+                    severity=meta.get("default_severity"),
+                    evidence=evidence,
+                    llm_raw_response={
+                        "forced_fallback": True,
+                        "reason_key": reason_key,
+                    },
+                )
+            )
+            existing_keys.update(candidate_keys)
+
+    return forced_suggestions
+
+
+def _collect_suggestion_keys(
+    suggestions: list[AISuggestion],
+) -> set[tuple[str, str, str]]:
+    keys: set[tuple[str, str, str]] = set()
+    for suggestion in suggestions:
+        norm_id = (suggestion.norm_id or "").strip()
+        if not norm_id:
+            continue
+        if suggestion.evidence:
+            for item in suggestion.evidence:
+                if not isinstance(item, dict):
+                    continue
+                keys.add(
+                    (
+                        norm_id,
+                        str(item.get("file") or ""),
+                        str(item.get("lines") or ""),
+                    )
+                )
+        else:
+            keys.add((norm_id, "", ""))
+    return keys
+
+
+def _extract_forced_norm_evidence(unit: CodeUnit, norm_id: str) -> list[dict[str, str]]:
+    evidence: list[dict[str, str]] = []
+    patterns = [item for item in FORCED_NORM_PATTERNS if item[0] == norm_id]
+    if not patterns:
+        return evidence
+    for index, line in enumerate(unit.text.splitlines(), start=unit.start_line):
+        for _, pattern, reason_key in patterns:
+            if pattern.search(line):
+                line_ref = f"{unit.source_path}:{index}-{index}"
+                evidence.append(
+                    {
+                        "file": unit.source_path,
+                        "lines": line_ref,
+                        "reason": FORCED_REASON_MESSAGES.get(
+                            reason_key, "Обнаружен триггер нормы в условии."
+                        ),
+                    }
+                )
+                break
+    return evidence
 
 
 def _extract_detection_hint_tokens(body: str) -> list[str]:
