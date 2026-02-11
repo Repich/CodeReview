@@ -8,7 +8,6 @@
    - `README.md`
    - `docs/architecture_overview.md`
    - `docs/analysis_pipeline.md`
-   - `docs/deployment_security.md`
    - `docs/next_steps.md`
    - `agents.md`
 3) Проверь состояние git:

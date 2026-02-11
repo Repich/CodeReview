@@ -6,7 +6,6 @@
 - `data_contracts.md` — описание сущностей/форматов.
 - `billing_architecture.md` — модель личного кабинета/баллов.
 - `detectors_mvp.md` — список детекторов.
-- `deployment_security.md` — production-развёртывание (Docker, Caddy, безопасность).
 - `developer_guide.txt` — заметки разработчика (черновик).
 - `query_language.txt` — текст по языку запросов.
 - `system_standards.txt` — выдержки стандартов для RAG.

@@ -75,7 +75,27 @@ MAX_QUERY_UNITS_PER_RUN = 40
 MAX_PATTERN_NORM_TEXT_CHARS = 40_000
 MAX_NORM_SELECTION_CHARS = 100_000
 QUERY_TEMPERATURE = 0.2
-PREFILTER_MAX_CARDS = 60
+PREFILTER_MAX_CARDS = 120
+PREFILTER_PRIMARY_SHARE = 0.7
+PREFILTER_MIN_SECTION_QUOTA = 2
+
+FORCED_NORM_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
+    (
+        "LANG_BOOL_COMPARE_SIMPLIFY",
+        re.compile(r"^\s*Если\s+.+\s*=\s*Истина\s+Тогда\s*$", re.IGNORECASE | re.MULTILINE),
+        "bool_compare_eq_true",
+    ),
+    (
+        "LANG_BOOL_COMPARE_SIMPLIFY",
+        re.compile(r"^\s*Если\s+.+\s*<>\s*Ложь\s+Тогда\s*$", re.IGNORECASE | re.MULTILINE),
+        "bool_compare_neq_false",
+    ),
+    (
+        "LANG_BOOL_COMPARE_SIMPLIFY",
+        re.compile(r"^\s*Если\s+.+\s*=\s*Ложь\s+Тогда\s*$", re.IGNORECASE | re.MULTILINE),
+        "bool_compare_eq_false",
+    ),
+)
 
 PATTERN_SYSTEM_PROMPT = (
     "Ты — ведущий архитектор и ревьюер 1С:Предприятие (BSL) с опытом промышленной "
@@ -112,6 +132,13 @@ class LLMResult:
     prompt_version: str | None
     log_entries: list[LLMDiagnostic]
     evaluation_report: dict[str, Any] | None = None
+
+
+@dataclass
+class PrefilterResult:
+    cards: list[NormCard]
+    forced_norm_reasons: dict[str, str]
+    stats: dict[str, Any]
 
 
 def generate_ai_suggestions(
@@ -189,11 +216,28 @@ def generate_ai_suggestions(
                     evaluation_report=report,
                 )
             for unit in units:
-                candidate_pool = _prefilter_norm_cards(unit, selection_pool)
+                prefilter_result = _prefilter_norm_cards(unit, selection_pool)
+                candidate_pool = prefilter_result.cards
                 if not candidate_pool:
                     selected_by_unit[unit.unit_id] = []
                     continue
-                selected_by_unit[unit.unit_id] = _select_norm_cards(
+                if prefilter_result.forced_norm_reasons:
+                    logger.info(
+                        "Run %s unit %s: forced norms %s (reasons: %s)",
+                        task.review_run_id,
+                        unit.unit_name,
+                        sorted(prefilter_result.forced_norm_reasons),
+                        prefilter_result.forced_norm_reasons,
+                    )
+                logger.info(
+                    "Run %s unit %s: prefilter selected %s of %s cards (scored=%s)",
+                    task.review_run_id,
+                    unit.unit_name,
+                    prefilter_result.stats.get("selected_count"),
+                    prefilter_result.stats.get("candidate_count"),
+                    prefilter_result.stats.get("scored_count"),
+                )
+                selected_cards = _select_norm_cards(
                     unit,
                     candidate_pool,
                     api_key,
@@ -201,6 +245,20 @@ def generate_ai_suggestions(
                     llm_provider=llm_provider,
                     llm_model=llm_model,
                 )
+                if prefilter_result.forced_norm_reasons:
+                    selected_map = {card.norm_id: card for card in selected_cards}
+                    candidate_map = {card.norm_id: card for card in candidate_pool}
+                    for norm_id in sorted(prefilter_result.forced_norm_reasons):
+                        card = candidate_map.get(norm_id)
+                        if card and norm_id not in selected_map:
+                            selected_cards.append(card)
+                    logger.info(
+                        "Run %s unit %s: selected %s norms after forced merge",
+                        task.review_run_id,
+                        unit.unit_name,
+                        len(selected_cards),
+                    )
+                selected_by_unit[unit.unit_id] = selected_cards
 
     # Паттерны (отдельный проход)
     pattern_repo = get_pattern_norm_repository()
@@ -980,8 +1038,10 @@ def _evaluate_selection_stability(
         candidate_cards = norm_cards
         prefilter_stats = None
         if prefilter:
-            candidate_cards = _prefilter_norm_cards(unit, norm_cards)
+            prefilter_result = _prefilter_norm_cards(unit, norm_cards)
+            candidate_cards = prefilter_result.cards
             prefilter_stats = {
+                **prefilter_result.stats,
                 "candidate_count": len(norm_cards),
                 "filtered_count": len(candidate_cards),
             }
@@ -1107,27 +1167,113 @@ def _parse_selected_norm_ids(response_text: str | None) -> list[str]:
     return results
 
 
-def _prefilter_norm_cards(unit: CodeUnit, norm_cards: list[NormCard]) -> list[NormCard]:
+def _prefilter_norm_cards(unit: CodeUnit, norm_cards: list[NormCard]) -> PrefilterResult:
     if not norm_cards:
-        return []
+        return PrefilterResult(
+            cards=[],
+            forced_norm_reasons={},
+            stats={"candidate_count": 0, "scored_count": 0, "selected_count": 0},
+        )
     code_tokens = set(_tokenize_text(unit.text))
     query_markers = {"выбрать", "запрос", "поместить", "выборка", "выполнить"}
     allow_query_section = bool(code_tokens & query_markers)
-    scored: list[tuple[tuple[int, int], NormCard]] = []
+    forced_norm_reasons = _detect_forced_norm_matches(unit.text)
+    scored: list[tuple[tuple[int, int], str, NormCard]] = []
     for card in norm_cards:
         section_value = _extract_body_field(card.body, "Раздел") or ""
-        is_query_section = allow_query_section and ("запрос" in section_value.lower() or "sql" in section_value.lower())
+        section_key = _normalize_section_key(section_value)
+        is_query_section = allow_query_section and (
+            "запрос" in section_value.lower() or "sql" in section_value.lower()
+        )
         hint_tokens = _extract_detection_hint_tokens(card.body)
         hint_match = any(token in code_tokens for token in hint_tokens)
         overlap = len(card.tokens & code_tokens) if card.tokens else 0
-        if not hint_match and overlap == 0 and not is_query_section:
+        is_forced = card.norm_id in forced_norm_reasons
+        if not hint_match and overlap == 0 and not is_query_section and not is_forced:
             continue
-        score = (2 if hint_match else 1 if is_query_section else 0, overlap)
-        scored.append((score, card))
+        # score tier: forced > hint > query-section > lexical overlap only
+        score = (3 if is_forced else 2 if hint_match else 1 if is_query_section else 0, overlap)
+        scored.append((score, section_key, card))
     if not scored:
-        return []
-    scored.sort(key=lambda item: (-item[0][0], -item[0][1], item[1].norm_id))
-    return [card for _, card in scored[:PREFILTER_MAX_CARDS]]
+        return PrefilterResult(
+            cards=[],
+            forced_norm_reasons=forced_norm_reasons,
+            stats={
+                "candidate_count": len(norm_cards),
+                "scored_count": 0,
+                "selected_count": 0,
+                "forced_norm_ids": sorted(forced_norm_reasons),
+            },
+        )
+    scored.sort(key=lambda item: (-item[0][0], -item[0][1], item[2].norm_id))
+    limit = min(len(scored), max(PREFILTER_MAX_CARDS, len(forced_norm_reasons)))
+    primary_limit = max(1, min(limit, int(PREFILTER_MAX_CARDS * PREFILTER_PRIMARY_SHARE)))
+
+    selected_cards: list[NormCard] = []
+    selected_ids: set[str] = set()
+    section_counts: dict[str, int] = {}
+
+    def add_card(card: NormCard, section_key: str) -> None:
+        if card.norm_id in selected_ids:
+            return
+        selected_cards.append(card)
+        selected_ids.add(card.norm_id)
+        section_counts[section_key] = section_counts.get(section_key, 0) + 1
+
+    # Force critical lexical pattern matches into candidate set to protect recall.
+    for _, section_key, card in scored:
+        if card.norm_id in forced_norm_reasons:
+            add_card(card, section_key)
+
+    # Keep highest-scored slice as primary selection.
+    for _, section_key, card in scored:
+        if len(selected_cards) >= primary_limit:
+            break
+        add_card(card, section_key)
+
+    # Then ensure section diversity to avoid starving style/language rules.
+    if len(selected_cards) < limit:
+        for _, section_key, card in scored:
+            if len(selected_cards) >= limit:
+                break
+            if section_counts.get(section_key, 0) < PREFILTER_MIN_SECTION_QUOTA:
+                add_card(card, section_key)
+
+    # Fill remaining slots in score order.
+    if len(selected_cards) < limit:
+        for _, section_key, card in scored:
+            if len(selected_cards) >= limit:
+                break
+            add_card(card, section_key)
+
+    return PrefilterResult(
+        cards=selected_cards,
+        forced_norm_reasons=forced_norm_reasons,
+        stats={
+            "candidate_count": len(norm_cards),
+            "scored_count": len(scored),
+            "selected_count": len(selected_cards),
+            "forced_norm_ids": sorted(forced_norm_reasons),
+            "section_coverage": len(section_counts),
+        },
+    )
+
+
+def _normalize_section_key(value: str) -> str:
+    lowered = (value or "").strip().lower()
+    return lowered or "__no_section__"
+
+
+def _detect_forced_norm_matches(unit_text: str) -> dict[str, str]:
+    reasons: dict[str, str] = {}
+    if not unit_text:
+        return reasons
+    for norm_id, pattern, reason in FORCED_NORM_PATTERNS:
+        if norm_id in reasons:
+            continue
+        if pattern.search(unit_text):
+            reasons[norm_id] = reason
+    return reasons
 
 
 def _extract_detection_hint_tokens(body: str) -> list[str]:
