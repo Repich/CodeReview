@@ -46,6 +46,16 @@ const OPEN_WORLD_USER_PROMPT_TEMPLATE = `Модуль: {source_path}
   }
 ]`;
 
+const PROVIDER_DEFAULT_MODELS: Record<'deepseek' | 'openai', string> = {
+  deepseek: 'deepseek-chat',
+  openai: 'gpt-5-mini',
+};
+
+const PROVIDER_MODEL_OPTIONS: Record<'deepseek' | 'openai', string[]> = {
+  deepseek: ['deepseek-chat'],
+  openai: ['gpt-5-mini'],
+};
+
 function AccountPage() {
   const queryClient = useQueryClient();
   const userQuery = useQuery({ queryKey: ['me'], queryFn: fetchCurrentUser });
@@ -314,13 +324,12 @@ function AccountPage() {
                   type="button"
                   className={llmProvider === 'deepseek' ? 'active' : ''}
                   onClick={() => {
+                    const defaultModel = PROVIDER_DEFAULT_MODELS.deepseek;
                     setLlmProvider('deepseek');
-                    if (llmModel === 'gpt-5-mini') {
-                      setLlmModel('deepseek-chat');
-                    }
+                    setLlmModel(defaultModel);
                     settingsMutation.mutate({
                       llm_provider: 'deepseek',
-                      llm_model: llmModel === 'gpt-5-mini' ? 'deepseek-chat' : llmModel,
+                      llm_model: defaultModel,
                     });
                   }}
                   disabled={settingsMutation.isPending}
@@ -331,13 +340,12 @@ function AccountPage() {
                   type="button"
                   className={llmProvider === 'openai' ? 'active' : ''}
                   onClick={() => {
+                    const defaultModel = PROVIDER_DEFAULT_MODELS.openai;
                     setLlmProvider('openai');
-                    if (llmModel === 'deepseek-chat') {
-                      setLlmModel('gpt-5-mini');
-                    }
+                    setLlmModel(defaultModel);
                     settingsMutation.mutate({
                       llm_provider: 'openai',
-                      llm_model: llmModel === 'deepseek-chat' ? 'gpt-5-mini' : llmModel,
+                      llm_model: defaultModel,
                     });
                   }}
                   disabled={settingsMutation.isPending}
@@ -347,21 +355,50 @@ function AccountPage() {
               </div>
               <div style={{ marginTop: '0.75rem' }}>
                 <label className="field" style={{ display: 'grid', gap: '0.35rem' }}>
-                  <span className="muted">Модель</span>
+                  <span className="muted">Модель (выбор)</span>
+                  <select
+                    value={llmModel}
+                    onChange={(event) => {
+                      const model = event.target.value;
+                      setLlmModel(model);
+                      settingsMutation.mutate({ llm_model: model });
+                    }}
+                    disabled={settingsMutation.isPending}
+                  >
+                    {(
+                      PROVIDER_MODEL_OPTIONS[
+                        llmProvider === 'openai' ? 'openai' : 'deepseek'
+                      ] || []
+                    ).map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                    {!(PROVIDER_MODEL_OPTIONS[llmProvider === 'openai' ? 'openai' : 'deepseek'] || []).includes(
+                      llmModel,
+                    ) && <option value={llmModel}>{llmModel} (текущее)</option>}
+                  </select>
+                </label>
+                <p className="muted" style={{ marginTop: '0.5rem' }}>
+                  Рекомендуемая модель подставляется автоматически при смене провайдера.
+                </p>
+              </div>
+              <details style={{ marginTop: '0.5rem' }}>
+                <summary style={{ cursor: 'pointer' }}>Указать модель вручную</summary>
+                <label className="field" style={{ display: 'grid', gap: '0.35rem', marginTop: '0.5rem' }}>
+                  <span className="muted">Кастомная модель</span>
                   <input
                     type="text"
                     value={llmModel}
                     onChange={(event) => setLlmModel(event.target.value)}
                     onBlur={() => {
-                      settingsMutation.mutate({ llm_model: llmModel });
+                      settingsMutation.mutate({ llm_model: llmModel.trim() || PROVIDER_DEFAULT_MODELS[llmProvider === 'openai' ? 'openai' : 'deepseek'] });
                     }}
+                    placeholder="Например: gpt-5-mini"
                     disabled={settingsMutation.isPending}
                   />
                 </label>
-                <p className="muted" style={{ marginTop: '0.5rem' }}>
-                  Примеры: deepseek-chat, gpt-5-mini
-                </p>
-              </div>
+              </details>
             </div>
           )}
           {settingsMutation.isError && (
