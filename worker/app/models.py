@@ -66,6 +66,7 @@ class AnalysisResult:
     duration_ms: int
     metrics: dict[str, Any] | None = None
     ai_suggestions: list["AISuggestion"] = field(default_factory=list)
+    open_world_candidates: list["OpenWorldCandidate"] = field(default_factory=list)
     llm_prompt_version: str | None = None
     llm_logs: list["LLMDiagnostic"] = field(default_factory=list)
     evaluation_report: dict[str, Any] | None = None
@@ -95,3 +96,16 @@ class LLMDiagnostic:
     unit_id: str | None = None
     unit_name: str | None = None
     redaction_report: dict[str, Any] | None = None
+
+
+@dataclass
+class OpenWorldCandidate:
+    title: str
+    section: str | None = None
+    severity: str | None = None
+    confidence: float | None = None
+    description: str | None = None
+    norm_text: str | None = None
+    mapped_norm_id: str | None = None
+    evidence: list[dict[str, Any]] | None = None
+    llm_raw_response: dict[str, Any] | None = None

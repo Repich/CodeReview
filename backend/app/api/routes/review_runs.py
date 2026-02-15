@@ -13,8 +13,8 @@ from backend.app.api.utils import ensure_run_access
 from backend.app.models.ai_finding import AIFinding
 from backend.app.models.audit import AuditLog, IOLog
 from backend.app.models.finding import Finding
+from backend.app.models.open_world_candidate import OpenWorldCandidate
 from backend.app.models.review_run import ReviewRun
-from backend.app.models.user import UserAccount
 from backend.app.models.user import UserAccount
 from backend.app.models.enums import (
     AIFindingStatus,
@@ -292,6 +292,22 @@ def submit_results(
         )
         db.add(ai_finding)
         ai_count += 1
+    open_world_count = 0
+    for candidate_payload in payload.open_world_candidates or []:
+        candidate = OpenWorldCandidate(
+            review_run_id=review_run.id,
+            title=candidate_payload.title,
+            section=candidate_payload.section,
+            severity=candidate_payload.severity,
+            confidence=candidate_payload.confidence,
+            description=candidate_payload.description,
+            norm_text=candidate_payload.norm_text,
+            mapped_norm_id=candidate_payload.mapped_norm_id,
+            evidence=candidate_payload.evidence,
+            llm_raw_response=candidate_payload.llm_raw_response,
+        )
+        db.add(candidate)
+        open_world_count += 1
 
     llm_log_count = 0
     for idx, log_payload in enumerate(payload.llm_logs or []):
@@ -335,6 +351,7 @@ def submit_results(
             payload={
                 "findings": len(payload.findings),
                 "ai_findings": ai_count,
+                "open_world_candidates": open_world_count,
                 "llm_logs": llm_log_count,
                 "duration_ms": payload.duration_ms,
             },

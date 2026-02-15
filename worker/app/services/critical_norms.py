@@ -12,6 +12,7 @@ from worker.app.services.norms_repo import NormCard
 ROOT_DIR = Path(__file__).resolve().parents[3]
 NORMS_PATH = ROOT_DIR / "critical_norms.yaml"
 CUSTOM_NORMS_PATH = ROOT_DIR / "custom_norms.yaml"
+MAKE_LLM_NORMS_PATH = ROOT_DIR / "make_llm_norm.yaml"
 
 CODE_NORM_IDS = [
     "CRIT_NEW_01",
@@ -49,6 +50,7 @@ CODE_NORM_IDS = [
 class CriticalNormRepository:
     path: Path = NORMS_PATH
     custom_path: Path = CUSTOM_NORMS_PATH
+    make_llm_path: Path = MAKE_LLM_NORMS_PATH
     norm_ids: list[str] | None = None
     cards: list[NormCard] | None = None
     entries: dict[str, dict] | None = None
@@ -68,7 +70,10 @@ class CriticalNormRepository:
             return
         raw_text = self.path.read_text(encoding="utf-8")
         custom_text = self.custom_path.read_text(encoding="utf-8") if self.custom_path.exists() else ""
-        version_seed = raw_text + "|" + custom_text + "|" + ",".join(self.norm_ids)
+        make_llm_text = (
+            self.make_llm_path.read_text(encoding="utf-8") if self.make_llm_path.exists() else ""
+        )
+        version_seed = raw_text + "|" + custom_text + "|" + make_llm_text + "|" + ",".join(self.norm_ids)
         self.version = hashlib.sha1(version_seed.encode("utf-8")).hexdigest()[:12]
         data = yaml.safe_load(raw_text) or {}
         entries = data.get("norms", [])
@@ -90,6 +95,25 @@ class CriticalNormRepository:
             custom_data = yaml.safe_load(custom_text) or {}
             custom_entries = custom_data.get("norms") if isinstance(custom_data, dict) else custom_data
             for entry in custom_entries or []:
+                if not isinstance(entry, dict):
+                    continue
+                norm_id = entry.get("norm_id")
+                if not norm_id or norm_id in self.entries:
+                    continue
+                self.entries[norm_id] = entry
+                body = _format_norm_body(entry)
+                checksum = hashlib.sha1(f"{norm_id}:{body}".encode("utf-8")).hexdigest()[:12]
+                tokens = set(_tokenize(body))
+                self.cards.append(
+                    NormCard(norm_id=norm_id, body=body, tokens=tokens, checksum=checksum)
+                )
+
+        if self.make_llm_path.exists():
+            make_llm_data = yaml.safe_load(make_llm_text) or {}
+            make_llm_entries = (
+                make_llm_data.get("norms") if isinstance(make_llm_data, dict) else make_llm_data
+            )
+            for entry in make_llm_entries or []:
                 if not isinstance(entry, dict):
                     continue
                 norm_id = entry.get("norm_id")
@@ -138,7 +162,7 @@ def _tokenize(text: str) -> list[str]:
 
 
 _CRITICAL_NORMS_CACHE: CriticalNormRepository | None = None
-_CRITICAL_NORMS_MTIMES: tuple[float | None, float | None] | None = None
+_CRITICAL_NORMS_MTIMES: tuple[float | None, float | None, float | None] | None = None
 
 
 def _get_mtime(path: Path) -> float | None:
@@ -151,7 +175,11 @@ def _get_mtime(path: Path) -> float | None:
 def get_critical_norm_repository() -> CriticalNormRepository:
     global _CRITICAL_NORMS_CACHE
     global _CRITICAL_NORMS_MTIMES
-    current_mtimes = (_get_mtime(NORMS_PATH), _get_mtime(CUSTOM_NORMS_PATH))
+    current_mtimes = (
+        _get_mtime(NORMS_PATH),
+        _get_mtime(CUSTOM_NORMS_PATH),
+        _get_mtime(MAKE_LLM_NORMS_PATH),
+    )
     if _CRITICAL_NORMS_CACHE is None or _CRITICAL_NORMS_MTIMES != current_mtimes:
         _CRITICAL_NORMS_CACHE = CriticalNormRepository()
         _CRITICAL_NORMS_MTIMES = current_mtimes

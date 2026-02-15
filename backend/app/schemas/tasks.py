@@ -56,6 +56,18 @@ class AISuggestionPayload(BaseModel):
     llm_raw_response: dict | None = None
 
 
+class OpenWorldCandidatePayload(BaseModel):
+    title: str
+    section: str | None = None
+    severity: str | None = None
+    confidence: float | None = None
+    description: str | None = None
+    norm_text: str | None = None
+    mapped_norm_id: str | None = None
+    evidence: list[dict[str, str | None]] | None = None
+    llm_raw_response: dict | None = None
+
+
 class AnalysisResultPayload(BaseModel):
     engine_version: str
     detectors_version: str
@@ -63,6 +75,7 @@ class AnalysisResultPayload(BaseModel):
     duration_ms: int
     findings: list[AnalysisFindingPayload]
     ai_findings: list[AISuggestionPayload] | None = None
+    open_world_candidates: list[OpenWorldCandidatePayload] | None = None
     llm_prompt_version: str | None = None
     llm_logs: list["LLMDiagnosticPayload"] | None = None
     metrics: dict[str, Any] | None = None

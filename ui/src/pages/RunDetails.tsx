@@ -8,6 +8,8 @@ import {
   fetchFeedback,
   fetchIOLogs,
   fetchAIFindings,
+  fetchOpenWorldCandidates,
+  acceptOpenWorldCandidate,
   fetchCurrentUser,
   fetchLLMLogs,
   downloadFindingsJsonl,
@@ -24,6 +26,7 @@ import type {
   Finding,
   AIFinding,
   AIFindingStatus,
+  OpenWorldCandidate,
   LLMLogEntry,
   RunSource,
   CognitiveComplexitySummary,
@@ -184,6 +187,19 @@ function RunDetailsPage() {
     queryFn: () => fetchAIFindings(id!),
     enabled: Boolean(id),
     refetchInterval: () => (isActiveRun ? 5000 : false),
+  });
+  const openWorldCandidatesQuery = useQuery({
+    queryKey: ['open-world-candidates', id],
+    queryFn: () => fetchOpenWorldCandidates(id!),
+    enabled: Boolean(id),
+    refetchInterval: () => (isActiveRun ? 5000 : false),
+  });
+  const acceptOpenWorldMutation = useMutation({
+    mutationFn: (candidateId: string) => acceptOpenWorldCandidate(candidateId),
+    onSuccess: () => {
+      openWorldCandidatesQuery.refetch();
+      aiFindingsQuery.refetch();
+    },
   });
 
   const userQuery = useQuery({
@@ -426,6 +442,8 @@ function RunDetailsPage() {
 
   const run = runQuery.data;
   const aiFindings: AIFinding[] = aiFindingsQuery.data?.items ?? [];
+  const openWorldCandidates: OpenWorldCandidate[] =
+    openWorldCandidatesQuery.data?.items ?? [];
   const aiCountSummary = aiFindingsQuery.isLoading ? '…' : aiFindings.length;
   const orderedAiFindings = useMemo(() => {
     const items = [...aiFindings];
@@ -708,7 +726,7 @@ function RunDetailsPage() {
           <p className="muted">
             {aiFindingsQuery.isLoading
               ? 'Загружаем…'
-              : `${aiFindings.length}/${aiFindingsQuery.data?.total ?? 0}`}
+              : `${aiFindings.length}/${aiFindingsQuery.data?.total ?? 0} · open-world: ${openWorldCandidates.length}`}
           </p>
         </div>
         {aiFindingsQuery.isLoading && <span className="muted">Обновляем…</span>}
@@ -852,6 +870,65 @@ function RunDetailsPage() {
             ))}
             {!aiFindings.length && !aiFindingsQuery.isLoading && (
               <div className="empty-state">LLM не предложила дополнительных норм.</div>
+            )}
+            {openWorldCandidates.length > 0 && (
+              <>
+                <div className="chip" style={{ margin: '0.75rem 0 0.5rem' }}>
+                  Кандидаты новых норм
+                </div>
+                {openWorldCandidates.map((candidate) => {
+                  const firstEvidence = (candidate.evidence || [])[0];
+                  return (
+                    <div key={candidate.id} className="card" style={{ padding: '0.75rem' }}>
+                      <div className="card-header">
+                        <strong>{candidate.title}</strong>
+                        <span className="muted">
+                          {candidate.severity || 'major'}
+                          {candidate.confidence !== null &&
+                          candidate.confidence !== undefined
+                            ? ` · ${candidate.confidence.toFixed(2)}`
+                            : ''}
+                        </span>
+                      </div>
+                      {candidate.description && (
+                        <p style={{ margin: '0.35rem 0 0.5rem' }}>{candidate.description}</p>
+                      )}
+                      {candidate.norm_text && (
+                        <p className="muted" style={{ margin: '0 0 0.5rem' }}>
+                          Норма-кандидат: {candidate.norm_text}
+                        </p>
+                      )}
+                      {firstEvidence && (
+                        <p className="muted" style={{ margin: 0 }}>
+                          {firstEvidence.file || '—'}: {firstEvidence.lines || '—'}
+                        </p>
+                      )}
+                      <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+                        {canTeach ? (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            disabled={
+                              candidate.status === 'accepted' || acceptOpenWorldMutation.isPending
+                            }
+                            onClick={() => acceptOpenWorldMutation.mutate(candidate.id)}
+                          >
+                            {candidate.status === 'accepted'
+                              ? `Принято (${candidate.accepted_norm_id || '—'})`
+                              : 'Принять как норму'}
+                          </button>
+                        ) : (
+                          <span className="muted">
+                            {candidate.status === 'accepted'
+                              ? `Принято (${candidate.accepted_norm_id || '—'})`
+                              : 'Ожидает проверки преподавателем'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
             )}
           </div>
 

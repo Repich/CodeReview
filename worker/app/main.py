@@ -99,6 +99,20 @@ def serialize_result(result: AnalysisResult) -> dict[str, Any]:
             }
             for suggestion in result.ai_suggestions
         ],
+        "open_world_candidates": [
+            {
+                "title": candidate.title,
+                "section": candidate.section,
+                "severity": candidate.severity,
+                "confidence": candidate.confidence,
+                "description": candidate.description,
+                "norm_text": candidate.norm_text,
+                "mapped_norm_id": candidate.mapped_norm_id,
+                "evidence": candidate.evidence,
+                "llm_raw_response": candidate.llm_raw_response,
+            }
+            for candidate in result.open_world_candidates
+        ],
         "llm_logs": [
             {
                 "prompt": log.prompt,

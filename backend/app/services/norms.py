@@ -37,8 +37,9 @@ def _load_norm_catalog() -> dict[str, dict[str, Any]]:
     for candidate in [current] + list(current.parents):
         norms_path = candidate / "norms.yaml"
         custom_path = candidate / "custom_norms.yaml"
-        if norms_path.exists() or custom_path.exists():
-            paths = (norms_path, custom_path)
+        make_llm_path = candidate / "make_llm_norm.yaml"
+        if norms_path.exists() or custom_path.exists() or make_llm_path.exists():
+            paths = (norms_path, custom_path, make_llm_path)
             key = _catalog_cache_key(list(paths))
             return _load_norm_catalog_cached(key, paths)
     return {}

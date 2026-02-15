@@ -14,7 +14,13 @@ from datetime import datetime
 import httpx
 
 from worker.app.config import get_settings
-from worker.app.models import AISuggestion, AnalysisTask, DetectorFinding, LLMDiagnostic
+from worker.app.models import (
+    AISuggestion,
+    AnalysisTask,
+    DetectorFinding,
+    LLMDiagnostic,
+    OpenWorldCandidate,
+)
 from worker.app.services.code_units import CodeUnit, split_source_into_units
 from worker.app.services.redaction import redact_lines, redact_text, RedactionStats
 
@@ -131,10 +137,20 @@ MERGE_SYSTEM_PROMPT = (
     "Ответ: строго JSON-массив."
 )
 
+OPEN_WORLD_SYSTEM_PROMPT = (
+    "Ты — ведущий ревьюер 1С. "
+    "Найди рискованные дефекты, которые не покрыты предоставленными norm_id. "
+    "Возвращай только практичные, проверяемые замечания с evidence по строкам."
+)
+
+MAX_OPEN_WORLD_CANDIDATES_PER_UNIT = 3
+MAX_OPEN_WORLD_CANDIDATES_TOTAL = 15
+
 
 @dataclass
 class LLMResult:
     suggestions: list[AISuggestion]
+    open_world_candidates: list[OpenWorldCandidate]
     prompt_version: str | None
     log_entries: list[LLMDiagnostic]
     evaluation_report: dict[str, Any] | None = None
@@ -186,6 +202,7 @@ def generate_ai_suggestions(
     )
 
     all_suggestions: list[AISuggestion] = []
+    open_world_candidates: list[OpenWorldCandidate] = []
     critical_suggestions: list[AISuggestion] = []
     general_suggestions: list[AISuggestion] = []
     pattern_suggestions: list[AISuggestion] = []
@@ -217,6 +234,7 @@ def generate_ai_suggestions(
                 prompt_versions.append("evaluation")
                 return LLMResult(
                     suggestions=[],
+                    open_world_candidates=[],
                     prompt_version="evaluation",
                     log_entries=diagnostics,
                     evaluation_report=report,
@@ -474,26 +492,39 @@ def generate_ai_suggestions(
         all_suggestions.extend(forced_fallback_suggestions)
     if query_suggestions:
         all_suggestions.extend(query_suggestions)
+    if units:
+        open_world_candidates = _run_open_world_pass(
+            units=units,
+            findings=findings_list,
+            known_norm_ids={item.norm_id for item in all_suggestions if item.norm_id},
+            api_key=api_key,
+            diagnostics=diagnostics,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+        )
 
-    if not all_suggestions:
-        logger.info("Run %s: LLM produced zero suggestions", task.review_run_id)
+    if not all_suggestions and not open_world_candidates:
+        logger.info("Run %s: LLM produced zero suggestions and zero candidates", task.review_run_id)
         if not diagnostics:
             return None
         return LLMResult(
             suggestions=[],
+            open_world_candidates=[],
             prompt_version=";".join(prompt_versions) if prompt_versions else None,
             log_entries=diagnostics,
         )
 
     logger.info(
-        "Run %s: LLM produced %s suggestions across %s units",
+        "Run %s: LLM produced %s suggestions and %s open-world candidates across %s units",
         task.review_run_id,
         len(all_suggestions),
+        len(open_world_candidates),
         len(diagnostics),
     )
 
     return LLMResult(
         suggestions=all_suggestions,
+        open_world_candidates=open_world_candidates,
         prompt_version=";".join(prompt_versions) if prompt_versions else None,
         log_entries=diagnostics,
     )
@@ -940,6 +971,201 @@ def _merge_suggestions(
     )
     prompt_versions.append("merge")
     return merged
+
+
+def _run_open_world_pass(
+    units: list[CodeUnit],
+    findings: list[DetectorFinding],
+    known_norm_ids: set[str],
+    api_key: str,
+    diagnostics: list[LLMDiagnostic],
+    llm_provider: str,
+    llm_model: str,
+) -> list[OpenWorldCandidate]:
+    candidates: list[OpenWorldCandidate] = []
+    for unit in units:
+        if len(candidates) >= MAX_OPEN_WORLD_CANDIDATES_TOTAL:
+            break
+        unit_findings = _filter_findings_for_unit(findings, unit)
+        prompt, redaction_report = _build_open_world_prompt(
+            unit=unit,
+            findings=unit_findings,
+            known_norm_ids=known_norm_ids,
+        )
+        response_text = _call_llm(
+            prompt,
+            api_key,
+            system_prompt=OPEN_WORLD_SYSTEM_PROMPT,
+            temperature=0,
+            provider=llm_provider,
+            model=llm_model,
+        )
+        if not response_text:
+            logger.warning("LLM open-world %s: no response", unit.unit_name)
+            continue
+        unit_candidates = _parse_open_world_response(
+            response_text=response_text,
+            unit=unit,
+            known_norm_ids=known_norm_ids,
+        )
+        if unit_candidates:
+            logger.info(
+                "LLM open-world %s: received %s candidates",
+                unit.unit_name,
+                len(unit_candidates),
+            )
+            candidates.extend(unit_candidates[:MAX_OPEN_WORLD_CANDIDATES_PER_UNIT])
+        diagnostics.append(
+            LLMDiagnostic(
+                prompt=prompt,
+                response=response_text,
+                context_files=["open_world:candidates"],
+                source_paths=[unit.source_path],
+                static_findings=json.loads(_serialize_findings(unit_findings)[0]),
+                created_at=datetime.utcnow().isoformat(),
+                prompt_version="open_world:candidates",
+                unit_id=unit.unit_id,
+                unit_name=unit.unit_name,
+                redaction_report=redaction_report,
+            )
+        )
+    deduped: list[OpenWorldCandidate] = []
+    seen_keys: set[tuple[str, str, str]] = set()
+    for item in candidates:
+        ev = (item.evidence or [{}])[0] if item.evidence else {}
+        key = (
+            (item.title or "").strip().lower(),
+            str(ev.get("file") or ""),
+            str(ev.get("lines") or ""),
+        )
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        deduped.append(item)
+        if len(deduped) >= MAX_OPEN_WORLD_CANDIDATES_TOTAL:
+            break
+    return deduped
+
+
+def _build_open_world_prompt(
+    unit: CodeUnit,
+    findings: list[DetectorFinding],
+    known_norm_ids: set[str],
+) -> tuple[str, dict]:
+    code_block, redaction_report = _extract_relevant_code(unit)
+    serialized_findings, findings_redaction = _serialize_findings(findings)
+    if findings_redaction:
+        redaction_report["redacted_in_findings"] = findings_redaction
+    known_norms_text = ", ".join(sorted(known_norm_ids)) if known_norm_ids else "нет"
+    prompt = textwrap.dedent(
+        f"""
+        Модуль: {unit.source_path}
+        Единица анализа: {unit.unit_name} ({unit.unit_type}), строки {unit.start_line}–{unit.end_line}
+
+        Код:
+        ```
+        {code_block}
+        ```
+
+        Уже найденные нарушения (статические и по известным нормам):
+        {serialized_findings}
+
+        Уже покрытые known norm_id:
+        {known_norms_text}
+
+        Задача:
+        - Найди риски/дефекты, которые НЕ покрыты known norm_id.
+        - Если риск фактически покрыт known norm_id — не возвращай его.
+        - Возвращай только проверяемые кандидаты с привязкой к строкам.
+        - Нужен краткий проект нормы (norm_text), который можно вынести в каталог норм.
+
+        Ответ: строго JSON-массив объектов:
+        [
+          {{
+            "title": "краткое название риска",
+            "description": "пояснение",
+            "section": "раздел нормы",
+            "severity": "critical|major|minor|info",
+            "confidence": 0.0,
+            "mapped_norm_id": null,
+            "norm_text": "формулировка новой нормы",
+            "evidence": [{{"file": "{unit.source_path}", "lines": "{unit.source_path}:{unit.start_line}-{unit.start_line}", "reason": "почему это риск"}}]
+          }}
+        ]
+        """
+    ).strip()
+    redaction_report["phase"] = "open_world"
+    return prompt, redaction_report
+
+
+def _parse_open_world_response(
+    response_text: str,
+    unit: CodeUnit,
+    known_norm_ids: set[str],
+) -> list[OpenWorldCandidate]:
+    parsed = _load_json_array(response_text)
+    if parsed is None or not isinstance(parsed, list):
+        logger.warning("LLM open-world response is not valid JSON array")
+        return []
+    results: list[OpenWorldCandidate] = []
+    for entry in parsed:
+        if not isinstance(entry, dict):
+            continue
+        title = str(entry.get("title") or "").strip()
+        description = str(entry.get("description") or "").strip() or None
+        if not title:
+            continue
+        evidence = entry.get("evidence")
+        if isinstance(evidence, dict):
+            evidence = [evidence]
+        elif evidence is not None and not isinstance(evidence, list):
+            evidence = None
+        normalized_evidence: list[dict[str, Any]] = []
+        for ev in evidence or []:
+            if not isinstance(ev, dict):
+                continue
+            file_value = str(ev.get("file") or unit.source_path).strip() or unit.source_path
+            lines_value = str(ev.get("lines") or "").strip()
+            reason_value = str(ev.get("reason") or "").strip()
+            if not lines_value:
+                continue
+            normalized_evidence.append(
+                {
+                    "file": file_value,
+                    "lines": lines_value,
+                    "reason": reason_value or None,
+                }
+            )
+        if not normalized_evidence:
+            continue
+        severity = str(entry.get("severity") or "").strip().lower() or None
+        if severity not in {"critical", "major", "minor", "info"}:
+            severity = "major"
+        confidence_raw = entry.get("confidence")
+        confidence: float | None = None
+        if confidence_raw is not None:
+            try:
+                confidence = float(confidence_raw)
+            except (TypeError, ValueError):
+                confidence = None
+        mapped_norm_id_raw = str(entry.get("mapped_norm_id") or "").strip()
+        mapped_norm_id = mapped_norm_id_raw if mapped_norm_id_raw in known_norm_ids else None
+        norm_text = str(entry.get("norm_text") or "").strip() or None
+        section = str(entry.get("section") or "").strip() or None
+        results.append(
+            OpenWorldCandidate(
+                title=title,
+                section=section,
+                severity=severity,
+                confidence=confidence,
+                description=description,
+                norm_text=norm_text,
+                mapped_norm_id=mapped_norm_id,
+                evidence=normalized_evidence,
+                llm_raw_response=entry,
+            )
+        )
+    return results
 
 
 def _format_norm_titles(norm_cards: list[NormCard]) -> str:

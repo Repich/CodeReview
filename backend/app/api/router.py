@@ -15,6 +15,7 @@ import backend.app.api.routes.changelog as changelog
 import backend.app.api.routes.health as health
 import backend.app.api.routes.llm_playground as llm_playground
 import backend.app.api.routes.norms as norms
+import backend.app.api.routes.open_world_candidates as open_world_candidates
 import backend.app.api.routes.review_runs as review_runs
 import backend.app.api.routes.users as users
 import backend.app.api.routes.wallets as wallets
@@ -24,6 +25,7 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(ai_findings.router)
+api_router.include_router(open_world_candidates.router)
 api_router.include_router(norms.router)
 api_router.include_router(suggested_norms.router)
 api_router.include_router(review_runs.router)

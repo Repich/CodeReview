@@ -7,7 +7,16 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 from backend.app.db.base import Base
-from backend.app.models import AuditLog, Feedback, Finding, IOLog, LLMPromptVersion, Norm, ReviewRun
+from backend.app.models import (
+    AuditLog,
+    Feedback,
+    Finding,
+    IOLog,
+    LLMPromptVersion,
+    Norm,
+    OpenWorldCandidate,
+    ReviewRun,
+)
 
 config = context.config
 if config.config_file_name is not None:

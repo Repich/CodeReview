@@ -71,7 +71,12 @@ def _load_catalog_norms_cached(
 
 def _load_catalog_norms() -> list[dict[str, Any]]:
     root_dir = Path(__file__).resolve().parents[3]
-    paths = (root_dir / "norms.yaml", root_dir / "critical_norms.yaml", root_dir / "custom_norms.yaml")
+    paths = (
+        root_dir / "norms.yaml",
+        root_dir / "critical_norms.yaml",
+        root_dir / "custom_norms.yaml",
+        root_dir / "make_llm_norm.yaml",
+    )
     key = _catalog_cache_key(list(paths))
     return _load_catalog_norms_cached(key, paths)
 
@@ -216,13 +221,35 @@ def append_suggested_norm_to_custom_norms_file(
     scope: str,
     default_severity: str,
 ) -> None:
+    append_norm_to_yaml_file(
+        norm_id=norm_id,
+        title=title,
+        norm_text=norm_text,
+        section=section,
+        scope=scope,
+        default_severity=default_severity,
+        file_name="custom_norms.yaml",
+        source_reference="Заявки норм",
+    )
+
+
+def append_norm_to_yaml_file(
+    norm_id: str,
+    title: str,
+    norm_text: str,
+    section: str,
+    scope: str,
+    default_severity: str,
+    file_name: str,
+    source_reference: str,
+) -> None:
     try:
         import yaml  # lazy import
     except ImportError as exc:
-        raise RuntimeError("yaml not available, cannot update pattern norms file") from exc
+        raise RuntimeError("yaml not available, cannot update norms file") from exc
 
     root_dir = Path(__file__).resolve().parents[3]
-    path = root_dir / "custom_norms.yaml"
+    path = root_dir / file_name
     existing: list[dict[str, Any]] = []
     existing_text = ""
     if path.exists():
@@ -250,7 +277,7 @@ def append_suggested_norm_to_custom_norms_file(
         "check_type": "llm",
         "default_severity": default_severity,
         "detector_type": "custom",
-        "source_reference": "Заявки норм",
+        "source_reference": source_reference,
     }
 
     payload = {"norms": existing + [entry]}

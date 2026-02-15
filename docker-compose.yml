@@ -24,6 +24,7 @@ services:
       - artifact_storage:/app/artifacts
       - ./pattern_1С.yaml:/app/pattern_1С.yaml
       - ./custom_norms.yaml:/app/custom_norms.yaml
+      - ./make_llm_norm.yaml:/app/make_llm_norm.yaml
     ports:
       - "8200:8000"
 
@@ -47,6 +48,7 @@ services:
       - artifact_storage:/app/artifacts
       - ./pattern_1С.yaml:/app/pattern_1С.yaml
       - ./custom_norms.yaml:/app/custom_norms.yaml
+      - ./make_llm_norm.yaml:/app/make_llm_norm.yaml
 
 volumes:
   artifact_storage:

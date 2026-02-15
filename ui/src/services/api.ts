@@ -129,6 +129,31 @@ export interface AIFinding {
   updated_at: string;
 }
 
+export interface OpenWorldCandidateEvidence {
+  file?: string | null;
+  lines?: string | null;
+  reason?: string | null;
+}
+
+export interface OpenWorldCandidate {
+  id: string;
+  review_run_id: string;
+  title: string;
+  section?: string | null;
+  severity?: string | null;
+  confidence?: number | null;
+  description?: string | null;
+  norm_text?: string | null;
+  mapped_norm_id?: string | null;
+  status: string;
+  accepted_norm_id?: string | null;
+  evidence?: OpenWorldCandidateEvidence[] | null;
+  llm_raw_response?: Record<string, unknown> | null;
+  created_at: string;
+  mapped_norm_source_reference?: string | null;
+  mapped_norm_source_excerpt?: string | null;
+}
+
 export interface LLMLogEntry {
   io_log_id: string;
   created_at: string;
@@ -381,6 +406,11 @@ export interface AIFindingListResponse {
   items: AIFinding[];
 }
 
+export interface OpenWorldCandidateListResponse {
+  total: number;
+  items: OpenWorldCandidate[];
+}
+
 export async function fetchFindings(runId: string) {
   const { data } = await client.get<FindingListResponse>(`/findings`, {
     params: { review_run_id: runId },
@@ -392,6 +422,18 @@ export async function fetchAIFindings(runId: string) {
   const { data } = await client.get<AIFindingListResponse>(`/ai-findings`, {
     params: { review_run_id: runId },
   });
+  return data;
+}
+
+export async function fetchOpenWorldCandidates(runId: string) {
+  const { data } = await client.get<OpenWorldCandidateListResponse>(`/open-world-candidates`, {
+    params: { review_run_id: runId },
+  });
+  return data;
+}
+
+export async function acceptOpenWorldCandidate(id: string) {
+  const { data } = await client.post<OpenWorldCandidate>(`/open-world-candidates/${id}/accept`);
   return data;
 }
 

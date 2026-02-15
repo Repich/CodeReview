@@ -89,6 +89,8 @@ def _infer_llm_stage(prompt_version: str | None) -> str:
         return "pattern"
     if lowered.startswith("query:"):
         return "query"
+    if lowered.startswith("open_world:"):
+        return "open_world"
     return "code"
 
 
