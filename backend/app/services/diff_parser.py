@@ -46,20 +46,29 @@ def parse_crucible_diff(text: str) -> tuple[str, list[tuple[int, int]]]:
         include = True
         is_changed = False
 
-        new_number_present = new_token and new_token != "_"
-        old_number_present = old_token and old_token != "_"
+        old_number_present = bool(old_token and old_token != "_")
+        new_number_present = bool(new_token and new_token != "_")
+        number_count = int(old_number_present) + int(new_number_present)
 
-        if not new_number_present and not old_number_present:
+        if number_count == 0:
             return text, []
 
-        addition_marker = ">" in markers and "_" not in markers
-        deletion_marker = "<" in markers and "_" not in markers and not addition_marker
+        # Crucible copy/paste specifics used in the product:
+        # - two line numbers in a row => context line (line was renumbered only);
+        # - one line number          => target changed line;
+        # - explicit "<" only marker => old-side line (deleted), exclude from rebuilt text.
+        has_add_marker = ">" in markers
+        has_delete_only_marker = "<" in markers and ">" not in markers
 
-        if not new_number_present and not addition_marker:
+        if has_delete_only_marker and number_count == 1:
             include = False
-
-        if include and (addition_marker or (("<" in markers or ">" in markers) and "_" not in markers)):
+            is_changed = False
+        elif number_count == 1:
+            include = True
             is_changed = True
+        else:
+            include = True
+            is_changed = False
 
         parsed.append(ParsedLine(include=include, changed=is_changed, text=code))
 
