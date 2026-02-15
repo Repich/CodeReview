@@ -832,45 +832,6 @@ function RunDetailsPage() {
                 </div>
               </>
             )}
-            {orderedAiFindings.map((finding) => (
-              <div
-                key={finding.id}
-                onClick={() => {
-                  setSelectedFindingKey(null);
-                  setSelectedFindingRange(null);
-                  setSelectedAiId(finding.id);
-                  if (finding.norm_text) {
-                    setNormText(finding.norm_text);
-                  } else if ((finding as any).message) {
-                    setNormText((finding as any).message);
-                  }
-                }}
-                style={{
-                  border: finding.id === selectedAiId ? '1px solid var(--primary)' : undefined,
-                  borderRadius: '0.75rem',
-                  padding: '0.25rem',
-                }}
-              >
-                <AIFindingCard
-                  finding={finding}
-                  sequence={aiOrderMap.get(finding.id)}
-                  onChangeStatus={
-                    canEditRun
-                      ? (status, reviewerComment) =>
-                          handleAiStatusChange(finding.id, status, reviewerComment)
-                      : undefined
-                  }
-                  isUpdating={
-                    updateAiFinding.isPending && updateAiFinding.variables?.findingId === finding.id
-                  }
-                  readOnly={!canEditRun}
-                  sourceLookup={sourceLookup}
-                />
-              </div>
-            ))}
-            {!aiFindings.length && !aiFindingsQuery.isLoading && (
-              <div className="empty-state">LLM не предложила дополнительных норм.</div>
-            )}
             {openWorldCandidates.length > 0 && (
               <>
                 <div className="chip" style={{ margin: '0.75rem 0 0.5rem' }}>
@@ -929,6 +890,45 @@ function RunDetailsPage() {
                   );
                 })}
               </>
+            )}
+            {orderedAiFindings.map((finding) => (
+              <div
+                key={finding.id}
+                onClick={() => {
+                  setSelectedFindingKey(null);
+                  setSelectedFindingRange(null);
+                  setSelectedAiId(finding.id);
+                  if (finding.norm_text) {
+                    setNormText(finding.norm_text);
+                  } else if ((finding as any).message) {
+                    setNormText((finding as any).message);
+                  }
+                }}
+                style={{
+                  border: finding.id === selectedAiId ? '1px solid var(--primary)' : undefined,
+                  borderRadius: '0.75rem',
+                  padding: '0.25rem',
+                }}
+              >
+                <AIFindingCard
+                  finding={finding}
+                  sequence={aiOrderMap.get(finding.id)}
+                  onChangeStatus={
+                    canEditRun
+                      ? (status, reviewerComment) =>
+                          handleAiStatusChange(finding.id, status, reviewerComment)
+                      : undefined
+                  }
+                  isUpdating={
+                    updateAiFinding.isPending && updateAiFinding.variables?.findingId === finding.id
+                  }
+                  readOnly={!canEditRun}
+                  sourceLookup={sourceLookup}
+                />
+              </div>
+            ))}
+            {!aiFindings.length && !aiFindingsQuery.isLoading && (
+              <div className="empty-state">LLM не предложила дополнительных норм.</div>
             )}
           </div>
 

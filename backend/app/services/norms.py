@@ -13,7 +13,7 @@ from backend.app.models.norm import Norm
 def _catalog_cache_key(paths: list[Path]) -> tuple[tuple[str, int, int], ...]:
     key: list[tuple[str, int, int]] = []
     for path in paths:
-        if path.exists():
+        if path.exists() and path.is_file():
             stat = path.stat()
             key.append((path.name, stat.st_mtime_ns, stat.st_size))
         else:
@@ -25,7 +25,7 @@ def _catalog_cache_key(paths: list[Path]) -> tuple[tuple[str, int, int], ...]:
 def _load_norm_catalog_cached(key: tuple[tuple[str, int, int], ...], paths: tuple[Path, ...]) -> dict[str, dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for path in paths:
-        if not path.exists():
+        if not path.exists() or not path.is_file():
             continue
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         entries.extend(_extract_norm_entries(data))
@@ -46,7 +46,7 @@ def _load_norm_catalog() -> dict[str, dict[str, Any]]:
 
 
 def load_norm_catalog_entries(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
+    if not path.exists() or not path.is_file():
         return []
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     entries = _extract_norm_entries(data)
@@ -54,7 +54,7 @@ def load_norm_catalog_entries(path: Path) -> list[dict[str, Any]]:
 
 
 def load_custom_norms(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
+    if not path.exists() or not path.is_file():
         return []
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     entries = _extract_norm_entries(data)
