@@ -5,7 +5,6 @@ import {
   createReviewRun,
   CreateReviewRunPayload,
   ReviewRun,
-  SourceUnitPayload,
 } from '../services/api';
 
 interface Props {
@@ -14,75 +13,37 @@ interface Props {
   runCost: number;
 }
 
-const defaultModule: SourceUnitPayload = {
-  name: 'DangerousModule',
-  path: 'CommonModules/DangerousModule.bsl',
-  module_type: 'CommonModule',
-  content: '',
-};
-
-const MODULE_TYPE_OPTIONS = [
-  { value: 'CommonModule', label: 'Общий модуль' },
-  { value: 'FormModule', label: 'Модуль формы' },
-  { value: 'ObjectModule', label: 'Модуль объекта' },
-  { value: 'ManagerModule', label: 'Модуль менеджера' },
-  { value: 'DocumentModule', label: 'Модуль документа' },
-  { value: 'RecordSetModule', label: 'Модуль набора записей' },
-  { value: 'CommandModule', label: 'Модуль команд' },
-  { value: 'SessionModule', label: 'Модуль сеанса' },
-  { value: 'HTTPServiceModule', label: 'Модуль HTTP-сервиса' },
-  { value: 'Other', label: 'Другое' },
-];
-
 function RunCreateForm({ onCreated, availablePoints, runCost }: Props) {
-  const [projectId, setProjectId] = useState('demo');
-  const [externalRef, setExternalRef] = useState('');
-  const [modules, setModules] = useState<SourceUnitPayload[]>([{ ...defaultModule }]);
+  const [sourceCode, setSourceCode] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: (payload: CreateReviewRunPayload) => createReviewRun(payload),
     onSuccess: (run) => {
       setFormError(null);
-      setModules([{ ...defaultModule }]);
-      setExternalRef('');
+      setSourceCode('');
       onCreated?.(run);
     },
   });
-
-  const updateModule = (index: number, patch: Partial<SourceUnitPayload>) => {
-    setModules((prev) =>
-      prev.map((module, idx) => (idx === index ? { ...module, ...patch } : module))
-    );
-  };
-
-  const addModule = () => setModules((prev) => [...prev, { ...defaultModule }]);
-  const removeModule = (index: number) => setModules((prev) => prev.filter((_, idx) => idx !== index));
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     setFormError(null);
 
-    if (modules.length === 0) {
-      setFormError('Добавьте хотя бы один модуль');
-      return;
-    }
-
-    if (modules.some((module) => !module.path.trim() || !module.name.trim() || !module.content.trim())) {
-      setFormError('Заполните путь, имя и текст для каждого модуля');
+    if (!sourceCode.trim()) {
+      setFormError('Добавьте текст кода');
       return;
     }
 
     const payload: CreateReviewRunPayload = {
-      project_id: projectId.trim() || undefined,
-      external_ref: externalRef.trim() || undefined,
-      sources: modules.map((module) => ({
-        ...module,
-        path: module.path.trim(),
-        name: module.name.trim(),
-        module_type: module.module_type.trim() || 'CommonModule',
-        content: module.content,
-      })),
+      sources: [
+        {
+          name: 'UserCode',
+          path: 'CommonModules/UserCode.bsl',
+          module_type: 'CommonModule',
+          content: sourceCode,
+        },
+      ],
     };
 
     mutation.mutate(payload, {
@@ -110,90 +71,24 @@ function RunCreateForm({ onCreated, availablePoints, runCost }: Props) {
           Создать новый запуск
         </h2>
         <p className="muted">
-          Загрузите один или несколько модулей 1С. Мы сохраним их и отправим в очередь
-          анализатора.
+          Вставьте код 1С. Мы сохраним его и отправим в очередь анализатора.
         </p>
       </div>
 
-      <div className="field">
-        <label htmlFor="project">Project ID</label>
-        <input
-          id="project"
-          value={projectId}
-          onChange={(event) => setProjectId(event.target.value)}
-          placeholder="demo"
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="external-ref">Внешняя ссылка</label>
-        <input
-          id="external-ref"
-          value={externalRef}
-          onChange={(event) => setExternalRef(event.target.value)}
-          placeholder="MR-123"
-        />
-      </div>
       <p className="muted" style={{ gridColumn: '1 / -1' }}>
         Стоимость запуска: <strong>{runCost}</strong> баллов. Баланс:{' '}
         <strong>{availablePoints ?? '—'}</strong>.
       </p>
 
-      <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ margin: 0 }}>Исходники ({modules.length})</h3>
-        <button type="button" className="btn btn-secondary" onClick={addModule} disabled={mutation.isPending}>
-          Добавить модуль
-        </button>
-      </div>
-
-      <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {modules.map((module, index) => (
-          <div key={index} className="card" style={{ padding: '1rem', borderColor: 'var(--border)' }}>
-            <div className="card-header">
-              <strong>Модуль #{index + 1}</strong>
-              {modules.length > 1 && (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => removeModule(index)}
-                  disabled={mutation.isPending}
-                >
-                  Удалить
-                </button>
-              )}
-            </div>
-            <div className="module-grid">
-              <div className="field">
-                <label>Имя</label>
-                <input value={module.name} onChange={(event) => updateModule(index, { name: event.target.value })} />
-              </div>
-              <div className="field">
-                <label>Путь</label>
-                <input value={module.path} onChange={(event) => updateModule(index, { path: event.target.value })} />
-              </div>
-              <div className="field">
-                <label>Тип модуля</label>
-                <select
-                  value={module.module_type}
-                  onChange={(event) => updateModule(index, { module_type: event.target.value })}
-                >
-                  {MODULE_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="field">
-              <label>Содержимое</label>
-              <textarea
-                value={module.content}
-                onChange={(event) => updateModule(index, { content: event.target.value })}
-                placeholder="Процедура Тест()..."
-              />
-            </div>
-          </div>
-        ))}
+      <div className="field" style={{ gridColumn: '1 / -1' }}>
+        <label htmlFor="source-code">Код</label>
+        <textarea
+          id="source-code"
+          value={sourceCode}
+          onChange={(event) => setSourceCode(event.target.value)}
+          placeholder="Процедура Тест()..."
+          style={{ minHeight: '24rem' }}
+        />
       </div>
 
       {formError && <div className="alert alert-error" style={{ gridColumn: '1 / -1' }}>{formError}</div>}
