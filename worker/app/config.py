@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     llm_provider: str = "deepseek"
     llm_api_base: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-chat"
+    open_world_chatgpt_model: str = "gpt-5-mini"
     llm_timeout_seconds: int = 60
     llm_context_glob: str | None = None
     model_config = SettingsConfigDict(

@@ -169,6 +169,7 @@ def generate_ai_suggestions(
     settings = get_settings()
     llm_provider = (task.settings or {}).get("llm_provider") or settings.llm_provider
     llm_model = (task.settings or {}).get("llm_model") or settings.llm_model
+    open_world_use_chatgpt = bool((task.settings or {}).get("open_world_use_chatgpt"))
     api_key = _load_api_key(llm_provider)
     if not api_key:
         logger.debug("LLM API key is not configured; skipping LLM stage")
@@ -493,14 +494,35 @@ def generate_ai_suggestions(
     if query_suggestions:
         all_suggestions.extend(query_suggestions)
     if units:
+        open_world_provider = llm_provider
+        open_world_model = llm_model
+        open_world_api_key = api_key
+        if open_world_use_chatgpt:
+            openai_api_key = _load_api_key("openai")
+            if openai_api_key:
+                open_world_provider = "openai"
+                open_world_model = settings.open_world_chatgpt_model
+                open_world_api_key = openai_api_key
+                logger.info(
+                    "Run %s: open-world pass uses ChatGPT model %s",
+                    task.review_run_id,
+                    open_world_model,
+                )
+            else:
+                logger.warning(
+                    "Run %s: open_world_use_chatgpt enabled, but OpenAI API key is missing; fallback to %s/%s",
+                    task.review_run_id,
+                    llm_provider,
+                    llm_model,
+                )
         open_world_candidates = _run_open_world_pass(
             units=units,
             findings=findings_list,
             known_norm_ids={item.norm_id for item in all_suggestions if item.norm_id},
-            api_key=api_key,
+            api_key=open_world_api_key,
             diagnostics=diagnostics,
-            llm_provider=llm_provider,
-            llm_model=llm_model,
+            llm_provider=open_world_provider,
+            llm_model=open_world_model,
         )
 
     if not all_suggestions and not open_world_candidates:

@@ -236,6 +236,7 @@ export interface UserSettings {
   use_all_norms: boolean;
   llm_provider: string;
   llm_model: string;
+  open_world_use_chatgpt: boolean;
 }
 
 export interface UserSettingsUpdate {
@@ -244,6 +245,7 @@ export interface UserSettingsUpdate {
   use_all_norms?: boolean;
   llm_provider?: string;
   llm_model?: string;
+  open_world_use_chatgpt?: boolean;
 }
 
 export interface NormCatalogEntry {

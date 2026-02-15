@@ -44,6 +44,7 @@ class UserSettings(ORMModel):
     use_all_norms: bool = False
     llm_provider: str = "deepseek"
     llm_model: str = "deepseek-chat"
+    open_world_use_chatgpt: bool = False
 
 
 class UserSettingsUpdate(ORMModel):
@@ -52,6 +53,7 @@ class UserSettingsUpdate(ORMModel):
     use_all_norms: bool | None = None
     llm_provider: str | None = None
     llm_model: str | None = None
+    open_world_use_chatgpt: bool | None = None
 
 
 class UserStatusUpdate(ORMModel):

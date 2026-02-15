@@ -8,6 +8,44 @@ import {
   updateUserSettings,
 } from '../services/api';
 
+const OPEN_WORLD_SYSTEM_PROMPT = `Ты — ведущий ревьюер 1С.
+Найди рискованные дефекты, которые не покрыты предоставленными norm_id.
+Возвращай только практичные, проверяемые замечания с evidence по строкам.`;
+
+const OPEN_WORLD_USER_PROMPT_TEMPLATE = `Модуль: {source_path}
+Единица анализа: {unit_name} ({unit_type}), строки {start_line}-{end_line}
+
+Код:
+\`\`\`
+{code_block}
+\`\`\`
+
+Уже найденные нарушения (статические и по известным нормам):
+{static_and_known_findings_json}
+
+Уже покрытые known norm_id:
+{known_norm_ids_csv}
+
+Задача:
+- Найди риски/дефекты, которые НЕ покрыты known norm_id.
+- Если риск фактически покрыт known norm_id — не возвращай его.
+- Возвращай только проверяемые кандидаты с привязкой к строкам.
+- Нужен краткий проект нормы (norm_text), который можно вынести в каталог норм.
+
+Ответ: строго JSON-массив объектов:
+[
+  {
+    "title": "краткое название риска",
+    "description": "пояснение",
+    "section": "раздел нормы",
+    "severity": "critical|major|minor|info",
+    "confidence": 0.0,
+    "mapped_norm_id": null,
+    "norm_text": "формулировка новой нормы",
+    "evidence": [{"file": "{source_path}", "lines": "{source_path}:{start_line}-{start_line}", "reason": "почему это риск"}]
+  }
+]`;
+
 function AccountPage() {
   const queryClient = useQueryClient();
   const userQuery = useQuery({ queryKey: ['me'], queryFn: fetchCurrentUser });
@@ -26,6 +64,7 @@ function AccountPage() {
   const [useAllNorms, setUseAllNorms] = useState(false);
   const [llmProvider, setLlmProvider] = useState('deepseek');
   const [llmModel, setLlmModel] = useState('deepseek-chat');
+  const [openWorldUseChatGPT, setOpenWorldUseChatGPT] = useState(false);
   const settingsMutation = useMutation({
     mutationFn: (payload: import('../services/api').UserSettingsUpdate) =>
       updateUserSettings(payload),
@@ -55,12 +94,17 @@ function AccountPage() {
     if (storedModel) {
       setLlmModel(storedModel);
     }
+    const storedOpenWorldUseChatGPT = userQuery.data?.settings?.open_world_use_chatgpt;
+    if (typeof storedOpenWorldUseChatGPT === 'boolean') {
+      setOpenWorldUseChatGPT(storedOpenWorldUseChatGPT);
+    }
   }, [
     userQuery.data?.settings?.findings_view,
     userQuery.data?.settings?.disable_patterns,
     userQuery.data?.settings?.use_all_norms,
     userQuery.data?.settings?.llm_provider,
     userQuery.data?.settings?.llm_model,
+    userQuery.data?.settings?.open_world_use_chatgpt,
   ]);
 
   if (userQuery.isLoading || walletQuery.isLoading) {
@@ -215,6 +259,51 @@ function AccountPage() {
               </button>
             </div>
           </div>
+          <div style={{ marginTop: '1rem' }}>
+            <p className="muted" style={{ marginBottom: '0.5rem' }}>
+              Кандидаты новых норм (open-world)
+            </p>
+            <div className="segmented-control" role="group" aria-label="Open-world провайдер">
+              <button
+                type="button"
+                className={!openWorldUseChatGPT ? 'active' : ''}
+                onClick={() => {
+                  setOpenWorldUseChatGPT(false);
+                  settingsMutation.mutate({ open_world_use_chatgpt: false });
+                }}
+                disabled={settingsMutation.isPending}
+              >
+                По умолчанию
+              </button>
+              <button
+                type="button"
+                className={openWorldUseChatGPT ? 'active' : ''}
+                onClick={() => {
+                  setOpenWorldUseChatGPT(true);
+                  settingsMutation.mutate({ open_world_use_chatgpt: true });
+                }}
+                disabled={settingsMutation.isPending}
+              >
+                ChatGPT
+              </button>
+            </div>
+            <p className="muted" style={{ marginTop: '0.75rem' }}>
+              Переключатель влияет только на 3-й проход: поиск кандидатов новых норм.
+            </p>
+          </div>
+          <details style={{ marginTop: '1rem' }}>
+            <summary style={{ cursor: 'pointer' }}>Промпт open-world (кандидаты норм)</summary>
+            <div style={{ marginTop: '0.75rem', display: 'grid', gap: '0.75rem' }}>
+              <label className="field" style={{ display: 'grid', gap: '0.35rem' }}>
+                <span className="muted">System prompt</span>
+                <textarea rows={4} readOnly value={OPEN_WORLD_SYSTEM_PROMPT} />
+              </label>
+              <label className="field" style={{ display: 'grid', gap: '0.35rem' }}>
+                <span className="muted">User prompt (шаблон)</span>
+                <textarea rows={14} readOnly value={OPEN_WORLD_USER_PROMPT_TEMPLATE} />
+              </label>
+            </div>
+          </details>
           {userQuery.data?.role === 'admin' && (
             <div style={{ marginTop: '1rem' }}>
               <p className="muted" style={{ marginBottom: '0.5rem' }}>
