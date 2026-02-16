@@ -104,6 +104,47 @@ const groupFindings = (items: Finding[]): FindingDisplayItem[] => {
   return output;
 };
 
+type HighlightRange = {
+  file: string;
+  lineStart: number;
+  lineEnd: number;
+};
+
+const parseHighlightRange = (
+  evidence: Array<{ file?: string | null; lines?: string | null }> | null | undefined,
+  fallback?: {
+    file?: string | null;
+    lineStart?: number | null;
+    lineEnd?: number | null;
+  },
+): HighlightRange | null => {
+  const ev = (evidence || []).find((item) => item.file || item.lines) || null;
+  let file = (ev?.file || fallback?.file || '').trim();
+  let lineStart = fallback?.lineStart ?? null;
+  let lineEnd = fallback?.lineEnd ?? lineStart;
+  const linesText = (ev?.lines || '').trim();
+  if (linesText) {
+    const split = linesText.lastIndexOf(':');
+    const linePart = split >= 0 ? linesText.slice(split + 1) : linesText;
+    if (!file && split > 0) {
+      file = linesText.slice(0, split).trim();
+    }
+    const nums = (linePart.match(/\d+/g) || []).map(Number);
+    if (nums.length >= 1) {
+      lineStart = nums[0];
+      lineEnd = nums[1] ?? nums[0];
+    }
+  }
+  if (!file || !lineStart || lineStart <= 0) {
+    return null;
+  }
+  return {
+    file,
+    lineStart,
+    lineEnd: lineEnd && lineEnd >= lineStart ? lineEnd : lineStart,
+  };
+};
+
 function RunDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -116,6 +157,7 @@ function RunDetailsPage() {
   const [showDiff, setShowDiff] = useState(false);
   const [showFindingsContext, setShowFindingsContext] = useState(true);
   const [selectedAiId, setSelectedAiId] = useState<string | null>(null);
+  const [selectedOpenWorldId, setSelectedOpenWorldId] = useState<string | null>(null);
   const [selectedFindingKey, setSelectedFindingKey] = useState<string | null>(null);
   const [selectedFindingRange, setSelectedFindingRange] = useState<{
     file: string;
@@ -494,30 +536,26 @@ function RunDetailsPage() {
     () => orderedAiFindings.find((f) => f.id === selectedAiId) || null,
     [orderedAiFindings, selectedAiId],
   );
+  const selectedOpenWorldCandidate = useMemo(
+    () => openWorldCandidates.find((candidate) => candidate.id === selectedOpenWorldId) || null,
+    [openWorldCandidates, selectedOpenWorldId],
+  );
   const highlightedRange = useMemo(() => {
     if (selectedFindingRange) {
       return selectedFindingRange;
     }
-    const finding = selectedAiFinding;
-    if (!finding) return null;
-    const ev = (finding.evidence || []).find((item) => item.file || item.lines) || null;
-    const file = ev?.file || (finding as any).file_path || null;
-    let lineStart: number | null = (finding as any).line_start ?? null;
-    let lineEnd: number | null = (finding as any).line_end ?? lineStart;
-    if (ev?.lines) {
-      const nums = (ev.lines.match(/\d+/g) || []).map(Number);
-      if (nums.length >= 1) {
-        lineStart = nums[0];
-        lineEnd = nums[1] ?? nums[0];
-      }
+    if (selectedAiFinding) {
+      return parseHighlightRange(selectedAiFinding.evidence, {
+        file: (selectedAiFinding as any).file_path ?? null,
+        lineStart: (selectedAiFinding as any).line_start ?? null,
+        lineEnd: (selectedAiFinding as any).line_end ?? null,
+      });
     }
-    if (!file) return null;
-    return {
-      file,
-      lineStart: lineStart || 0,
-      lineEnd: lineEnd || lineStart || 0,
-    };
-  }, [selectedAiFinding, selectedFindingRange]);
+    if (selectedOpenWorldCandidate) {
+      return parseHighlightRange(selectedOpenWorldCandidate.evidence);
+    }
+    return null;
+  }, [selectedAiFinding, selectedFindingRange, selectedOpenWorldCandidate]);
 
   useEffect(() => {
     if (!highlightedRange) return;
@@ -716,6 +754,7 @@ function RunDetailsPage() {
         : null,
     );
     setSelectedAiId(null);
+    setSelectedOpenWorldId(null);
   };
 
   const aiSection = (
@@ -840,7 +879,29 @@ function RunDetailsPage() {
                 {openWorldCandidates.map((candidate) => {
                   const firstEvidence = (candidate.evidence || [])[0];
                   return (
-                    <div key={candidate.id} className="card" style={{ padding: '0.75rem' }}>
+                    <div
+                      key={candidate.id}
+                      className="card"
+                      style={{
+                        padding: '0.75rem',
+                        border:
+                          candidate.id === selectedOpenWorldId
+                            ? '1px solid var(--primary)'
+                            : undefined,
+                      }}
+                      onClick={() => {
+                        setSelectedFindingKey(null);
+                        setSelectedAiId(null);
+                        setSelectedOpenWorldId(candidate.id);
+                        const range = parseHighlightRange(candidate.evidence);
+                        setSelectedFindingRange(range);
+                        if (candidate.norm_text) {
+                          setNormText(candidate.norm_text);
+                        } else if (candidate.description) {
+                          setNormText(candidate.description);
+                        }
+                      }}
+                    >
                       <div className="card-header">
                         <strong>{candidate.title}</strong>
                         <span className="muted">
@@ -872,7 +933,10 @@ function RunDetailsPage() {
                             disabled={
                               candidate.status === 'accepted' || acceptOpenWorldMutation.isPending
                             }
-                            onClick={() => acceptOpenWorldMutation.mutate(candidate.id)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              acceptOpenWorldMutation.mutate(candidate.id);
+                            }}
                           >
                             {candidate.status === 'accepted'
                               ? `Принято (${candidate.accepted_norm_id || '—'})`
@@ -898,6 +962,7 @@ function RunDetailsPage() {
                   setSelectedFindingKey(null);
                   setSelectedFindingRange(null);
                   setSelectedAiId(finding.id);
+                  setSelectedOpenWorldId(null);
                   if (finding.norm_text) {
                     setNormText(finding.norm_text);
                   } else if ((finding as any).message) {
