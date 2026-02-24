@@ -400,7 +400,7 @@ def generate_ai_suggestions(
         query_units = query_units[:MAX_QUERY_UNITS_PER_RUN]
 
     if query_units:
-        query_norm_repo = get_query_norm_repository()
+        query_norm_repo = get_query_norm_repository(include_general_query_norms=use_all_norms)
         if not query_norm_repo.cards:
             logger.warning("Query norms are not available; skipping query LLM stage")
             query_units = []
@@ -414,12 +414,13 @@ def generate_ai_suggestions(
                     if item.norm_id in query_norm_ids
                 ]
                 logger.info(
-                    "LLM query %s lines %s-%s: norms=%s findings=%s",
+                    "LLM query %s lines %s-%s: norms=%s findings=%s (use_all_norms=%s)",
                     unit.unit_name,
                     unit.start_line,
                     unit.end_line,
                     len(query_norm_repo.cards),
                     len(unit_findings),
+                    use_all_norms,
                 )
                 prompt, redaction_report = _build_query_prompt(unit, unit_findings, query_norm_repo.cards)
                 response_text = _call_llm(

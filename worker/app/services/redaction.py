@@ -22,7 +22,7 @@ def _redact_line(
     in_string: bool,
     preserve_string: bool,
     preserve_next_string: bool,
-) -> tuple[str, bool, bool, int]:
+) -> tuple[str, bool, bool, bool, int]:
     out: list[str] = []
     i = 0
     redactions = 0
@@ -58,7 +58,7 @@ def _redact_line(
             continue
         out.append(ch)
         i += 1
-    return "".join(out), in_string, preserve_string, redactions
+    return "".join(out), in_string, preserve_string, preserve_next_string, redactions
 
 
 def redact_lines(lines: list[str], start_line: int) -> tuple[list[str], RedactionStats]:
@@ -66,10 +66,11 @@ def redact_lines(lines: list[str], start_line: int) -> tuple[list[str], Redactio
     redactions_by_line: dict[int, int] = {}
     in_string = False
     preserve_string = False
+    preserve_next_string = False
     total = 0
     for idx, line in enumerate(lines):
-        preserve_next_string = bool(QUERY_STRING_START.search(line))
-        redacted_line, in_string, preserve_string, count = _redact_line(
+        preserve_next_string = preserve_next_string or bool(QUERY_STRING_START.search(line))
+        redacted_line, in_string, preserve_string, preserve_next_string, count = _redact_line(
             line, in_string, preserve_string, preserve_next_string
         )
         redacted.append(redacted_line)

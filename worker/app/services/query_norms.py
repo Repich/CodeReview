@@ -8,6 +8,7 @@ from pathlib import Path
 
 import yaml
 
+from worker.app.services.general_norms import get_general_norm_repository
 from worker.app.services.norms_repo import NormCard
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -47,6 +48,7 @@ class QueryNormRepository:
     cards: list[NormCard] | None = None
     entries: dict[str, dict] | None = None
     version: str = "unknown"
+    include_general_query_norms: bool = False
 
     def __post_init__(self) -> None:
         if self.norm_ids is None:
@@ -62,7 +64,6 @@ class QueryNormRepository:
             return
         raw_text = self.path.read_text(encoding="utf-8")
         version_seed = raw_text + "|" + ",".join(self.norm_ids)
-        self.version = hashlib.sha1(version_seed.encode("utf-8")).hexdigest()[:12]
         data = yaml.safe_load(raw_text) or {}
         entries = data.get("norms", [])
         norm_map = {entry.get("norm_id"): entry for entry in entries if entry.get("norm_id")}
@@ -70,13 +71,60 @@ class QueryNormRepository:
             entry = norm_map.get(norm_id)
             if not entry:
                 continue
-            self.entries[norm_id] = entry
-            body = _format_norm_body(entry)
-            checksum = hashlib.sha1(f"{norm_id}:{body}".encode("utf-8")).hexdigest()[:12]
-            tokens = set(_tokenize(body))
-            self.cards.append(
-                NormCard(norm_id=norm_id, body=body, tokens=tokens, checksum=checksum)
+            self._append_entry(norm_id, entry)
+        if self.include_general_query_norms:
+            general_repo = get_general_norm_repository()
+            added_ids: list[str] = []
+            general_cards = {card.norm_id: card for card in general_repo.cards}
+            for norm_id, entry in general_repo.entries.items():
+                if norm_id in self.entries:
+                    continue
+                if not _is_query_related(entry):
+                    continue
+                self.entries[norm_id] = entry
+                self.norm_ids.append(norm_id)
+                card = general_cards.get(norm_id)
+                if card is None:
+                    self.cards.append(_build_card(norm_id, entry))
+                else:
+                    self.cards.append(card)
+                added_ids.append(norm_id)
+            version_seed += (
+                f"|general:{general_repo.version}|"
+                f"include_general_query_norms=1|"
+                f"added:{','.join(sorted(added_ids))}"
             )
+        self.version = hashlib.sha1(version_seed.encode("utf-8")).hexdigest()[:12]
+
+    def _append_entry(self, norm_id: str, entry: dict) -> None:
+        self.entries[norm_id] = entry
+        self.cards.append(_build_card(norm_id, entry))
+
+
+def _build_card(norm_id: str, entry: dict) -> NormCard:
+    body = _format_norm_body(entry)
+    checksum = hashlib.sha1(f"{norm_id}:{body}".encode("utf-8")).hexdigest()[:12]
+    tokens = set(_tokenize(body))
+    return NormCard(norm_id=norm_id, body=body, tokens=tokens, checksum=checksum)
+
+
+def _is_query_related(entry: dict) -> bool:
+    tags = entry.get("tags") or []
+    if isinstance(tags, str):
+        tags = [tags]
+    tag_set = {str(tag).strip().lower() for tag in tags if str(tag).strip()}
+    if "queries" in tag_set:
+        return True
+
+    section = str(entry.get("section") or "").lower()
+    category = str(entry.get("category") or "").lower()
+    title = str(entry.get("title") or "").lower()
+
+    return (
+        "query" in category
+        or "запрос" in section
+        or "запрос" in title
+    )
 
 
 def _format_norm_body(entry: dict) -> str:
@@ -112,6 +160,6 @@ def _tokenize(text: str) -> list[str]:
     return [token for token in tokens if len(token) > 2]
 
 
-@lru_cache(maxsize=1)
-def get_query_norm_repository() -> QueryNormRepository:
-    return QueryNormRepository()
+@lru_cache(maxsize=2)
+def get_query_norm_repository(include_general_query_norms: bool = False) -> QueryNormRepository:
+    return QueryNormRepository(include_general_query_norms=include_general_query_norms)
