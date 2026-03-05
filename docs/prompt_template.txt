@@ -65,6 +65,7 @@ CODEREVIEW_WORKER_BACKEND_API_URL=http://backend:8000/api
 CODEREVIEW_WORKER_REDIS_URL=redis://redis:6379/0
 DEEPSEEK_API_KEY=...
 CODEREVIEW_AUTH_JWT_SECRET=...
+CODEREVIEW_REGISTRATION_CAPTCHA_ENABLED=false
 CODEREVIEW_TURNSTILE_SECRET_KEY=...
 CODEREVIEW_CADDY_LOG_INGEST_TOKEN=...
 CODEREVIEW_TRUSTED_PROXY_DEPTH=1
@@ -86,10 +87,11 @@ docker-compose up -d --build backend worker redis
     --email admin@company.ru --password 'Secret123' --name 'Admin'
   ```
 
-## Регистрация и Turnstile
+## Регистрация и капча
 
-- При наличии `CODEREVIEW_TURNSTILE_SECRET_KEY` включается капча.
-- UI использует `VITE_TURNSTILE_SITE_KEY`.
+- По умолчанию капча отключена (`CODEREVIEW_REGISTRATION_CAPTCHA_ENABLED=false`).
+- Для включения задайте `CODEREVIEW_REGISTRATION_CAPTCHA_ENABLED=true` и `CODEREVIEW_TURNSTILE_SECRET_KEY`.
+- `VITE_TURNSTILE_SITE_KEY` используется только если капча включена.
 - Лимиты регистрации:
   - `CODEREVIEW_REGISTRATION_RATE_LIMIT`
   - `CODEREVIEW_REGISTRATION_RATE_WINDOW_MINUTES`

@@ -55,7 +55,7 @@ def register(payload: RegisterPayload, request: Request, db: Session = Depends(g
     )
     if payload.website and payload.website.strip():
         raise HTTPException(status_code=400, detail="Registration blocked")
-    if settings.turnstile_secret_key:
+    if settings.registration_captcha_enabled and settings.turnstile_secret_key:
         if not captcha.verify_turnstile(payload.captcha_token, client_ip):
             raise HTTPException(status_code=400, detail="Captcha verification failed")
     existing = db.query(UserAccount).filter(UserAccount.email == payload.email).first()

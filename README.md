@@ -46,6 +46,7 @@ Backend (префикс `CODEREVIEW_`):
 - `CODEREVIEW_DEFAULT_RUN_COST_POINTS` — стоимость запуска (по умолчанию 10).
 - `CODEREVIEW_ADMIN_LOCAL_ONLY` — ограничить админку локальной сетью (bool).
 - `CODEREVIEW_ADMIN_ALLOWED_CIDRS` — список CIDR для админов (JSON-массив строк).
+- `CODEREVIEW_REGISTRATION_CAPTCHA_ENABLED` — включить капчу на регистрации (`true/false`, по умолчанию `false`).
 - `CODEREVIEW_TURNSTILE_SECRET_KEY` — секрет Turnstile (если включаете капчу).
 - `CODEREVIEW_CADDY_LOG_INGEST_TOKEN` — токен приёма логов Caddy.
 - `CODEREVIEW_TRUSTED_PROXY_DEPTH` — число доверенных прокси в цепочке.
@@ -59,7 +60,7 @@ Worker (префикс `CODEREVIEW_WORKER_`):
 - `CODEREVIEW_WORKER_LLM_CONTEXT_GLOB` — glob для доп. контекста LLM.
 
 UI:
-- `VITE_TURNSTILE_SITE_KEY` — site key Turnstile (если капча включена).
+- `VITE_TURNSTILE_SITE_KEY` — site key Turnstile (актуально только при включенной капче на backend).
 
 ## Администратор
 
@@ -74,8 +75,8 @@ docker-compose exec backend python /app/scripts/create_admin.py \
 ## Регистрация и капча
 
 - `POST /api/auth/register` — регистрация.
-- Если задан `CODEREVIEW_TURNSTILE_SECRET_KEY`, регистрация требует капчу.
-- UI показывает Turnstile, если установлен `VITE_TURNSTILE_SITE_KEY`.
+- По умолчанию капча при регистрации отключена.
+- Для включения капчи задайте `CODEREVIEW_REGISTRATION_CAPTCHA_ENABLED=true` и `CODEREVIEW_TURNSTILE_SECRET_KEY`.
 - После регистрации начисляется `CODEREVIEW_REGISTRATION_BONUS_POINTS` (по умолчанию 100).
 - Есть rate limit: `CODEREVIEW_REGISTRATION_RATE_LIMIT` и `CODEREVIEW_REGISTRATION_RATE_WINDOW_MINUTES`.
 
