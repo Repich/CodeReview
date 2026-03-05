@@ -31,6 +31,7 @@ STATIC_ROOT = Path(__file__).resolve().parent / "static"
 INDEX_FILE = STATIC_ROOT / "index.html"
 DOCS_ROOT = Path(__file__).resolve().parents[2] / "docs"
 TEACHER_GUIDE_FILE = DOCS_ROOT / "teacher_guide.html"
+SPA_ROUTE_ROOTS = {"login", "register", "runs", "account", "admin"}
 
 
 def _is_within_static(target: Path) -> bool:
@@ -39,6 +40,18 @@ def _is_within_static(target: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _is_spa_route(full_path: str) -> bool:
+    normalized = full_path.strip("/")
+    if not normalized:
+        return True
+    parts = [part for part in normalized.split("/") if part]
+    if not parts:
+        return True
+    if parts[0] not in SPA_ROUTE_ROOTS:
+        return False
+    return all(not part.startswith(".") for part in parts)
 
 
 @app.get("/", include_in_schema=False)
@@ -59,11 +72,13 @@ async def serve_teacher_guide() -> Response:
 
 
 @app.get("/{full_path:path}", include_in_schema=False)
-async def serve_static(full_path: str) -> FileResponse:
+async def serve_static(full_path: str) -> Response:
     target = (STATIC_ROOT / full_path).resolve()
     if target.is_file() and _is_within_static(target):
         return FileResponse(target)
-    return FileResponse(INDEX_FILE)
+    if _is_spa_route(full_path):
+        return FileResponse(INDEX_FILE)
+    return Response(status_code=404)
 
 
 @app.head("/{full_path:path}", include_in_schema=False)
@@ -71,7 +86,9 @@ async def serve_static_head(full_path: str) -> Response:
     target = (STATIC_ROOT / full_path).resolve()
     if target.is_file() and _is_within_static(target):
         return Response(status_code=200)
-    return Response(status_code=200)
+    if _is_spa_route(full_path):
+        return Response(status_code=200)
+    return Response(status_code=404)
 
 
 if __name__ == "__main__":
