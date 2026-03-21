@@ -14,6 +14,7 @@ import backend.app.api.routes.findings as findings
 import backend.app.api.routes.changelog as changelog
 import backend.app.api.routes.health as health
 import backend.app.api.routes.llm_playground as llm_playground
+import backend.app.api.routes.model_lab as model_lab
 import backend.app.api.routes.norms as norms
 import backend.app.api.routes.open_world_candidates as open_world_candidates
 import backend.app.api.routes.review_runs as review_runs
@@ -40,3 +41,4 @@ api_router.include_router(access_logs.router)
 api_router.include_router(caddy_logs.router)
 api_router.include_router(admin_review_runs.router)
 api_router.include_router(llm_playground.router)
+api_router.include_router(model_lab.router)

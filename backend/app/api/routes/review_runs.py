@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_db, get_current_user, get_current_admin
@@ -40,9 +42,12 @@ from backend.app.schemas.tasks import LineRangePayload
 from backend.app.schemas.llm import LLMLogEntry
 from backend.app.services import artifacts as artifact_service, billing
 from backend.app.services.diff_parser import parse_crucible_diff, merge_change_ranges
+from backend.app.services.model_lab import handle_case_result, mark_case_started
+from backend.app.services.model_lab_secrets import get_secret
 from backend.app.core.config import get_settings
 
 router = APIRouter(prefix="/review-runs", tags=["review-runs"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=list[ReviewRunRead])
@@ -56,6 +61,7 @@ def list_review_runs(
     query = (
         db.query(ReviewRun, UserAccount)
         .outerjoin(UserAccount, UserAccount.id == ReviewRun.user_id)
+        .filter(or_(ReviewRun.external_ref.is_(None), ~ReviewRun.external_ref.like("model-lab:%")))
         .order_by(ReviewRun.queued_at.desc())
     )
     if current_user.role != UserRole.ADMIN:
@@ -219,11 +225,39 @@ def fetch_next_task(response: Response, db: Session = Depends(get_db)):
             )
         )
         db.commit()
+        mark_case_started(db, review_run)
         settings_payload: dict | None = None
         if review_run.user_id:
             user = db.get(UserAccount, review_run.user_id)
             if user and isinstance(user.settings, dict):
                 settings_payload = UserSettings.model_validate(user.settings).model_dump()
+        worker_override = ctx.get("worker_settings_override")
+        if isinstance(worker_override, dict):
+            merged_settings = dict(settings_payload or {})
+            missing_secret = False
+            for key, value in worker_override.items():
+                if key == "llm_api_key_ref":
+                    secret = get_secret(str(value))
+                    if not secret:
+                        missing_secret = True
+                        break
+                    merged_settings["llm_api_key"] = secret
+                    continue
+                merged_settings[key] = value
+            if missing_secret:
+                review_run.status = ReviewStatus.FAILED
+                review_run.finished_at = datetime.utcnow()
+                db.add(review_run)
+                db.add(
+                    AuditLog(
+                        review_run_id=review_run.id,
+                        event_type=AuditEventType.RUN_FAILED,
+                        payload={"reason": "model_lab_secret_missing"},
+                    )
+                )
+                db.commit()
+                continue
+            settings_payload = merged_settings
         return AnalysisTaskResponse(
             review_run_id=review_run.id,
             sources=[SourceUnitPayload(**source) for source in sources],
@@ -358,6 +392,17 @@ def submit_results(
         )
     )
     db.commit()
+    try:
+        handle_case_result(
+            db,
+            review_run=review_run,
+            findings_count=len(payload.findings),
+            ai_findings_count=ai_count,
+            open_world_count=open_world_count,
+            duration_ms=payload.duration_ms,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Model Lab post-processing failed for run %s: %s", review_run_id, exc)
     return {"findings": len(payload.findings)}
 
 

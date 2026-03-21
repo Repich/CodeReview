@@ -167,10 +167,12 @@ def generate_ai_suggestions(
     task: AnalysisTask, findings: Iterable[DetectorFinding]
 ) -> LLMResult | None:
     settings = get_settings()
-    llm_provider = (task.settings or {}).get("llm_provider") or settings.llm_provider
-    llm_model = (task.settings or {}).get("llm_model") or settings.llm_model
-    open_world_use_chatgpt = bool((task.settings or {}).get("open_world_use_chatgpt"))
-    api_key = _load_api_key(llm_provider)
+    runtime_settings = task.settings or {}
+    llm_provider = runtime_settings.get("llm_provider") or settings.llm_provider
+    llm_model = runtime_settings.get("llm_model") or settings.llm_model
+    llm_api_base = runtime_settings.get("llm_api_base")
+    open_world_use_chatgpt = bool(runtime_settings.get("open_world_use_chatgpt"))
+    api_key = runtime_settings.get("llm_api_key") or _load_api_key(llm_provider)
     if not api_key:
         logger.debug("LLM API key is not configured; skipping LLM stage")
         return None
@@ -231,6 +233,7 @@ def generate_ai_suggestions(
                     selection_runs=_extract_selection_runs(evaluation_config),
                     llm_provider=llm_provider,
                     llm_model=llm_model,
+                    llm_api_base=llm_api_base,
                 )
                 prompt_versions.append("evaluation")
                 return LLMResult(
@@ -269,6 +272,7 @@ def generate_ai_suggestions(
                     diagnostics,
                     llm_provider=llm_provider,
                     llm_model=llm_model,
+                    llm_api_base=llm_api_base,
                 )
                 if prefilter_result.forced_norm_reasons:
                     selected_map = {card.norm_id: card for card in selected_cards}
@@ -300,6 +304,7 @@ def generate_ai_suggestions(
                 temperature=0,
                 provider=llm_provider,
                 model=llm_model,
+                api_base=llm_api_base,
             )
             if not response_text:
                 logger.warning("LLM patterns %s: no response", unit.unit_name)
@@ -355,6 +360,7 @@ def generate_ai_suggestions(
                 context_prefix="norm",
                 llm_provider=llm_provider,
                 llm_model=llm_model,
+                llm_api_base=llm_api_base,
             )
             if unit_suggestions:
                 critical_suggestions.extend(unit_suggestions)
@@ -381,6 +387,7 @@ def generate_ai_suggestions(
                 context_prefix="norms",
                 llm_provider=llm_provider,
                 llm_model=llm_model,
+                llm_api_base=llm_api_base,
             )
             if unit_suggestions:
                 general_suggestions.extend(unit_suggestions)
@@ -430,6 +437,7 @@ def generate_ai_suggestions(
                     temperature=QUERY_TEMPERATURE,
                     provider=llm_provider,
                     model=llm_model,
+                    api_base=llm_api_base,
                 )
                 if not response_text:
                     logger.warning("LLM query %s: no response", unit.unit_name)
@@ -474,6 +482,7 @@ def generate_ai_suggestions(
         prompt_versions=prompt_versions,
         llm_provider=llm_provider,
         llm_model=llm_model,
+        llm_api_base=llm_api_base,
     )
     all_suggestions.extend(merged_suggestions)
     forced_fallback_suggestions = _build_forced_fallback_suggestions(
@@ -498,12 +507,14 @@ def generate_ai_suggestions(
         open_world_provider = llm_provider
         open_world_model = llm_model
         open_world_api_key = api_key
+        open_world_api_base = llm_api_base
         if open_world_use_chatgpt:
-            openai_api_key = _load_api_key("openai")
+            openai_api_key = runtime_settings.get("open_world_api_key") or _load_api_key("openai")
             if openai_api_key:
                 open_world_provider = "openai"
                 open_world_model = settings.open_world_chatgpt_model
                 open_world_api_key = openai_api_key
+                open_world_api_base = runtime_settings.get("open_world_api_base")
                 logger.info(
                     "Run %s: open-world pass uses ChatGPT model %s",
                     task.review_run_id,
@@ -524,6 +535,7 @@ def generate_ai_suggestions(
             diagnostics=diagnostics,
             llm_provider=open_world_provider,
             llm_model=open_world_model,
+            llm_api_base=open_world_api_base,
         )
 
     if not all_suggestions and not open_world_candidates:
@@ -561,11 +573,12 @@ def _call_llm(
     *,
     provider: str | None = None,
     model: str | None = None,
+    api_base: str | None = None,
 ) -> str | None:
     settings = get_settings()
     provider = (provider or settings.llm_provider or "deepseek").lower()
-    base_url = settings.llm_api_base
-    if provider == "openai" and "deepseek" in base_url:
+    base_url = (api_base or settings.llm_api_base).strip()
+    if provider == "openai" and (not api_base) and "deepseek" in base_url:
         base_url = "https://api.openai.com"
     url = base_url.rstrip("/") + "/v1/chat/completions"
     payload = {
@@ -893,10 +906,17 @@ def _run_code_pass(
     context_prefix: str,
     llm_provider: str,
     llm_model: str,
+    llm_api_base: str | None,
 ) -> list[AISuggestion]:
     allowed_norm_ids = {card.norm_id for card in norm_cards}
     prompt, redaction_report = _build_unit_prompt(unit, unit_findings, norm_cards)
-    response_text = _call_llm(prompt, api_key, provider=llm_provider, model=llm_model)
+    response_text = _call_llm(
+        prompt,
+        api_key,
+        provider=llm_provider,
+        model=llm_model,
+        api_base=llm_api_base,
+    )
     if not response_text:
         logger.warning("LLM unit %s: no response", unit.unit_name)
         return []
@@ -941,6 +961,7 @@ def _merge_suggestions(
     prompt_versions: list[str],
     llm_provider: str,
     llm_model: str,
+    llm_api_base: str | None,
 ) -> list[AISuggestion]:
     non_empty = [
         item
@@ -966,6 +987,7 @@ def _merge_suggestions(
         temperature=0,
         provider=llm_provider,
         model=llm_model,
+        api_base=llm_api_base,
     )
     if not response_text:
         logger.warning("LLM merge: no response, keeping raw suggestions")
@@ -1004,6 +1026,7 @@ def _run_open_world_pass(
     diagnostics: list[LLMDiagnostic],
     llm_provider: str,
     llm_model: str,
+    llm_api_base: str | None,
 ) -> list[OpenWorldCandidate]:
     candidates: list[OpenWorldCandidate] = []
     for unit in units:
@@ -1022,6 +1045,7 @@ def _run_open_world_pass(
             temperature=0,
             provider=llm_provider,
             model=llm_model,
+            api_base=llm_api_base,
         )
         if not response_text:
             logger.warning("LLM open-world %s: no response", unit.unit_name)
@@ -1223,6 +1247,7 @@ def _select_norm_cards(
     diagnostics: list[LLMDiagnostic],
     llm_provider: str,
     llm_model: str,
+    llm_api_base: str | None,
 ) -> list[NormCard]:
     if not norm_cards:
         return []
@@ -1241,6 +1266,7 @@ def _select_norm_cards(
             temperature=0,
             provider=llm_provider,
             model=llm_model,
+            api_base=llm_api_base,
         )
         selected_ids = _parse_selected_norm_ids(response_text)
         if not selected_ids:
@@ -1301,6 +1327,7 @@ def _evaluate_selection_stability(
     *,
     label: str,
     prefilter: bool = False,
+    llm_api_base: str | None = None,
 ) -> dict[str, Any]:
     unit_reports: list[dict[str, Any]] = []
     jaccards: list[float] = []
@@ -1327,6 +1354,7 @@ def _evaluate_selection_stability(
                     diagnostics,
                     llm_provider=llm_provider,
                     llm_model=llm_model,
+                    llm_api_base=llm_api_base,
                 )
             sets.append(set(card.norm_id for card in selected))
         avg_jaccard = _average_pairwise_jaccard(sets)
@@ -1363,6 +1391,7 @@ def _evaluate_selection_compare(
     selection_runs: int,
     llm_provider: str,
     llm_model: str,
+    llm_api_base: str | None = None,
 ) -> dict[str, Any]:
     baseline = _evaluate_selection_stability(
         units=units,
@@ -1374,6 +1403,7 @@ def _evaluate_selection_compare(
         llm_model=llm_model,
         label="baseline",
         prefilter=False,
+        llm_api_base=llm_api_base,
     )
     prefiltered = _evaluate_selection_stability(
         units=units,
@@ -1385,6 +1415,7 @@ def _evaluate_selection_compare(
         llm_model=llm_model,
         label="prefiltered",
         prefilter=True,
+        llm_api_base=llm_api_base,
     )
     return {"baseline": baseline, "prefiltered": prefiltered}
 

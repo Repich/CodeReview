@@ -751,3 +751,131 @@ export async function updateAIFindingStatus(
   });
   return data;
 }
+
+export interface ModelLabConfig {
+  enabled: boolean;
+  default_sample_size: number;
+  max_sample_size: number;
+  max_models: number;
+  max_paid_target_models: number;
+  max_paid_target_runs: number;
+  max_expert_models: number;
+  max_expert_calls: number;
+}
+
+export interface ModelLabOption {
+  provider: 'internal' | 'deepseek' | 'openai';
+  model: string;
+}
+
+export interface ModelLabSession {
+  id: string;
+  created_by: string;
+  title?: string | null;
+  status: string;
+  target_models?: Array<{ provider: string; model: string }> | null;
+  expert_models?: Array<{ provider: string; model: string }> | null;
+  sample_size: number;
+  error_message?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModelLabCase {
+  id: string;
+  session_id: string;
+  source_run_id: string;
+  review_run_id: string;
+  target_provider: string;
+  target_model: string;
+  status: string;
+  duration_ms?: number | null;
+  findings_count?: number | null;
+  ai_findings_count?: number | null;
+  open_world_count?: number | null;
+  score_overall?: number | null;
+  score_summary?: string | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModelLabJudgement {
+  id: string;
+  case_id: string;
+  expert_provider: string;
+  expert_model: string;
+  overall_score: number;
+  criteria?: Record<string, number> | null;
+  summary?: string | null;
+  created_at: string;
+}
+
+export interface ModelLabLeaderboardRow {
+  provider: string;
+  model: string;
+  cases: number;
+  avg_score: number;
+}
+
+export interface ModelLabSessionDetail {
+  session: ModelLabSession;
+  cases: ModelLabCase[];
+  judgements: ModelLabJudgement[];
+  leaderboard: ModelLabLeaderboardRow[];
+}
+
+export interface ModelLabCreatePayload {
+  title?: string;
+  api_base: string;
+  api_key: string;
+  internal_models: string[];
+  baseline_models: ModelLabOption[];
+  expert_models: ModelLabOption[];
+  sample_size: number;
+  include_open_world: boolean;
+  use_all_norms: boolean;
+  disable_patterns: boolean;
+}
+
+export async function fetchModelLabConfig() {
+  const { data } = await client.get<ModelLabConfig>('/admin/model-lab/config');
+  return data;
+}
+
+export async function discoverModelLabModels(payload: { api_base: string; api_key: string }) {
+  const { data } = await client.post<{ models: string[] }>('/admin/model-lab/discover-models', payload);
+  return data;
+}
+
+export async function createModelLabSession(payload: ModelLabCreatePayload) {
+  const { data } = await client.post<ModelLabSession>('/admin/model-lab/sessions', payload);
+  return data;
+}
+
+export async function fetchModelLabSessions(limit = 50) {
+  const { data } = await client.get<ModelLabSession[]>('/admin/model-lab/sessions', {
+    params: { limit },
+  });
+  return data;
+}
+
+export async function fetchModelLabSession(sessionId: string) {
+  const { data } = await client.get<ModelLabSessionDetail>(`/admin/model-lab/sessions/${sessionId}`);
+  return data;
+}
+
+export async function evaluateModelLabSession(
+  sessionId: string,
+  payload?: { experts?: ModelLabOption[] },
+) {
+  const { data } = await client.post<ModelLabSessionDetail>(
+    `/admin/model-lab/sessions/${sessionId}/evaluate`,
+    payload ?? {},
+  );
+  return data;
+}

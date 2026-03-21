@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { fetchCurrentUser, fetchWallet } from '../services/api';
+import { fetchCurrentUser, fetchModelLabConfig, fetchWallet } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Props {
@@ -23,6 +23,13 @@ function DashboardLayout({ children }: Props) {
   const isTeacher = role === 'teacher';
   const canManage = isAdmin || isTeacher;
   const showTeacherDocs = canManage;
+  const modelLabConfigQuery = useQuery({
+    queryKey: ['layout-model-lab-config'],
+    queryFn: fetchModelLabConfig,
+    enabled: isAdmin,
+    retry: false,
+  });
+  const showModelLab = isAdmin && Boolean(modelLabConfigQuery.data?.enabled);
 
   return (
     <div className="app-shell">
@@ -38,6 +45,11 @@ function DashboardLayout({ children }: Props) {
           {canManage && (
             <NavLink to="/admin" className={({ isActive }) => (isActive ? 'active-link' : undefined)}>
               {isAdmin ? 'Админка' : 'Обучение'}
+            </NavLink>
+          )}
+          {showModelLab && (
+            <NavLink to="/model-lab" className={({ isActive }) => (isActive ? 'active-link' : undefined)}>
+              Model Lab
             </NavLink>
           )}
           {showTeacherDocs && (

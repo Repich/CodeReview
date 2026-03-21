@@ -3,6 +3,7 @@ import RunListPage from './pages/RunList';
 import RunDetailsPage from './pages/RunDetails';
 import AccountPage from './pages/Account';
 import AdminPage from './pages/Admin';
+import ModelLabPage from './pages/ModelLab';
 import LoginPage from './pages/Login';
 import { useAuth } from './contexts/AuthContext';
 import DashboardLayout from './components/DashboardLayout';
@@ -39,6 +40,7 @@ function App() {
         <Route path="/runs/:id" element={<RunDetailsPage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="/admin" element={<AdminPage />} />
+        <Route path="/model-lab" element={<ModelLabPage />} />
       </Route>
       <Route path="*" element={<Navigate to={fallbackPath} replace />} />
     </Routes>
