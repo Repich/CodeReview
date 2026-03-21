@@ -56,7 +56,7 @@ def get_current_user(
         raise HTTPException(status_code=403, detail="User disabled")
     if user.role == UserRole.ADMIN:
         settings = get_settings()
-        auth_security.enforce_admin_local(request, settings)
+        auth_security.enforce_admin_local(request, settings, db=db)
     request.state.current_user = user
     return user
 

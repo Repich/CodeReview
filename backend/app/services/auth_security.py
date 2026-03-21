@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from ipaddress import IPv4Address, IPv6Address
 from typing import Iterable, Optional
+import logging
 
 from fastapi import HTTPException, Request
 from sqlalchemy import func
@@ -10,7 +11,10 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import Settings
 from backend.app.models.access_log import AccessLog
+from backend.app.services import admin_access
 from backend.app.utils.request_ip import extract_client_ip, ip_in_cidrs
+
+logger = logging.getLogger(__name__)
 
 
 def get_client_ip(request: Request, settings: Settings) -> Optional[IPv4Address | IPv6Address]:
@@ -21,10 +25,27 @@ def enforce_admin_local(
     request: Request,
     settings: Settings,
     ip_obj: Optional[IPv4Address | IPv6Address] = None,
+    db: Session | None = None,
 ) -> None:
     if not settings.admin_local_only:
         return
     ip_obj = ip_obj or get_client_ip(request, settings)
+    if ip_obj and ip_in_cidrs(ip_obj, settings.admin_allowed_cidrs):
+        logger.debug("Admin access allowed from trusted CIDR ip=%s path=%s", ip_obj, request.url.path)
+        return
+    if db and admin_access.is_external_admin_access_enabled(db):
+        logger.info(
+            "Admin access allowed by temporary external window ip=%s path=%s",
+            ip_obj or "-",
+            request.url.path,
+        )
+        return
+    logger.warning(
+        "Admin access denied ip=%s path=%s (local_only=%s)",
+        ip_obj or "-",
+        request.url.path,
+        settings.admin_local_only,
+    )
     if not ip_obj or not ip_in_cidrs(ip_obj, settings.admin_allowed_cidrs):
         raise HTTPException(status_code=403, detail="Admin access allowed only from local network")
 

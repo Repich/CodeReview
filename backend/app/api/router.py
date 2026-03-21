@@ -7,6 +7,7 @@ import backend.app.api.routes.ai_findings as ai_findings
 import backend.app.api.routes.auth as auth
 import backend.app.api.routes.audit as audit
 import backend.app.api.routes.access_logs as access_logs
+import backend.app.api.routes.admin_access as admin_access
 import backend.app.api.routes.caddy_logs as caddy_logs
 import backend.app.api.routes.companies as companies
 import backend.app.api.routes.feedback as feedback
@@ -38,6 +39,7 @@ api_router.include_router(changelog.router)
 api_router.include_router(companies.router)
 api_router.include_router(wallets.router)
 api_router.include_router(access_logs.router)
+api_router.include_router(admin_access.router)
 api_router.include_router(caddy_logs.router)
 api_router.include_router(admin_review_runs.router)
 api_router.include_router(llm_playground.router)

@@ -1,4 +1,5 @@
 from backend.app.models.ai_finding import AIFinding
+from backend.app.models.admin_access import AdminExternalAccessGrant
 from backend.app.models.access_log import AccessLog
 from backend.app.models.audit import AuditLog, IOLog
 from backend.app.models.caddy_access_log import CaddyAccessLog
@@ -15,6 +16,7 @@ from backend.app.models.user import UserAccount, Wallet, WalletTransaction
 
 __all__ = [
     "AuditLog",
+    "AdminExternalAccessGrant",
     "AccessLog",
     "CaddyAccessLog",
     "Company",

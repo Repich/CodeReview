@@ -324,6 +324,16 @@ export interface CaddyAccessLogEntry {
   referer?: string | null;
 }
 
+export interface AdminExternalAccessState {
+  enabled: boolean;
+  expires_at?: string | null;
+  opened_by?: string | null;
+  opened_from_ip?: string | null;
+  opened_at?: string | null;
+  reason?: string | null;
+  remaining_minutes?: number | null;
+}
+
 export interface WalletInfo {
   id: string;
   balance: number;
@@ -732,6 +742,24 @@ export async function fetchCaddyLogs(params?: {
   path?: string;
 }) {
   const { data } = await client.get<CaddyAccessLogEntry[]>('/admin/caddy-logs', { params });
+  return data;
+}
+
+export async function fetchAdminExternalAccessState() {
+  const { data } = await client.get<AdminExternalAccessState>('/admin/access-control/external-admin');
+  return data;
+}
+
+export async function enableAdminExternalAccess(payload?: { duration_hours?: number; reason?: string }) {
+  const { data } = await client.post<AdminExternalAccessState>(
+    '/admin/access-control/external-admin',
+    payload ?? {},
+  );
+  return data;
+}
+
+export async function disableAdminExternalAccess() {
+  const { data } = await client.delete<AdminExternalAccessState>('/admin/access-control/external-admin');
   return data;
 }
 

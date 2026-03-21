@@ -3,11 +3,15 @@ import axios from 'axios';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   AccessLogEntry,
+  AdminExternalAccessState,
   CaddyAccessLogEntry,
+  disableAdminExternalAccess,
+  enableAdminExternalAccess,
   ReviewRun,
   adjustWalletBalance,
   createCompany,
   fetchAccessLogs,
+  fetchAdminExternalAccessState,
   fetchCaddyLogs,
   fetchCompanies,
   fetchCurrentUser,
@@ -111,6 +115,10 @@ function AdminPage() {
   const [llmLastResponseAt, setLlmLastResponseAt] = useState<string | null>(null);
   const [llmCopyMessage, setLlmCopyMessage] = useState<string | null>(null);
   const [llmLastRequestInfo, setLlmLastRequestInfo] = useState<LLMRequestInfo | null>(null);
+  const [externalAccessDurationHours, setExternalAccessDurationHours] = useState('8');
+  const [externalAccessReason, setExternalAccessReason] = useState('');
+  const [externalAccessMessage, setExternalAccessMessage] = useState<string | null>(null);
+  const [externalAccessState, setExternalAccessState] = useState<'idle' | 'success' | 'error'>('idle');
   const [normSource, setNormSource] = useState<'static' | 'llm'>('static');
   const [normSearch, setNormSearch] = useState('');
   const [normLimit, setNormLimit] = useState('200');
@@ -172,6 +180,16 @@ function AdminPage() {
         limit: Number(caddyLimit) || 200,
       }),
     enabled: isAdmin,
+  });
+
+  const externalAccessQuery = useQuery({
+    queryKey: ['admin-external-access'],
+    queryFn: fetchAdminExternalAccessState,
+    enabled: isAdmin,
+    refetchInterval: (query) => {
+      const state = query.state.data;
+      return state?.enabled ? 15000 : false;
+    },
   });
 
   const runsQuery = useQuery({
@@ -244,6 +262,44 @@ function AdminPage() {
       updateUserCompany(userId, companyId),
     onSuccess: () => {
       usersQuery.refetch();
+    },
+  });
+
+  const externalAccessEnableMutation = useMutation({
+    mutationFn: (payload: { duration_hours?: number; reason?: string }) => enableAdminExternalAccess(payload),
+    onSuccess: (data) => {
+      externalAccessQuery.refetch();
+      setExternalAccessState('success');
+      setExternalAccessMessage(
+        data.expires_at
+          ? `Внешний доступ открыт до ${new Date(data.expires_at).toLocaleString()}.`
+          : 'Внешний доступ открыт.',
+      );
+    },
+    onError: (error) => {
+      setExternalAccessState('error');
+      setExternalAccessMessage(
+        axios.isAxiosError(error)
+          ? (error.response?.data?.detail ?? error.message)
+          : 'Не удалось открыть внешний доступ.',
+      );
+    },
+  });
+
+  const externalAccessDisableMutation = useMutation({
+    mutationFn: () => disableAdminExternalAccess(),
+    onSuccess: () => {
+      externalAccessQuery.refetch();
+      setExternalAccessState('success');
+      setExternalAccessMessage('Внешний доступ закрыт.');
+    },
+    onError: (error) => {
+      setExternalAccessState('error');
+      setExternalAccessMessage(
+        axios.isAxiosError(error)
+          ? (error.response?.data?.detail ?? error.message)
+          : 'Не удалось закрыть внешний доступ.',
+      );
     },
   });
 
@@ -432,6 +488,23 @@ function AdminPage() {
     }
   };
 
+  const handleEnableExternalAccess = () => {
+    setExternalAccessMessage(null);
+    setExternalAccessState('idle');
+    const parsed = Number(externalAccessDurationHours);
+    const duration_hours = Number.isFinite(parsed) && parsed > 0 ? Math.min(24, Math.floor(parsed)) : 8;
+    externalAccessEnableMutation.mutate({
+      duration_hours,
+      reason: externalAccessReason.trim() || undefined,
+    });
+  };
+
+  const handleDisableExternalAccess = () => {
+    setExternalAccessMessage(null);
+    setExternalAccessState('idle');
+    externalAccessDisableMutation.mutate();
+  };
+
   const usersSummary = useMemo(() => {
     const users = usersQuery.data || [];
     const active = users.filter((user) => user.status === 'active').length;
@@ -471,6 +544,21 @@ function AdminPage() {
       2,
     );
   }, [llmLastRequestInfo]);
+
+  const externalAccessStatusText = useMemo(() => {
+    const state: AdminExternalAccessState | undefined = externalAccessQuery.data;
+    if (!state?.enabled) {
+      return 'Внешний доступ закрыт.';
+    }
+    const parts: string[] = ['Внешний доступ открыт'];
+    if (state.expires_at) {
+      parts.push(`до ${new Date(state.expires_at).toLocaleString()}`);
+    }
+    if (typeof state.remaining_minutes === 'number') {
+      parts.push(`(осталось ~${state.remaining_minutes} мин)`);
+    }
+    return `${parts.join(' ')}.`;
+  }, [externalAccessQuery.data]);
 
   if (userQuery.isLoading) {
     return <p>Загружаем админ-панель...</p>;
@@ -1064,6 +1152,92 @@ function AdminPage() {
           </button>
         ))}
       </div>
+
+      {activeTab === 'users' && isAdmin && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card-header">
+          <div>
+            <h2 className="card-title">Внешний доступ администратора</h2>
+            <p className="muted">
+              Временно разрешает вход в роль администратора с внешних IP. По умолчанию: 8 часов.
+            </p>
+          </div>
+        </div>
+        <div className="section-grid" style={{ marginBottom: '1rem' }}>
+          <div>
+            <span className="chip">{externalAccessStatusText}</span>
+          </div>
+          <div className="muted">
+            {externalAccessQuery.data?.opened_from_ip
+              ? `Открыто с IP: ${externalAccessQuery.data.opened_from_ip}`
+              : 'Открывается из текущей сессии администратора'}
+          </div>
+        </div>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            handleEnableExternalAccess();
+          }}
+          className="form-grid"
+          style={{ gap: '1rem' }}
+        >
+          <div className="field">
+            <label htmlFor="external-admin-duration">Длительность (часы)</label>
+            <input
+              id="external-admin-duration"
+              type="number"
+              min={1}
+              max={24}
+              value={externalAccessDurationHours}
+              onChange={(event) => setExternalAccessDurationHours(event.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="external-admin-reason">Причина (опционально)</label>
+            <input
+              id="external-admin-reason"
+              type="text"
+              value={externalAccessReason}
+              onChange={(event) => setExternalAccessReason(event.target.value)}
+              placeholder="Например: удаленная работа"
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={externalAccessEnableMutation.isPending}
+            >
+              {externalAccessEnableMutation.isPending ? 'Открываем…' : 'Открыть внешний доступ'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleDisableExternalAccess}
+              disabled={externalAccessDisableMutation.isPending || !externalAccessQuery.data?.enabled}
+            >
+              {externalAccessDisableMutation.isPending ? 'Закрываем…' : 'Закрыть сейчас'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => externalAccessQuery.refetch()}
+              disabled={externalAccessQuery.isFetching}
+            >
+              Обновить
+            </button>
+          </div>
+        </form>
+        {externalAccessMessage && (
+          <p className={`alert ${externalAccessState === 'error' ? 'alert-error' : 'alert-success'}`}>
+            {externalAccessMessage}
+          </p>
+        )}
+        {externalAccessQuery.error && (
+          <p className="alert alert-error">Не удалось получить статус внешнего доступа администратора.</p>
+        )}
+        </div>
+      )}
 
       {activeTab === 'users' && isAdmin && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>

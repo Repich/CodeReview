@@ -580,7 +580,7 @@ def _call_llm(
     base_url = (api_base or settings.llm_api_base).strip()
     if provider == "openai" and (not api_base) and "deepseek" in base_url:
         base_url = "https://api.openai.com"
-    url = base_url.rstrip("/") + "/v1/chat/completions"
+    url = _resolve_chat_url(base_url)
     payload = {
         "model": model or settings.llm_model,
         "messages": [
@@ -590,6 +590,8 @@ def _call_llm(
     }
     if provider != "openai":
         payload["temperature"] = temperature
+    if "/api/v3/" in url:
+        payload["stream"] = False
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -612,6 +614,18 @@ def _call_llm(
     except (httpx.HTTPError, KeyError, ValueError) as exc:
         logger.warning("LLM request failed (%s): %s", provider, exc)
         return None
+
+
+def _resolve_chat_url(base_url: str) -> str:
+    cleaned = base_url.strip().rstrip("/")
+    lowered = cleaned.lower()
+    if lowered.endswith("/v1") or lowered.endswith("/v3"):
+        return f"{cleaned}/chat/completions"
+    if "/api/v3" in lowered:
+        return f"{cleaned}/chat/completions"
+    if "ai.beeline.ru" in lowered:
+        return f"{cleaned}/api/v3/chat/completions"
+    return f"{cleaned}/v1/chat/completions"
 
 
 def _build_unit_prompt(
