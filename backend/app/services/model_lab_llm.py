@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -75,18 +76,41 @@ def chat_completion(
     if "/api/v3/" in url:
         payload["stream"] = False
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    try:
-        with httpx.Client(timeout=timeout_seconds) as client:
-            response = client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
-            body = response.json()
-    except httpx.HTTPStatusError as exc:
-        preview = exc.response.text[:500] if exc.response.text else "<empty>"
-        raise ModelLabLLMError(
-            f"Ошибка chat completion ({exc.response.status_code}): {preview}"
-        ) from exc
-    except (httpx.HTTPError, ValueError) as exc:
-        raise ModelLabLLMError(f"Ошибка запроса chat completion: {exc}") from exc
+    timeout = httpx.Timeout(
+        connect=min(20.0, float(timeout_seconds)),
+        read=float(timeout_seconds),
+        write=60.0,
+        pool=30.0,
+    )
+    last_read_timeout: httpx.ReadTimeout | None = None
+    body: dict | None = None
+    for attempt in range(2):
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                response = client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+                body_raw = response.json()
+                if isinstance(body_raw, dict):
+                    body = body_raw
+                else:
+                    raise ModelLabLLMError("Некорректный ответ chat completion: JSON не является объектом")
+            break
+        except httpx.ReadTimeout as exc:
+            last_read_timeout = exc
+            if attempt == 0:
+                time.sleep(1.0)
+                continue
+            raise ModelLabLLMError(f"Ошибка запроса chat completion: {exc}") from exc
+        except httpx.HTTPStatusError as exc:
+            preview = exc.response.text[:500] if exc.response.text else "<empty>"
+            raise ModelLabLLMError(
+                f"Ошибка chat completion ({exc.response.status_code}): {preview}"
+            ) from exc
+        except (httpx.HTTPError, ValueError) as exc:
+            raise ModelLabLLMError(f"Ошибка запроса chat completion: {exc}") from exc
+
+    if last_read_timeout is not None and body is None:
+        raise ModelLabLLMError(f"Ошибка запроса chat completion: {last_read_timeout}")
 
     try:
         content = body["choices"][0]["message"]["content"]

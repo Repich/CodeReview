@@ -350,7 +350,7 @@ def evaluate_session(
                     model=expert.model,
                     system_prompt=EVALUATION_SYSTEM_PROMPT,
                     user_prompt=user_prompt,
-                    timeout_seconds=settings.llm_timeout_seconds,
+                    timeout_seconds=settings.model_lab_expert_timeout_seconds,
                     temperature=None,
                 )
                 parsed = _parse_expert_response(result.content)
