@@ -16,6 +16,14 @@ import {
 const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat';
 const DEFAULT_OPENAI_MODEL = 'gpt-5-mini';
 
+function parseModelIds(raw: string): string[] {
+  const parts = raw
+    .split(/[\n,;]/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return Array.from(new Set(parts));
+}
+
 function shortId(value: string) {
   return value.length > 8 ? `${value.slice(0, 8)}…` : value;
 }
@@ -117,6 +125,7 @@ function ModelLabPage() {
 
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
   const [selectedInternalModels, setSelectedInternalModels] = useState<string[]>([]);
+  const [manualInternalModelsText, setManualInternalModelsText] = useState('');
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [feedbackState, setFeedbackState] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -179,7 +188,15 @@ function ModelLabPage() {
   const selectedSessionStatus = String(detailQuery.data?.session?.status || '').toLowerCase();
   const canEvaluate = ['ready_for_evaluation', 'evaluated'].includes(selectedSessionStatus);
 
-  const activeInternalCount = selectedInternalModels.length;
+  const manualInternalModels = useMemo(
+    () => parseModelIds(manualInternalModelsText),
+    [manualInternalModelsText],
+  );
+  const effectiveInternalModels = useMemo(
+    () => Array.from(new Set([...selectedInternalModels, ...manualInternalModels])),
+    [selectedInternalModels, manualInternalModels],
+  );
+  const activeInternalCount = effectiveInternalModels.length;
 
   const limitsText = useMemo(() => {
     if (!configQuery.data) return null;
@@ -202,7 +219,7 @@ function ModelLabPage() {
       setFeedbackMessage('Заполните API base и API key.');
       return;
     }
-    if (!selectedInternalModels.length) {
+    if (!effectiveInternalModels.length) {
       setFeedbackState('error');
       setFeedbackMessage('Выберите хотя бы одну внутреннюю модель.');
       return;
@@ -234,7 +251,7 @@ function ModelLabPage() {
       title: title.trim() || undefined,
       api_base: apiBase.trim(),
       api_key: apiKey.trim(),
-      internal_models: selectedInternalModels,
+      internal_models: effectiveInternalModels,
       baseline_models,
       expert_models,
       sample_size: sampleSize,
@@ -376,6 +393,20 @@ function ModelLabPage() {
               Очистить
             </button>
             <span className="muted">Выбрано внутренних моделей: {activeInternalCount}</span>
+          </div>
+
+          <div className="field" style={{ gridColumn: '1 / -1' }}>
+            <label htmlFor="model-lab-manual-models">Внутренние модели (вручную)</label>
+            <textarea
+              id="model-lab-manual-models"
+              rows={3}
+              value={manualInternalModelsText}
+              onChange={(event) => setManualInternalModelsText(event.target.value)}
+              placeholder="llm-medium-moe-instruct, llm-small-instruct"
+            />
+            <p className="muted" style={{ marginTop: '0.35rem' }}>
+              Укажите model id через запятую, `;` или с новой строки. Полезно, если discover недоступен.
+            </p>
           </div>
 
           {discoveredModels.length > 0 && (
