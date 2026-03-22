@@ -50,6 +50,17 @@ router = APIRouter(prefix="/review-runs", tags=["review-runs"])
 logger = logging.getLogger(__name__)
 
 
+def _is_internal_model_lab_task(context: dict | None) -> bool:
+    if not isinstance(context, dict):
+        return False
+    if not context.get("model_lab_case_id"):
+        return False
+    worker_override = context.get("worker_settings_override")
+    if not isinstance(worker_override, dict):
+        return False
+    return bool(worker_override.get("llm_api_key_ref"))
+
+
 @router.get("", response_model=list[ReviewRunRead])
 def list_review_runs(
     skip: int = Query(0, ge=0),
@@ -175,11 +186,16 @@ def create_review_run(
 @router.get("/next-task", response_model=AnalysisTaskResponse | None)
 def fetch_next_task(response: Response, db: Session = Depends(get_db)):
     while True:
-        review_run = (
+        queued_candidates = (
             db.query(ReviewRun)
             .filter(ReviewRun.status == ReviewStatus.QUEUED)
             .order_by(ReviewRun.queued_at.asc())
-            .first()
+            .limit(50)
+            .all()
+        )
+        review_run = next(
+            (row for row in queued_candidates if not _is_internal_model_lab_task(row.context)),
+            None,
         )
         if not review_run:
             return Response(status_code=204)
