@@ -34,7 +34,7 @@ def login(payload: LoginPayload, request: Request, db: Session = Depends(get_db)
     if user.status != "active":
         raise HTTPException(status_code=403, detail="User is disabled")
     if user.role == UserRole.ADMIN:
-        auth_security.enforce_admin_local(request, settings, client_ip_obj)
+        auth_security.enforce_admin_local(request, settings, client_ip_obj, db=db)
     request.state.current_user = user
     token = create_access_token(str(user.id), user.role.value)
     return TokenResponse(access_token=token)
