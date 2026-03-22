@@ -57,7 +57,7 @@ def chat_completion(
     system_prompt: str,
     user_prompt: str,
     timeout_seconds: int,
-    temperature: float = 0.0,
+    temperature: float | None = None,
 ) -> ChatCompletionResult:
     base = api_base.strip().rstrip("/")
     if not base:
@@ -69,8 +69,9 @@ def chat_completion(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": temperature,
     }
+    if temperature is not None:
+        payload["temperature"] = temperature
     if "/api/v3/" in url:
         payload["stream"] = False
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
