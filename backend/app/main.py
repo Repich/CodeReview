@@ -31,7 +31,7 @@ STATIC_ROOT = Path(__file__).resolve().parent / "static"
 INDEX_FILE = STATIC_ROOT / "index.html"
 DOCS_ROOT = Path(__file__).resolve().parents[2] / "docs"
 TEACHER_GUIDE_FILE = DOCS_ROOT / "teacher_guide.html"
-SPA_ROUTE_ROOTS = {"login", "register", "runs", "account", "admin"}
+SPA_ROUTE_ROOTS = {"login", "register", "runs", "account", "admin", "model-lab"}
 
 
 def _is_within_static(target: Path) -> bool:

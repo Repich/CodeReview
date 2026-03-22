@@ -7,6 +7,7 @@ import logging
 import subprocess
 import sys
 import tempfile
+import threading
 import traceback
 import uuid
 from pathlib import Path
@@ -253,51 +254,107 @@ def _build_server_client(args: argparse.Namespace, *, api_base: str, verify_ssl:
     return HttpxServerApiClient(api_base=api_base, verify_ssl=verify_ssl)
 
 
-def run(args: argparse.Namespace) -> int:
-    api_base = _normalize_api_base(args.base_url)
-    verify_ssl = not args.insecure
+def _run_worker_loop(
+    *,
+    worker_id: int,
+    args: argparse.Namespace,
+    api_base: str,
+    verify_ssl: bool,
+    token: str,
+    stop_event: threading.Event,
+    counters: dict[str, int | bool],
+    counters_lock: threading.Lock,
+) -> None:
     client = _build_server_client(args, api_base=api_base, verify_ssl=verify_ssl)
+    client.set_token(token)
+    analyzer = Analyzer()
     try:
-        token = args.token.strip() if args.token else ""
-        if not token:
-            if not args.email or not args.password:
-                raise RuntimeError("Provide --token or --email with --password")
-            token = client.login(email=args.email, password=args.password)
-        client.set_token(token)
-
-        analyzer = Analyzer()
-        processed = 0
-        failed = 0
-        while True:
-            if args.max_tasks and processed + failed >= args.max_tasks:
-                break
+        while not stop_event.is_set():
+            with counters_lock:
+                done = int(counters["processed"]) + int(counters["failed"])
+                if args.max_tasks and done >= args.max_tasks:
+                    stop_event.set()
+                    return
             task_payload = client.fetch_next_task(args.session_id)
             if not task_payload:
-                break
+                return
             task = _build_task(task_payload)
-            LOG.info("Processing run %s (%s sources)", task.review_run_id, len(task.sources))
+            LOG.info("[w%s] Processing run %s (%s sources)", worker_id, task.review_run_id, len(task.sources))
             try:
                 result = analyzer.run(task)
                 out_payload = serialize_result(result)
                 client.submit_result(task.review_run_id, out_payload)
-                processed += 1
-                LOG.info("Submitted results for run %s", task.review_run_id)
+                with counters_lock:
+                    counters["processed"] = int(counters["processed"]) + 1
+                LOG.info("[w%s] Submitted results for run %s", worker_id, task.review_run_id)
             except Exception as exc:  # noqa: BLE001
-                failed += 1
+                with counters_lock:
+                    counters["failed"] = int(counters["failed"]) + 1
                 message = _extract_error_message(exc)
-                LOG.exception("Run %s failed, marking as failed", task.review_run_id)
+                LOG.exception("[w%s] Run %s failed, marking as failed", worker_id, task.review_run_id)
                 try:
                     client.mark_failed(task.review_run_id, message)
                 except Exception:  # noqa: BLE001
-                    LOG.exception("Unable to mark run %s as failed on server", task.review_run_id)
-                    return 2
-        LOG.info("Done: processed=%s failed=%s", processed, failed)
+                    LOG.exception("[w%s] Unable to mark run %s as failed on server", worker_id, task.review_run_id)
+                    with counters_lock:
+                        counters["fatal_error"] = True
+                    stop_event.set()
+                    return
     finally:
         try:
             client.close()
         except Exception:  # noqa: BLE001
             pass
-    return 0
+
+
+def run(args: argparse.Namespace) -> int:
+    api_base = _normalize_api_base(args.base_url)
+    verify_ssl = not args.insecure
+    bootstrap_client = _build_server_client(args, api_base=api_base, verify_ssl=verify_ssl)
+    try:
+        token = args.token.strip() if args.token else ""
+        if not token:
+            if not args.email or not args.password:
+                raise RuntimeError("Provide --token or --email with --password")
+            token = bootstrap_client.login(email=args.email, password=args.password)
+    finally:
+        try:
+            bootstrap_client.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    workers = max(1, int(args.workers))
+    counters: dict[str, int | bool] = {"processed": 0, "failed": 0, "fatal_error": False}
+    counters_lock = threading.Lock()
+    stop_event = threading.Event()
+    threads: list[threading.Thread] = []
+
+    for idx in range(workers):
+        thread = threading.Thread(
+            target=_run_worker_loop,
+            kwargs={
+                "worker_id": idx + 1,
+                "args": args,
+                "api_base": api_base,
+                "verify_ssl": verify_ssl,
+                "token": token,
+                "stop_event": stop_event,
+                "counters": counters,
+                "counters_lock": counters_lock,
+            },
+            name=f"model-lab-runner-{idx + 1}",
+            daemon=False,
+        )
+        threads.append(thread)
+        thread.start()
+
+    for thread in threads:
+        thread.join()
+
+    processed = int(counters["processed"])
+    failed = int(counters["failed"])
+    LOG.info("Done: processed=%s failed=%s workers=%s", processed, failed, workers)
+    return 2 if bool(counters["fatal_error"]) else 0
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -308,6 +365,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--email", default="", help="Admin email for /auth/login")
     parser.add_argument("--password", default="", help="Admin password for /auth/login")
     parser.add_argument("--max-tasks", type=int, default=0, help="Stop after N processed+failed tasks")
+    parser.add_argument("--workers", type=int, default=1, help="Parallel workers for internal cases (default: 1)")
     parser.add_argument("--insecure", action="store_true", help="Disable TLS certificate verification")
     parser.add_argument(
         "--server-transport",

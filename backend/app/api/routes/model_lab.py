@@ -162,6 +162,7 @@ def fetch_next_internal_task(
                 ReviewRun.status == ReviewStatus.QUEUED,
             )
             .order_by(ModelLabCase.created_at.asc())
+            .with_for_update(of=ReviewRun, skip_locked=True)
             .first()
         )
         if not row:
