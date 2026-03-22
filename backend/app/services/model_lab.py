@@ -166,6 +166,8 @@ def create_session(
                 context=clone_context,
             )
             db.add(review_run)
+            # Ensure ReviewRun rows exist before ModelLabCase FK inserts.
+            db.flush()
 
             case = ModelLabCase(
                 id=case_id,
