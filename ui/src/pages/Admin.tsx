@@ -97,7 +97,7 @@ function AdminPage() {
   const [adjustMessage, setAdjustMessage] = useState<string | null>(null);
   const [adjustState, setAdjustState] = useState<'idle' | 'success' | 'error'>('idle');
   const [isSubmittingAdjust, setSubmittingAdjust] = useState(false);
-  const [runsLimit, setRunsLimit] = useState('500');
+  const [runsLimit, setRunsLimit] = useState('200');
   const [runsStatusFilter, setRunsStatusFilter] = useState('');
   const [runsUserFilter, setRunsUserFilter] = useState('');
   const [llmSystemPrompt, setLlmSystemPrompt] = useState(DEFAULT_LLM_SYSTEM_PROMPT);
@@ -194,7 +194,7 @@ function AdminPage() {
 
   const runsQuery = useQuery({
     queryKey: ['admin-runs', runsLimit],
-    queryFn: () => fetchRuns({ limit: Number(runsLimit) || 500 }),
+    queryFn: () => fetchRuns({ limit: Number(runsLimit) || 200 }),
     enabled: isAdmin,
     refetchInterval: (query) => {
       const runs = query.state.data;
@@ -1576,7 +1576,7 @@ function AdminPage() {
               id="runs-limit"
               type="number"
               min={1}
-              max={500}
+              max={200}
               value={runsLimit}
               onChange={(event) => setRunsLimit(event.target.value)}
             />
