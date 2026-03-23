@@ -52,12 +52,12 @@ class Settings(BaseSettings):
     openai_api_base: str = "https://api.openai.com"
     model_lab_enabled: bool = False
     model_lab_default_sample_size: int = 10
-    model_lab_max_sample_size: int = 20
+    model_lab_max_sample_size: int = 50
     model_lab_max_models: int = 12
     model_lab_max_paid_target_models: int = 2
-    model_lab_max_paid_target_runs: int = 40
+    model_lab_max_paid_target_runs: int = 100
     model_lab_max_expert_models: int = 2
-    model_lab_max_expert_calls: int = 120
+    model_lab_max_expert_calls: int = 500
     model_lab_expert_timeout_seconds: int = 240
     model_lab_secret_ttl_seconds: int = 21600
     model_config = SettingsConfigDict(env_file=".env", env_prefix="CODEREVIEW_", extra="ignore")

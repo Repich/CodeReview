@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.app.schemas.base import ORMModel
 
@@ -52,9 +52,17 @@ class ModelLabSessionCreate(BaseModel):
         ]
     )
     sample_size: int = Field(default=10, ge=1, le=200)
+    loc_min: int | None = Field(default=None, ge=1, le=200000)
+    loc_max: int | None = Field(default=None, ge=1, le=200000)
     include_open_world: bool = False
     use_all_norms: bool = True
     disable_patterns: bool = True
+
+    @model_validator(mode="after")
+    def validate_loc_bounds(self) -> "ModelLabSessionCreate":
+        if self.loc_min is not None and self.loc_max is not None and self.loc_min > self.loc_max:
+            raise ValueError("loc_min must be <= loc_max")
+        return self
 
 
 class ModelLabSessionRead(ORMModel):

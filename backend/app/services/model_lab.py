@@ -58,9 +58,23 @@ def create_session(
     if payload.sample_size > settings.model_lab_max_sample_size:
         raise ValueError(f"sample_size limit exceeded: max {settings.model_lab_max_sample_size}")
 
-    source_runs = _select_source_runs(db, payload.sample_size)
-    if not source_runs:
-        raise ValueError("No completed review runs with source artifacts found")
+    source_runs = _select_source_runs(
+        db,
+        payload.sample_size,
+        loc_min=payload.loc_min,
+        loc_max=payload.loc_max,
+    )
+    if len(source_runs) < payload.sample_size:
+        filter_parts: list[str] = []
+        if payload.loc_min is not None:
+            filter_parts.append(f"loc_min={payload.loc_min}")
+        if payload.loc_max is not None:
+            filter_parts.append(f"loc_max={payload.loc_max}")
+        filter_text = f" with filters ({', '.join(filter_parts)})" if filter_parts else ""
+        raise ValueError(
+            f"Not enough completed review runs with source artifacts{filter_text}: "
+            f"requested {payload.sample_size}, found {len(source_runs)}"
+        )
 
     target_models: list[dict[str, str]] = []
     for model in payload.internal_models:
@@ -120,6 +134,8 @@ def create_session(
             "include_open_world": payload.include_open_world,
             "use_all_norms": payload.use_all_norms,
             "disable_patterns": payload.disable_patterns,
+            "loc_min": payload.loc_min,
+            "loc_max": payload.loc_max,
         },
         internal_api_base=payload.api_base.strip().rstrip("/"),
         internal_secret_ref=secret_ref,
@@ -405,13 +421,19 @@ def _extract_source_artifact(review_run: ReviewRun) -> str:
     return source_artifact
 
 
-def _select_source_runs(db: Session, sample_size: int) -> list[ReviewRun]:
+def _select_source_runs(
+    db: Session,
+    sample_size: int,
+    *,
+    loc_min: int | None = None,
+    loc_max: int | None = None,
+) -> list[ReviewRun]:
     query = (
         db.query(ReviewRun)
         .filter(ReviewRun.status == ReviewStatus.COMPLETED)
         .order_by(ReviewRun.finished_at.desc().nullslast(), ReviewRun.queued_at.desc())
     )
-    rows = query.limit(max(sample_size * 5, sample_size)).all()
+    rows = query.all()
     selected: list[ReviewRun] = []
     for row in rows:
         if not row.context:
@@ -422,10 +444,45 @@ def _select_source_runs(db: Session, sample_size: int) -> list[ReviewRun]:
             continue
         if row.context.get("model_lab_case_id"):
             continue
+        if loc_min is not None or loc_max is not None:
+            loc = _resolve_run_total_loc(row)
+            if loc is None:
+                continue
+            if loc_min is not None and loc < loc_min:
+                continue
+            if loc_max is not None and loc > loc_max:
+                continue
         selected.append(row)
         if len(selected) >= sample_size:
             break
     return selected
+
+
+def _resolve_run_total_loc(run: ReviewRun) -> int | None:
+    ctx = run.context or {}
+    metrics = ctx.get("metrics")
+    if isinstance(metrics, dict):
+        cc = metrics.get("cognitive_complexity")
+        if isinstance(cc, dict):
+            total_loc = cc.get("total_loc")
+            if isinstance(total_loc, (int, float)):
+                return int(total_loc)
+    try:
+        artifact_path = _extract_source_artifact(run)
+        sources = artifact_service.load_sources(artifact_path)
+    except Exception:  # noqa: BLE001
+        return None
+    total = 0
+    has_content = False
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        content = source.get("content")
+        if not isinstance(content, str):
+            continue
+        has_content = True
+        total += len(content.splitlines())
+    return total if has_content else None
 
 
 def _resolve_expert_credentials(provider: str, settings) -> tuple[str, str]:

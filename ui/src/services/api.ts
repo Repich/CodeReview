@@ -865,6 +865,8 @@ export interface ModelLabCreatePayload {
   baseline_models: ModelLabOption[];
   expert_models: ModelLabOption[];
   sample_size: number;
+  loc_min?: number;
+  loc_max?: number;
   include_open_world: boolean;
   use_all_norms: boolean;
   disable_patterns: boolean;

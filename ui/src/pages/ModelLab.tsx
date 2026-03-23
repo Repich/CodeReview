@@ -109,6 +109,8 @@ function ModelLabPage() {
   const [apiBase, setApiBase] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [sampleSize, setSampleSize] = useState(10);
+  const [locMin, setLocMin] = useState('10');
+  const [locMax, setLocMax] = useState('300');
   const [includeOpenWorld, setIncludeOpenWorld] = useState(false);
   const [useAllNorms, setUseAllNorms] = useState(true);
   const [disablePatterns, setDisablePatterns] = useState(true);
@@ -201,6 +203,7 @@ function ModelLabPage() {
   const limitsText = useMemo(() => {
     if (!configQuery.data) return null;
     return [
+      `Размер выборки: до ${configQuery.data.max_sample_size}.`,
       `Внутренние модели на сессию: до ${configQuery.data.max_models}.`,
       `Платные baseline-модели (DeepSeek/OpenAI): до ${configQuery.data.max_paid_target_models}.`,
       `Платные baseline-прогоны: до ${configQuery.data.max_paid_target_runs}.`,
@@ -222,6 +225,16 @@ function ModelLabPage() {
     if (!effectiveInternalModels.length) {
       setFeedbackState('error');
       setFeedbackMessage('Выберите хотя бы одну внутреннюю модель.');
+      return;
+    }
+
+    const parsedLocMin = Number(locMin);
+    const parsedLocMax = Number(locMax);
+    const hasLocMin = Number.isFinite(parsedLocMin) && parsedLocMin > 0;
+    const hasLocMax = Number.isFinite(parsedLocMax) && parsedLocMax > 0;
+    if (hasLocMin && hasLocMax && parsedLocMin > parsedLocMax) {
+      setFeedbackState('error');
+      setFeedbackMessage('LOC минимум должен быть меньше или равен LOC максимуму.');
       return;
     }
 
@@ -255,6 +268,8 @@ function ModelLabPage() {
       baseline_models,
       expert_models,
       sample_size: sampleSize,
+      loc_min: hasLocMin ? parsedLocMin : undefined,
+      loc_max: hasLocMax ? parsedLocMax : undefined,
       include_open_world: includeOpenWorld,
       use_all_norms: useAllNorms,
       disable_patterns: disablePatterns,
@@ -339,9 +354,33 @@ function ModelLabPage() {
               id="model-lab-sample"
               type="number"
               min={1}
-              max={configQuery.data?.max_sample_size || 20}
+              max={configQuery.data?.max_sample_size || 50}
               value={sampleSize}
               onChange={(event) => setSampleSize(Number(event.target.value) || 1)}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="model-lab-loc-min">LOC минимум (опционально)</label>
+            <input
+              id="model-lab-loc-min"
+              type="number"
+              min={1}
+              value={locMin}
+              onChange={(event) => setLocMin(event.target.value)}
+              placeholder="10"
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="model-lab-loc-max">LOC максимум (опционально)</label>
+            <input
+              id="model-lab-loc-max"
+              type="number"
+              min={1}
+              value={locMax}
+              onChange={(event) => setLocMax(event.target.value)}
+              placeholder="300"
             />
           </div>
 
