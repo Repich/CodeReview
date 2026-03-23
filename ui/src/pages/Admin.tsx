@@ -1541,6 +1541,9 @@ function AdminPage() {
           <div>
             <h2 className="card-title">Запуски</h2>
             <p className="muted">Админ-управление очередью и зависшими запусками.</p>
+            <p className="muted" style={{ marginTop: '0.35rem' }}>
+              Показано: {filteredRuns.length} из {(runsQuery.data || []).length}
+            </p>
           </div>
         </div>
         <form className="form-grid" style={{ gap: '1rem' }}>
@@ -1588,6 +1591,7 @@ function AdminPage() {
           <table className="table">
             <thead>
               <tr>
+                <th>№</th>
                 <th>Run</th>
                 <th>Пользователь</th>
                 <th>Статус</th>
@@ -1599,8 +1603,9 @@ function AdminPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredRuns.map((run) => (
+              {filteredRuns.map((run, index) => (
                 <tr key={run.id}>
+                  <td>{index + 1}</td>
                   <td>{run.id.slice(0, 8)}…</td>
                   <td>{run.user_name || run.user_email || '—'}</td>
                   <td>
@@ -1658,7 +1663,7 @@ function AdminPage() {
               ))}
               {!runsQuery.isLoading && !filteredRuns.length && (
                 <tr>
-                  <td colSpan={8} className="muted">
+                  <td colSpan={9} className="muted">
                     Запуски не найдены.
                   </td>
                 </tr>
