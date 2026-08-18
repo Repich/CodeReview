@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from backend.app.models.enums import ReviewStatus
 from backend.app.schemas.base import ORMModel
@@ -29,9 +29,15 @@ class SourceChangePayload(ORMModel):
     ranges: list["LineRangePayload"]
 
 
-class ReviewRunCreate(ReviewRunBase):
+class ReviewRunCreate(ORMModel):
+    external_ref: str | None = None
+    project_id: str | None = None
+    input_hash: str | None = None
+    initiator: str | None = None
+    source_type: str | None = None
     sources: list[SourceUnitPayload] | None = None
     changes: list[SourceChangePayload] | None = None
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 class ReviewRunUpdate(ORMModel):

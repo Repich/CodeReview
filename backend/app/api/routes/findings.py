@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 import logging
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_current_user, get_db
+from backend.app.api.deps import get_current_user, get_db, require_worker_or_admin
 from backend.app.api.utils import ensure_run_access
 from backend.app.core.config import get_settings
 from backend.app.models.audit import IOLog
@@ -63,7 +63,11 @@ def list_findings(
 
 
 @router.post("", response_model=FindingRead, status_code=201)
-def create_finding(payload: FindingCreate, db: Session = Depends(get_db)) -> Finding:
+def create_finding(
+    payload: FindingCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_worker_or_admin),
+) -> Finding:
     finding = Finding(**payload.model_dump())
     db.add(finding)
     db.commit()
@@ -108,6 +112,7 @@ def export_findings_jsonl(
     settings = get_settings()
     artifact_dir = Path(settings.artifact_dir)
     artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_dir.chmod(0o700)
     file_path = artifact_dir / f"{review_run_id}_findings.jsonl"
     norm_ids = {item.norm_id for item in findings if item.norm_id}
     norm_ids.update({item.norm_id for item in ai_findings if item.norm_id})
@@ -144,6 +149,7 @@ def export_findings_jsonl(
                 logger.warning("Norm %s not found for AI finding", item.norm_id)
             fh.write(json.dumps(payload, ensure_ascii=False))
             fh.write("\n")
+    file_path.chmod(0o600)
     io_log = IOLog(
         review_run_id=review_run_id,
         direction=IODirection.OUT,

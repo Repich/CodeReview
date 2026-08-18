@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_client_ip(request: Request, settings: Settings) -> Optional[IPv4Address | IPv6Address]:
-    return extract_client_ip(request, settings.trusted_proxy_depth)
+    return extract_client_ip(request, settings.trusted_proxy_cidrs)
 
 
 def enforce_admin_local(

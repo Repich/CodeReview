@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     backend_api_url: str = "http://backend:8000/api"
+    api_token: str
     redis_url: str = "redis://localhost:6379/0"
     poll_interval_seconds: int = 5
     engine_version: str = "0.1.0"

@@ -7,6 +7,7 @@ WORKDIR /app
 COPY worker/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY worker /app/worker
+COPY common /app/common
 COPY norms.yaml /app/norms.yaml
 COPY critical_norms.yaml /app/critical_norms.yaml
 COPY pattern_1С.yaml /app/pattern_1С.yaml

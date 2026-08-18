@@ -359,7 +359,7 @@ def run(args: argparse.Namespace) -> int:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="One-off internal Model Lab runner")
-    parser.add_argument("--base-url", required=True, help="CodeReview base URL, e.g. https://codereview.1cretail.ru")
+    parser.add_argument("--base-url", required=True, help="CodeReview base URL, e.g. https://codereview.example")
     parser.add_argument("--session-id", required=True, help="Model Lab session UUID")
     parser.add_argument("--token", default="", help="JWT token (admin)")
     parser.add_argument("--email", default="", help="Admin email for /auth/login")

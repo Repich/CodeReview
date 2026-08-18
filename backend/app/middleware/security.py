@@ -33,7 +33,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self.blocked_ips = {ip.strip() for ip in self.settings.blocked_ips if ip.strip()}
         self.blocked_networks = self._build_networks(self.settings.blocked_cidrs)
         self.blocked_countries = {code.upper() for code in self.settings.blocked_countries}
-        self.trusted_proxy_depth = max(0, self.settings.trusted_proxy_depth)
+        self.trusted_proxy_cidrs = self.settings.trusted_proxy_cidrs
         self.geo_reader = None
         if self.settings.geoip_db_path and geoip2:
             try:
@@ -55,7 +55,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         return networks
 
     async def dispatch(self, request: Request, call_next):
-        client_ip_obj = extract_client_ip(request, self.trusted_proxy_depth)
+        client_ip_obj = extract_client_ip(request, self.trusted_proxy_cidrs)
         client_ip = str(client_ip_obj) if client_ip_obj else "unknown"
         country_code = self._lookup_country(client_ip_obj)
         block_reason = self._check_block(client_ip_obj, country_code)

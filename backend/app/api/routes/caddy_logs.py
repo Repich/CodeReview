@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -25,7 +26,7 @@ async def ingest_caddy_logs(request: Request, db: Session = Depends(get_db)) -> 
     if not expected_token:
         raise HTTPException(status_code=503, detail="Caddy log ingest is not configured")
     token = _extract_token(request)
-    if token != expected_token:
+    if not token or not secrets.compare_digest(token, expected_token):
         raise HTTPException(status_code=401, detail="Invalid ingest token")
     try:
         body = await request.body()

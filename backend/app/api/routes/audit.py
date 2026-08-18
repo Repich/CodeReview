@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_current_user, get_db
+from backend.app.api.deps import get_current_user, get_db, require_worker_or_admin
 from backend.app.api.utils import ensure_run_access
 from backend.app.core.config import get_settings
 from backend.app.models.audit import AuditLog, IOLog
@@ -45,7 +45,9 @@ def list_audit_logs(
 
 @router.post("/logs", response_model=AuditLogRead, status_code=201)
 def create_audit_log(
-    payload: AuditLogCreate, db: Session = Depends(get_db)
+    payload: AuditLogCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_worker_or_admin),
 ) -> AuditLog:
     record = AuditLog(**payload.model_dump())
     db.add(record)
@@ -74,7 +76,11 @@ def list_io_logs(
 
 
 @router.post("/io", response_model=IOLogRead, status_code=201)
-def create_io_log(payload: IOLogCreate, db: Session = Depends(get_db)) -> IOLog:
+def create_io_log(
+    payload: IOLogCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_worker_or_admin),
+) -> IOLog:
     record = IOLog(**payload.model_dump())
     db.add(record)
     db.commit()

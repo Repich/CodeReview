@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from common.redaction import redact_bsl_source_text
 from backend.app.core.config import get_settings
 from backend.app.models.ai_finding import AIFinding
 from backend.app.models.enums import ReviewStatus
@@ -614,7 +615,8 @@ def _load_source_map(db: Session, review_run_id: uuid.UUID) -> dict[str, list[st
         path = source.get("path")
         content = source.get("content")
         if isinstance(path, str) and isinstance(content, str):
-            result[path] = content.splitlines()
+            redacted_content, _ = redact_bsl_source_text(content)
+            result[path] = redacted_content.splitlines()
     return result
 
 

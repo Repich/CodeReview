@@ -10,7 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_db, get_current_user, get_current_admin
+from backend.app.api.deps import (
+    get_current_admin,
+    get_current_user,
+    get_db,
+    require_worker_or_admin,
+    require_worker_token,
+)
 from backend.app.api.utils import ensure_run_access
 from backend.app.models.ai_finding import AIFinding
 from backend.app.models.audit import AuditLog, IOLog
@@ -184,7 +190,11 @@ def create_review_run(
 
 
 @router.get("/next-task", response_model=AnalysisTaskResponse | None)
-def fetch_next_task(response: Response, db: Session = Depends(get_db)):
+def fetch_next_task(
+    response: Response,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_worker_token),
+):
     while True:
         queued_candidates = (
             db.query(ReviewRun)
@@ -287,6 +297,7 @@ def submit_results(
     review_run_id: uuid.UUID,
     payload: AnalysisResultPayload,
     db: Session = Depends(get_db),
+    _: None = Depends(require_worker_or_admin),
 ):
     review_run = db.get(ReviewRun, review_run_id)
     if not review_run:

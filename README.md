@@ -20,14 +20,12 @@ pip install -r backend/requirements.txt -r worker/requirements.txt pytest
 # если нужен локальный pg
 # docker compose up -d postgres
 
-# миграции
+# Сначала заполните .env по образцу .env.example, затем выполните миграции.
 cd backend
-DATABASE_URL=postgresql+psycopg://codereview:codereview@localhost:5432/codereview \
 PYTHONPATH=.. alembic upgrade head
 cd ..
 
 # backend
-CODEREVIEW_DATABASE_URL=postgresql+psycopg://codereview:codereview@localhost:5432/codereview \
 uvicorn backend.app.main:app --reload --env-file .env
 
 # worker
@@ -43,18 +41,20 @@ cd ui && npm install && npm run dev
 Backend (префикс `CODEREVIEW_`):
 - `CODEREVIEW_DATABASE_URL` — строка подключения к Postgres.
 - `CODEREVIEW_AUTH_JWT_SECRET` — секрет подписи JWT.
+- `CODEREVIEW_WORKER_API_TOKEN` — общий service token backend/worker (не менее 32 случайных символов).
 - `CODEREVIEW_DEFAULT_RUN_COST_POINTS` — стоимость запуска (по умолчанию 10).
 - `CODEREVIEW_ADMIN_LOCAL_ONLY` — ограничить админку локальной сетью (bool).
 - `CODEREVIEW_ADMIN_ALLOWED_CIDRS` — список CIDR для админов (JSON-массив строк).
 - `CODEREVIEW_REGISTRATION_CAPTCHA_ENABLED` — включить капчу на регистрации (`true/false`, по умолчанию `false`).
 - `CODEREVIEW_TURNSTILE_SECRET_KEY` — секрет Turnstile (если включаете капчу).
 - `CODEREVIEW_CADDY_LOG_INGEST_TOKEN` — токен приёма логов Caddy.
-- `CODEREVIEW_TRUSTED_PROXY_DEPTH` — число доверенных прокси в цепочке.
+- `CODEREVIEW_TRUSTED_PROXY_CIDRS` — JSON-массив CIDR доверенных reverse proxy. Заголовок `X-Forwarded-For` от остальных адресов игнорируется.
 - `CODEREVIEW_BLOCKED_IPS`, `CODEREVIEW_BLOCKED_CIDRS`, `CODEREVIEW_BLOCKED_COUNTRIES` — блок-листы.
 - `CODEREVIEW_GEOIP_DB_PATH` — путь к базе GeoIP (если используете геоблокировку).
 
 Worker (префикс `CODEREVIEW_WORKER_`):
 - `CODEREVIEW_WORKER_BACKEND_API_URL` — URL backend API.
+- `CODEREVIEW_WORKER_API_TOKEN` — тот же service token, что настроен на backend.
 - `CODEREVIEW_WORKER_REDIS_URL` — Redis URL.
 - `CODEREVIEW_WORKER_LLM_API_BASE`, `CODEREVIEW_WORKER_LLM_MODEL` — параметры LLM.
 - `CODEREVIEW_WORKER_LLM_CONTEXT_GLOB` — glob для доп. контекста LLM.
@@ -69,7 +69,7 @@ UI:
 
 ```bash
 docker-compose exec backend python /app/scripts/create_admin.py \
-  --email admin@company.ru --password 'Secret123' --name 'Admin'
+  --email admin@company.ru --name 'Admin'
 ```
 
 ## Регистрация и капча
@@ -82,17 +82,11 @@ docker-compose exec backend python /app/scripts/create_admin.py \
 
 ## Сборка UI и раздача статики
 
-В проде фронтенд отдаёт backend. После изменений UI выполните:
+В проде фронтенд отдаёт backend. UI собирается в Node 20 build stage backend-образа:
 
 ```bash
-cd ui
-npm ci
-npm run build
-
-cd ..
-rm -rf backend/app/static
-mkdir -p backend/app/static
-cp -r ui/dist/* backend/app/static/
+docker-compose build backend
+docker-compose up -d backend
 ```
 
 Проверка: `curl -I http://127.0.0.1:8000/` → `200`.
@@ -102,20 +96,22 @@ cp -r ui/dist/* backend/app/static/
 1) Подготовить Postgres (отдельный контейнер/кластер):
 ```sql
 CREATE DATABASE codereview;
-CREATE USER codereview_user WITH PASSWORD '***';
+CREATE USER <DB_USER> WITH PASSWORD '<GENERATED_DB_PASSWORD>';
 GRANT ALL PRIVILEGES ON DATABASE codereview TO codereview_user;
 ```
 
 2) `.env` на сервере:
 ```dotenv
-CODEREVIEW_DATABASE_URL=postgresql+psycopg://codereview_user:***@host.docker.internal:5432/codereview
+CODEREVIEW_DATABASE_URL=postgresql+psycopg://<DB_USER>:<URL_ENCODED_DB_PASSWORD>@<DB_HOST>:5432/<DB_NAME>
 CODEREVIEW_WORKER_BACKEND_API_URL=http://backend:8000/api
 CODEREVIEW_WORKER_REDIS_URL=redis://redis:6379/0
-CODEREVIEW_AUTH_JWT_SECRET=...
-DEEPSEEK_API_KEY=...
-CODEREVIEW_TURNSTILE_SECRET_KEY=...
-CODEREVIEW_CADDY_LOG_INGEST_TOKEN=...
-CODEREVIEW_TRUSTED_PROXY_DEPTH=1
+CODEREVIEW_AUTH_JWT_SECRET=<GENERATE_WITH_OPENSSL_RAND_HEX_32>
+CODEREVIEW_WORKER_API_TOKEN=<GENERATE_WITH_OPENSSL_RAND_HEX_32>
+CODEREVIEW_BACKEND_BIND_ADDRESS=<LAN_ADDRESS_USED_BY_REVERSE_PROXY>
+CODEREVIEW_TRUSTED_PROXY_CIDRS=["<REVERSE_PROXY_IP>/32"]
+DEEPSEEK_API_KEY=<PROVIDER_SECRET>
+CODEREVIEW_TURNSTILE_SECRET_KEY=<PROVIDER_SECRET>
+CODEREVIEW_CADDY_LOG_INGEST_TOKEN=<GENERATE_WITH_OPENSSL_RAND_HEX_32>
 ```
 
 3) Сборка и запуск:
@@ -129,11 +125,11 @@ docker-compose exec backend bash -c "cd /app/backend && PYTHONPATH=/app alembic 
 ```
 
 5) Reverse proxy:
-Caddy на Raspberry Pi проксирует `codereview.1cretail.ru` → `192.168.1.76:8200`.
+Caddy проксирует публичный HTTPS-домен на `<CODEREVIEW_BACKEND_BIND_ADDRESS>:8200`.
 
 6) Проверки:
-- `curl -I http://127.0.0.1:8200/` → `200`.
-- `curl http://127.0.0.1:8200/api/health` → `{"status":"ok"}`.
+- `curl -I http://<CODEREVIEW_BACKEND_BIND_ADDRESS>:8200/` → `200`.
+- `curl http://<CODEREVIEW_BACKEND_BIND_ADDRESS>:8200/api/health` → `{"status":"ok"}`.
 
 ## Логи Caddy
 
@@ -160,7 +156,7 @@ Worker рассчитывает когнитивную сложность по �
 
 `scripts/deploy_refresh.sh`:
 - `git pull`
-- сборка UI и копия в `backend/app/static`
+- сборка UI внутри multi-stage backend-образа
 - пересборка backend/worker
 - при `RUN_MIGRATIONS=1` выполняет миграции
 

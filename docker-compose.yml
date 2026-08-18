@@ -2,8 +2,6 @@ services:
   redis:
     image: redis:7
     restart: unless-stopped
-    ports:
-      - "6379:6379"
 
   backend:
     build:
@@ -26,7 +24,7 @@ services:
       - ./custom_norms.yaml:/app/custom_norms.yaml
       - ./make_llm_norm.yaml:/app/make_llm_norm.yaml
     ports:
-      - "8200:8000"
+      - "${CODEREVIEW_BACKEND_BIND_ADDRESS:-127.0.0.1}:8200:8000"
 
   worker:
     build:

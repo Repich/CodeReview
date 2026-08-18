@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/codereview"
+    database_url: str
     project_name: str = "CodeReview API"
     api_prefix: str = "/api"
     debug: bool = False
     artifact_dir: str = "artifact_storage"
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     default_run_cost_points: int = 10
-    auth_jwt_secret: str = "insecure-dev-secret"
+    auth_jwt_secret: str
+    worker_api_token: str
     auth_jwt_algorithm: str = "HS256"
     auth_access_token_expire_minutes: int = 60 * 24
     admin_local_only: bool = True
@@ -37,7 +38,7 @@ class Settings(BaseSettings):
     caddy_log_ingest_token: str | None = None
     caddy_log_retention_days: int = 30
     access_log_enabled: bool = True
-    trusted_proxy_depth: int = 1
+    trusted_proxy_cidrs: list[str] = []
     blocked_ips: list[str] = []
     blocked_cidrs: list[str] = []
     blocked_countries: list[str] = []
@@ -61,6 +62,26 @@ class Settings(BaseSettings):
     model_lab_expert_timeout_seconds: int = 240
     model_lab_secret_ttl_seconds: int = 21600
     model_config = SettingsConfigDict(env_file=".env", env_prefix="CODEREVIEW_", extra="ignore")
+
+    @field_validator("auth_jwt_secret", "worker_api_token")
+    @classmethod
+    def validate_runtime_secret(cls, value: str) -> str:
+        normalized = value.strip()
+        weak_values = {
+            "change-me",
+            "change-me-in-production",
+            "insecure-dev-secret",
+            "secret",
+            "test",
+        }
+        placeholder_markers = ("<", ">", "your-", "replace", "generate", "example")
+        if (
+            len(normalized) < 32
+            or normalized.lower() in weak_values
+            or any(marker in normalized.lower() for marker in placeholder_markers)
+        ):
+            raise ValueError("runtime secrets must be at least 32 characters and non-default")
+        return normalized
 
 
 class HealthInfo(BaseModel):

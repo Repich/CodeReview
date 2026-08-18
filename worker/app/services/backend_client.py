@@ -12,7 +12,11 @@ from worker.app.models import AnalysisTask, SourceUnit
 class BackendClient:
     def __init__(self) -> None:
         self.settings = get_settings()
-        self.client = httpx.Client(base_url=self.settings.backend_api_url, timeout=30)
+        self.client = httpx.Client(
+            base_url=self.settings.backend_api_url,
+            timeout=30,
+            headers={"X-Worker-Token": self.settings.api_token},
+        )
 
     def fetch_task(self) -> AnalysisTask | None:
         response = self.client.get("/review-runs/next-task")

@@ -1,3 +1,11 @@
+FROM node:20-alpine AS ui-build
+
+WORKDIR /ui
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
+COPY ui /ui
+RUN npm run build
+
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -7,6 +15,8 @@ WORKDIR /app
 COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend /app/backend
+COPY --from=ui-build /ui/dist /app/backend/app/static
+COPY common /app/common
 COPY norms.yaml /app/norms.yaml
 COPY critical_norms.yaml /app/critical_norms.yaml
 COPY CHANGELOG.md /app/CHANGELOG.md
