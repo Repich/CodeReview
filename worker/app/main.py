@@ -10,11 +10,14 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from worker.app.config import get_settings
 from worker.app.models import AnalysisResult, AnalysisTask, SourceUnit
 from worker.app.queue.base import InMemoryQueue
 from worker.app.services.analyzer import Analyzer
 from worker.app.services.backend_client import BackendClient
+from worker.app.services.redaction import redact_bsl_source_text, redact_structure
 
 
 def load_task_from_json(path: Path) -> AnalysisTask:
@@ -81,8 +84,10 @@ def serialize_result(result: AnalysisResult) -> dict[str, Any]:
                 "column_end": None,
                 "message": finding.message,
                 "recommendation": finding.recommendation,
-                "code_snippet": finding.snippet,
-                "context": finding.context,
+                "code_snippet": (
+                    redact_bsl_source_text(finding.snippet)[0] if finding.snippet else None
+                ),
+                "context": redact_structure(finding.context),
             }
             for finding in result.findings
         ],
@@ -146,7 +151,14 @@ def process_backend_tasks(once: bool) -> None:
     client = BackendClient()
     settings = get_settings()
     while True:
-        task = client.fetch_task()
+        try:
+            task = client.fetch_task()
+        except httpx.HTTPError:
+            logging.getLogger(__name__).exception("Backend polling failed; retrying")
+            if once:
+                raise
+            time.sleep(settings.poll_interval_seconds)
+            continue
         if not task:
             if once:
                 break

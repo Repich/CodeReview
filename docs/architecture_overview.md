@@ -48,14 +48,14 @@
 ## Биллинг/баллы
 - Настройка `CODEREVIEW_DEFAULT_RUN_COST_POINTS` (по умолчанию 10).
 - При создании run'а вызывается `billing.charge_for_run` — создаёт запись в `wallet_transactions`, обновляет `wallet.balance`. При недостатке баллов возвращается 402.
-- По умолчанию при миграциях создаётся администратор `admin@localhost / admin123`. Создание run'а и любые защищённые эндпоинты требуют Bearer-токен.
+- Миграции не создают администратора с известным паролем. Первый администратор создаётся явно через `scripts/create_admin.py` со случайным паролем.
 
 ## Как перезапустить локально
 1. **Backend**: `uvicorn backend.app.main:app --reload --env-file .env`. Убедитесь, что `.env` содержит `CODEREVIEW_DATABASE_URL` (или экспортируйте `DATABASE_URL`).
-2. **Alembic**: `PYTHONPATH=.. DATABASE_URL=postgresql+psycopg://codereview:codereview@localhost:5432/codereview alembic upgrade head`.
+2. **Alembic**: задайте `DATABASE_URL` или `CODEREVIEW_DATABASE_URL`, затем выполните `PYTHONPATH=.. alembic upgrade head`.
 3. **Worker**: `python -m worker.app.main --once` (или без `--once`).
 4. **UI**: `cd ui && npm install && npm run dev` (использует `VITE_API_BASE` и хранит Bearer-токен в localStorage).
-5. **Postgres**: `docker compose up -d postgres` (по умолчанию `codereview/codereview`).
+5. **Postgres**: используйте отдельного пользователя и случайный пароль из локального secret store.
 
 ## Диагностика
 - Если лицевой баланс не грузится — проверьте `Authorization: Bearer` (токен истёк/невалиден).
@@ -70,8 +70,8 @@
 - **UI**: `npm run build`, результат копируем в `backend/app/static`. FastAPI раздаёт `/` и ассеты, так что отдельный nginx внутри docker-compose не нужен.
 - **Docker compose**: backend/worker/redis. Postgres живёт отдельно; контейнеры подключаются через `extra_hosts: host.docker.internal:host-gateway`.
 - **Миграции**: `docker-compose exec backend bash -c "cd /app/backend && PYTHONPATH=/app alembic upgrade head"`.
-- **Reverse proxy**: Raspberry Pi + Caddy → `codereview.1cretail.ru` → `192.168.1.76:8200`. Проксируем `/api/*` на backend, остальное отдаёт статика.
-- **Переменные окружения**: `CODEREVIEW_DATABASE_URL`, `CODEREVIEW_WORKER_BACKEND_API_URL`, `DEEPSEEK_API_KEY`, `CODEREVIEW_AUTH_JWT_SECRET`, `CODEREVIEW_DEFAULT_RUN_COST_POINTS`, блок-листы (`CODEREVIEW_BLOCKED_IPS/CIDRS/COUNTRIES`), GeoIP (`CODEREVIEW_GEOIP_DB_PATH`), `CODEREVIEW_TRUSTED_PROXY_DEPTH=1`.
+- **Reverse proxy**: Caddy → `<BACKEND_LAN_IP>:8200`. Проксируем `/api/*` на backend, остальное отдаёт статика.
+- **Переменные окружения**: `CODEREVIEW_DATABASE_URL`, `CODEREVIEW_WORKER_BACKEND_API_URL`, `CODEREVIEW_WORKER_API_TOKEN`, `DEEPSEEK_API_KEY`, `CODEREVIEW_AUTH_JWT_SECRET`, `CODEREVIEW_BACKEND_BIND_ADDRESS`, `CODEREVIEW_TRUSTED_PROXY_CIDRS`, блок-листы и GeoIP.
 
 ## Безопасность и наблюдаемость
 

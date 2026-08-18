@@ -13,7 +13,13 @@ def _ensure_dir() -> Path:
     settings = get_settings()
     path = Path(settings.artifact_dir)
     path.mkdir(parents=True, exist_ok=True)
+    path.chmod(0o700)
     return path
+
+
+def _write_private_text(path: Path, payload: str) -> None:
+    path.write_text(payload, encoding="utf-8")
+    path.chmod(0o600)
 
 
 def save_sources(run_id: str, sources: list[dict[str, Any]]) -> tuple[str, str, int]:
@@ -22,7 +28,7 @@ def save_sources(run_id: str, sources: list[dict[str, Any]]) -> tuple[str, str, 
     file_name = f"{run_id}_sources.json"
     file_path = target_dir / file_name
     payload = json.dumps(sources, ensure_ascii=False, indent=2)
-    file_path.write_text(payload, encoding="utf-8")
+    _write_private_text(file_path, payload)
     checksum = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     rel_path = file_name
     return rel_path, checksum, len(payload.encode("utf-8"))
@@ -62,6 +68,7 @@ def save_sources_raw(run_id: str, sources: list[dict[str, Any]]) -> tuple[str, s
             safe_name = _dedupe_source_path(safe_name, index, used_names)
             content = source.get("content") or ""
             archive.writestr(safe_name, content)
+    file_path.chmod(0o600)
     data = file_path.read_bytes()
     checksum = hashlib.sha256(data).hexdigest()
     return file_name, checksum, len(data)
@@ -100,23 +107,23 @@ def save_llm_log(run_id: str, index: int, payload: dict[str, Any]) -> list[tuple
     file_name = f"{run_id}_{stage}_llm_log_{index}.json"
     file_path = target_dir / file_name
     data = json.dumps(payload, ensure_ascii=False, indent=2)
-    file_path.write_text(data, encoding="utf-8")
+    _write_private_text(file_path, data)
     artifacts: list[tuple[str, str, int]] = [("llm_log.json", file_name, len(data.encode("utf-8")))]
     prompt = payload.get("prompt")
     if isinstance(prompt, str):
         prompt_name = f"{run_id}_{stage}_llm_log_{index}_prompt.txt"
-        (target_dir / prompt_name).write_text(prompt, encoding="utf-8")
+        _write_private_text(target_dir / prompt_name, prompt)
         artifacts.append((f"{stage}_llm_prompt.txt", prompt_name, len(prompt.encode("utf-8"))))
     response = payload.get("response")
     if isinstance(response, str):
         response_name = f"{run_id}_{stage}_llm_log_{index}_response.txt"
-        (target_dir / response_name).write_text(response, encoding="utf-8")
+        _write_private_text(target_dir / response_name, response)
         artifacts.append((f"{stage}_llm_response.txt", response_name, len(response.encode("utf-8"))))
     redaction_report = payload.get("redaction_report")
     if isinstance(redaction_report, dict):
         redaction_name = f"{run_id}_{stage}_llm_redaction_{index}.json"
         redaction_payload = json.dumps(redaction_report, ensure_ascii=False, indent=2)
-        (target_dir / redaction_name).write_text(redaction_payload, encoding="utf-8")
+        _write_private_text(target_dir / redaction_name, redaction_payload)
         artifacts.append(
             (f"{stage}_llm_redaction.json", redaction_name, len(redaction_payload.encode("utf-8")))
         )
@@ -128,7 +135,7 @@ def save_evaluation_report(run_id: str, payload: dict[str, Any]) -> tuple[str, i
     file_name = f"{run_id}_evaluation_report.json"
     file_path = target_dir / file_name
     data = json.dumps(payload, ensure_ascii=False, indent=2)
-    file_path.write_text(data, encoding="utf-8")
+    _write_private_text(file_path, data)
     return file_name, len(data.encode("utf-8"))
 
 

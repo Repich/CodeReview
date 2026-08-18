@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import secrets
 import uuid
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -19,6 +20,20 @@ def get_db() -> Session:
     yield from get_session()
 
 
+def _is_valid_worker_token(candidate: str | None) -> bool:
+    if not candidate:
+        return False
+    expected = get_settings().worker_api_token
+    return secrets.compare_digest(candidate, expected)
+
+
+def require_worker_token(
+    x_worker_token: str | None = Header(default=None, alias="X-Worker-Token"),
+) -> None:
+    if not _is_valid_worker_token(x_worker_token):
+        raise HTTPException(status_code=401, detail="Worker authentication required")
+
+
 def _extract_bearer_from_header(auth_header: str | None) -> str | None:
     if not auth_header:
         return None
@@ -32,8 +47,6 @@ def get_current_user(
     token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> UserAccount:
-    if not token:
-        token = request.query_params.get("token")
     if not token:
         token = _extract_bearer_from_header(request.headers.get("Authorization"))
     if not token:
@@ -65,6 +78,21 @@ def get_current_admin(current_user: UserAccount = Depends(get_current_user)) -> 
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin privileges required")
     return current_user
+
+
+def require_worker_or_admin(
+    request: Request,
+    x_worker_token: str | None = Header(default=None, alias="X-Worker-Token"),
+    db: Session = Depends(get_db),
+) -> None:
+    if _is_valid_worker_token(x_worker_token):
+        return
+    try:
+        user = get_current_user(request=request, token=None, db=db)
+    except HTTPException as exc:
+        raise HTTPException(status_code=401, detail="Worker or admin authentication required") from exc
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Worker or admin privileges required")
 
 
 def get_current_teacher(current_user: UserAccount = Depends(get_current_user)) -> UserAccount:

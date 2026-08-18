@@ -22,7 +22,12 @@ from worker.app.models import (
     OpenWorldCandidate,
 )
 from worker.app.services.code_units import CodeUnit, split_source_into_units
-from worker.app.services.redaction import redact_lines, redact_text, RedactionStats
+from worker.app.services.redaction import (
+    redact_bsl_source_text,
+    redact_lines,
+    redact_text,
+    RedactionStats,
+)
 
 
 @dataclass
@@ -892,7 +897,7 @@ def _serialize_findings(findings: Iterable[DetectorFinding]) -> tuple[str, int]:
     for item in findings:
         snippet = item.snippet
         if snippet:
-            redacted_snippet, stats = redact_text(snippet)
+            redacted_snippet, stats = redact_bsl_source_text(snippet)
             snippet = redacted_snippet
             redaction_count += stats.total_literals
         payload.append(

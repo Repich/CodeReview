@@ -1,14 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
+  downloadArtifact,
   fetchRawSourceContent,
   fetchRawSourcesIndex,
-  getStoredAuthToken,
 } from '../services/api';
 import type { IOLogEntry, RawSourceEntry } from '../services/api';
 
 interface Props {
   artifacts: IOLogEntry[];
-  artifactBaseUrl?: string;
 }
 
 const humanSize = (size?: number | null) => {
@@ -18,7 +17,7 @@ const humanSize = (size?: number | null) => {
   return `${(kb / 1024).toFixed(2)} MB`;
 };
 
-function ArtifactsTable({ artifacts, artifactBaseUrl }: Props) {
+function ArtifactsTable({ artifacts }: Props) {
   if (!artifacts.length) {
     return <p className="muted">Артефактов пока нет.</p>;
   }
@@ -37,22 +36,29 @@ function ArtifactsTable({ artifacts, artifactBaseUrl }: Props) {
   const [sourcePath, setSourcePath] = useState<string | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
 
-  const buildUrl = (artifact: IOLogEntry) => {
-    const base = artifactBaseUrl || (import.meta.env.VITE_API_BASE || 'http://localhost:8000/api');
-    const url = new URL(`${base}/audit/io/${artifact.id}/download`);
-    const token = getStoredAuthToken();
-    if (token) {
-      url.searchParams.set('token', token);
-    }
-    return url.toString();
-  };
-
   const isPreviewable = (artifact: IOLogEntry) => {
     const path = artifact.storage_path.toLowerCase();
     return path.endsWith('.txt') || path.endsWith('.json');
   };
 
   const isRawSources = (artifact: IOLogEntry) => artifact.artifact_type === 'sources_raw.zip';
+
+  const handleDownload = async (artifact: IOLogEntry) => {
+    try {
+      const blob = await downloadArtifact(artifact.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = artifact.storage_path.split('/').pop() || 'artifact';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download artifact', error);
+      setPreviewError('Не удалось скачать артефакт.');
+    }
+  };
 
   const handleOpenRawSources = async (artifact: IOLogEntry) => {
     setSourcesError(null);
@@ -92,13 +98,9 @@ function ArtifactsTable({ artifacts, artifactBaseUrl }: Props) {
     setPreviewLoading(true);
     setPreviewOpen(true);
     setPreviewTitle(artifact.storage_path);
-    const url = buildUrl(artifact);
     try {
-      const response = await fetch(url, { credentials: 'include' });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const text = await response.text();
+      const blob = await downloadArtifact(artifact.id);
+      const text = await blob.text();
       const lower = artifact.storage_path.toLowerCase();
       if (lower.endsWith('.json')) {
         setPreviewKind('json');
@@ -141,9 +143,13 @@ function ArtifactsTable({ artifacts, artifactBaseUrl }: Props) {
                 <td>{new Date(artifact.created_at).toLocaleString()}</td>
                 <td>
                   <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                    <a href={buildUrl(artifact)} target="_blank" rel="noreferrer">
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => handleDownload(artifact)}
+                    >
                       Скачать
-                    </a>
+                    </button>
                     {isPreviewable(artifact) && (
                       <button
                         type="button"

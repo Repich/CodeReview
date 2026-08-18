@@ -516,6 +516,13 @@ export async function downloadFindingsJsonl(runId: string) {
   return data;
 }
 
+export async function downloadArtifact(ioLogId: string) {
+  const { data } = await client.get<Blob>(`/audit/io/${ioLogId}/download`, {
+    responseType: 'blob',
+  });
+  return data;
+}
+
 export async function fetchCurrentUser() {
   const { data } = await client.get<UserProfile>('/users/me');
   return data;

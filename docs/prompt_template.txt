@@ -34,14 +34,12 @@
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r backend/requirements.txt -r worker/requirements.txt pytest
 
-# миграции
+# заполнить .env по .env.example, затем выполнить миграции
 cd backend
-DATABASE_URL=postgresql+psycopg://codereview:codereview@localhost:5432/codereview \
 PYTHONPATH=.. alembic upgrade head
 cd ..
 
 # backend
-CODEREVIEW_DATABASE_URL=postgresql+psycopg://codereview:codereview@localhost:5432/codereview \
 uvicorn backend.app.main:app --reload --env-file .env
 
 # worker
@@ -54,21 +52,23 @@ cd ui && npm install && npm run dev
 
 ## Продакшн (актуальная схема)
 
-- Caddy на Raspberry Pi проксирует `codereview.1cretail.ru` → `192.168.1.76:8200`.
+- Reverse proxy проксирует публичный HTTPS-домен → `<BACKEND_LAN_IP>:8200`.
 - Postgres общий (вне docker-compose).
 - Backend/Worker/Redis — в контейнерах.
 
 Пример `.env`:
 ```dotenv
-CODEREVIEW_DATABASE_URL=postgresql+psycopg://codereview_user:***@host.docker.internal:5432/codereview
+CODEREVIEW_DATABASE_URL=postgresql+psycopg://<DB_USER>:<URL_ENCODED_DB_PASSWORD>@<DB_HOST>:5432/<DB_NAME>
 CODEREVIEW_WORKER_BACKEND_API_URL=http://backend:8000/api
 CODEREVIEW_WORKER_REDIS_URL=redis://redis:6379/0
+CODEREVIEW_WORKER_API_TOKEN=<GENERATE_WITH_OPENSSL_RAND_HEX_32>
 DEEPSEEK_API_KEY=...
-CODEREVIEW_AUTH_JWT_SECRET=...
+CODEREVIEW_AUTH_JWT_SECRET=<GENERATE_WITH_OPENSSL_RAND_HEX_32>
 CODEREVIEW_REGISTRATION_CAPTCHA_ENABLED=false
 CODEREVIEW_TURNSTILE_SECRET_KEY=...
 CODEREVIEW_CADDY_LOG_INGEST_TOKEN=...
-CODEREVIEW_TRUSTED_PROXY_DEPTH=1
+CODEREVIEW_BACKEND_BIND_ADDRESS=<BACKEND_LAN_IP>
+CODEREVIEW_TRUSTED_PROXY_CIDRS=["<REVERSE_PROXY_IP>/32"]
 ```
 
 Запуск:
@@ -83,8 +83,8 @@ docker-compose up -d --build backend worker redis
   - `CODEREVIEW_ADMIN_ALLOWED_CIDRS`
 - Создание/обновление администратора:
   ```bash
-  docker-compose exec backend python /app/scripts/create_admin.py \
-    --email admin@company.ru --password 'Secret123' --name 'Admin'
+docker-compose exec backend python /app/scripts/create_admin.py \
+    --email admin@company.ru --name 'Admin'
   ```
 
 ## Регистрация и капча
