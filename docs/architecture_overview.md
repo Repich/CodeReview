@@ -67,7 +67,7 @@
 
 ## Развёртывание (prod)
 
-- **UI**: `npm run build`, результат копируем в `backend/app/static`. FastAPI раздаёт `/` и ассеты, так что отдельный nginx внутри docker-compose не нужен.
+- **UI**: Node 20 stage backend Dockerfile выполняет `npm ci` и `npm run build`, затем копирует результат в `backend/app/static`. FastAPI раздаёт `/` и ассеты, так что отдельный nginx внутри docker-compose не нужен.
 - **Docker compose**: backend/worker/redis. Postgres живёт отдельно; контейнеры подключаются через `extra_hosts: host.docker.internal:host-gateway`.
 - **Миграции**: `docker-compose exec backend bash -c "cd /app/backend && PYTHONPATH=/app alembic upgrade head"`.
 - **Reverse proxy**: Caddy → `<BACKEND_LAN_IP>:8200`. Проксируем `/api/*` на backend, остальное отдаёт статика.

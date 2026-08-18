@@ -4,6 +4,8 @@
 !backend/**
 !worker/
 !worker/**
+!ui/
+!ui/**
 !common/
 !common/**
 !scripts/
@@ -20,3 +22,7 @@
 **/*.py[cod]
 backend/tests/
 worker/tests/
+backend/app/static/
+ui/node_modules/
+ui/dist/
+ui/src/**/*.js

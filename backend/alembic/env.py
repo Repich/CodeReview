@@ -23,7 +23,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 def get_url() -> str:
-    url = os.getenv("DATABASE_URL") or os.getenv("CODEREVIEW_DATABASE_URL")
+    url = os.getenv("CODEREVIEW_DATABASE_URL") or os.getenv("DATABASE_URL")
     if not url:
         raise RuntimeError("DATABASE_URL or CODEREVIEW_DATABASE_URL must be configured")
     return url

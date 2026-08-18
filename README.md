@@ -82,17 +82,11 @@ docker-compose exec backend python /app/scripts/create_admin.py \
 
 ## Сборка UI и раздача статики
 
-В проде фронтенд отдаёт backend. После изменений UI выполните:
+В проде фронтенд отдаёт backend. UI собирается в Node 20 build stage backend-образа:
 
 ```bash
-cd ui
-npm ci
-npm run build
-
-cd ..
-rm -rf backend/app/static
-mkdir -p backend/app/static
-cp -r ui/dist/* backend/app/static/
+docker-compose build backend
+docker-compose up -d backend
 ```
 
 Проверка: `curl -I http://127.0.0.1:8000/` → `200`.
@@ -162,7 +156,7 @@ Worker рассчитывает когнитивную сложность по �
 
 `scripts/deploy_refresh.sh`:
 - `git pull`
-- сборка UI и копия в `backend/app/static`
+- сборка UI внутри multi-stage backend-образа
 - пересборка backend/worker
 - при `RUN_MIGRATIONS=1` выполняет миграции
 
